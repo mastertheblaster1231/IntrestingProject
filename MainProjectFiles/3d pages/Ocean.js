@@ -14,10 +14,9 @@ const camera = new THREE.PerspectiveCamera(
   1000
 );
 
-// Camera placed near water level, angled slightly upward so horizon is at 40% from bottom
+// Camera placed near water level, angled so horizon is at 40% from bottom with Argo float in view
 camera.position.set(0, 3.2, 14);
-const cameraTarget = new THREE.Vector3(0, 4.6, -100);
-camera.lookAt(cameraTarget);
+camera.lookAt(0, 2.0, 1.5);
 
 // WebGL Renderer with HDR Tone Mapping
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -31,7 +30,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.target.set(0, 3.8, 0);
+controls.target.set(0, 2.0, 1.5);
 controls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevents camera going underwater
 controls.minDistance = 5;
 controls.maxDistance = 35;
@@ -453,7 +452,191 @@ for (let i = 0; i < BUBBLE_COUNT; i++) {
 bubblesMesh.instanceMatrix.needsUpdate = true;
 
 // ============================================================================
-// 6. RESPONSIVE RESIZE HANDLING
+// 6. APEX ARGO PROFILING FLOAT 3D MODEL
+// ============================================================================
+// ----------------------------------------------------------------------------
+// [USER CONFIGURATION] ARGO FLOAT POSITION & SCALE:
+// You can change where the Argo float is located in the 3D scene here:
+//   x: Horizontal axis (- is left, + is right)
+//   y: Vertical waterline offset (0 is resting on the water surface)
+//   z: Depth distance (lower number moves it further back away from camera)
+// ----------------------------------------------------------------------------
+export const ARGO_FLOAT_CONFIG = {
+  x: 0.0,
+  y: 0.0,
+  z: 1.5,        // <--- [CHANGE POSITION HERE] Moved back to 1.5 (was 7.5). Set to 0.0 or -2.0 to move further back!
+  scale: 1.0     // Overall scale of the float model
+};
+window.ARGO_FLOAT_CONFIG = ARGO_FLOAT_CONFIG;
+
+// Dive tracking variables for scroller synchronization
+let argoDiveY = 0.0;
+let argoDiveRatio = 0.0;
+
+function createArgoFloatModel() {
+  const floatGroup = new THREE.Group();
+
+  // Materials matching the real APEX Argo float
+  const yellowHullMat = new THREE.MeshStandardMaterial({
+    color: 0xf6c500,        // Vibrant marine safety yellow
+    roughness: 0.28,
+    metalness: 0.12
+  });
+
+  const yellowBaseMat = new THREE.MeshStandardMaterial({
+    color: 0xefbd00,
+    roughness: 0.35,
+    metalness: 0.1
+  });
+
+  const blackHardwareMat = new THREE.MeshStandardMaterial({
+    color: 0x18191c,        // Dark anodized aluminum / graphite
+    roughness: 0.45,
+    metalness: 0.4
+  });
+
+  const whiteCollarMat = new THREE.MeshStandardMaterial({
+    color: 0xf8f9fa,        // Damping collar white
+    roughness: 0.22,
+    metalness: 0.05
+  });
+
+  const antennaMat = new THREE.MeshStandardMaterial({
+    color: 0x121214,        // High-frequency satellite antenna
+    roughness: 0.3,
+    metalness: 0.75
+  });
+
+  const sensorMetalMat = new THREE.MeshStandardMaterial({
+    color: 0xdde3ea,        // Conductivity sensor probe chrome/metal
+    roughness: 0.15,
+    metalness: 0.9
+  });
+
+  const HULL_RADIUS = 0.24;
+
+  // 1. Bottom Flared Base (External Hydraulic Oil Bladder Housing)
+  const baseFlangeGeo = new THREE.CylinderGeometry(0.32, 0.38, 0.30, 32);
+  const baseFlange = new THREE.Mesh(baseFlangeGeo, yellowBaseMat);
+  baseFlange.position.y = -2.15;
+  floatGroup.add(baseFlange);
+
+  const baseChamferGeo = new THREE.CylinderGeometry(0.38, 0.34, 0.09, 32);
+  const baseChamfer = new THREE.Mesh(baseChamferGeo, yellowBaseMat);
+  baseChamfer.position.y = -2.32;
+  floatGroup.add(baseChamfer);
+
+  // Black lower collar joint
+  const baseJointGeo = new THREE.CylinderGeometry(0.25, 0.31, 0.15, 32);
+  const baseJoint = new THREE.Mesh(baseJointGeo, blackHardwareMat);
+  baseJoint.position.y = -1.94;
+  floatGroup.add(baseJoint);
+
+  // 2. Lower Yellow Cylindrical Pressure Hull
+  const lowerHullGeo = new THREE.CylinderGeometry(HULL_RADIUS, HULL_RADIUS, 1.95, 32);
+  const lowerHull = new THREE.Mesh(lowerHullGeo, yellowHullMat);
+  lowerHull.position.y = -0.92;
+  floatGroup.add(lowerHull);
+
+  // Hull joint seam band
+  const seamBandGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.005, HULL_RADIUS + 0.005, 0.03, 32);
+  const seamBand = new THREE.Mesh(seamBandGeo, blackHardwareMat);
+  seamBand.position.y = -0.95;
+  floatGroup.add(seamBand);
+
+  // 3. White Damping Flange Disk / Collar (Stabilizing Ring)
+  // Sits right around the waterline to minimize wave rocking
+  const collarDiskGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.038, 48);
+  const collarDisk = new THREE.Mesh(collarDiskGeo, whiteCollarMat);
+  collarDisk.position.y = 0.14;
+  floatGroup.add(collarDisk);
+
+  const collarSupportGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.025, HULL_RADIUS + 0.025, 0.08, 32);
+  const collarSupport = new THREE.Mesh(collarSupportGeo, whiteCollarMat);
+  collarSupport.position.y = 0.11;
+  floatGroup.add(collarSupport);
+
+  // 4. Upper Yellow Pressure Hull Section
+  const upperHullGeo = new THREE.CylinderGeometry(HULL_RADIUS, HULL_RADIUS, 1.05, 32);
+  const upperHull = new THREE.Mesh(upperHullGeo, yellowHullMat);
+  upperHull.position.y = 0.68;
+  floatGroup.add(upperHull);
+
+  // Upper joint seam band
+  const upperSeamGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.005, HULL_RADIUS + 0.005, 0.025, 32);
+  const upperSeam = new THREE.Mesh(upperSeamGeo, blackHardwareMat);
+  upperSeam.position.y = 1.18;
+  floatGroup.add(upperSeam);
+
+  // 5. Dark Graphite Domed Shoulder Cap
+  const shoulderGeo = new THREE.CylinderGeometry(0.19, HULL_RADIUS + 0.005, 0.22, 32);
+  const shoulder = new THREE.Mesh(shoulderGeo, blackHardwareMat);
+  shoulder.position.y = 1.30;
+  floatGroup.add(shoulder);
+
+  const domeCapGeo = new THREE.SphereGeometry(0.19, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  const domeCap = new THREE.Mesh(domeCapGeo, blackHardwareMat);
+  domeCap.position.y = 1.41;
+  floatGroup.add(domeCap);
+
+  // 6. CTD Sensor Pod Head (Conductivity, Temperature & Depth sensors)
+  // Sensor guard tower (slotted cylindrical cage)
+  const sensorTowerGeo = new THREE.CylinderGeometry(0.065, 0.065, 0.58, 16);
+  const sensorTower = new THREE.Mesh(sensorTowerGeo, blackHardwareMat);
+  sensorTower.position.set(0.045, 1.74, 0.0);
+  floatGroup.add(sensorTower);
+
+  // Sensor guard ribs
+  for (let r = 0; r < 4; r++) {
+    const ribGeo = new THREE.BoxGeometry(0.02, 0.52, 0.02);
+    const rib = new THREE.Mesh(ribGeo, blackHardwareMat);
+    const angle = (r * Math.PI) / 2;
+    rib.position.set(0.045 + Math.cos(angle) * 0.075, 1.74, Math.sin(angle) * 0.075);
+    floatGroup.add(rib);
+  }
+
+  // CTD temperature/conductivity intake tube (chrome/white probe)
+  const sensorTubeGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.52, 12);
+  const sensorTube = new THREE.Mesh(sensorTubeGeo, sensorMetalMat);
+  sensorTube.position.set(-0.045, 1.72, 0.03);
+  floatGroup.add(sensorTube);
+
+  const sensorTubeCap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.07, 12), whiteCollarMat);
+  sensorTubeCap.position.set(-0.045, 2.0, 0.03);
+  floatGroup.add(sensorTubeCap);
+
+  // 7. Tall Satellite Transmission Antenna Rod
+  const antennaBaseGeo = new THREE.CylinderGeometry(0.025, 0.038, 0.14, 16);
+  const antennaBase = new THREE.Mesh(antennaBaseGeo, blackHardwareMat);
+  antennaBase.position.set(-0.065, 1.52, -0.04);
+  floatGroup.add(antennaBase);
+
+  const antennaRodGeo = new THREE.CylinderGeometry(0.009, 0.018, 2.5, 16);
+  const antennaRod = new THREE.Mesh(antennaRodGeo, antennaMat);
+  antennaRod.position.set(-0.065, 2.78, -0.04);
+  floatGroup.add(antennaRod);
+
+  // Small antenna tip bead
+  const antennaTipGeo = new THREE.SphereGeometry(0.02, 12, 12);
+  const antennaTip = new THREE.Mesh(antennaTipGeo, antennaMat);
+  antennaTip.position.set(-0.065, 4.04, -0.04);
+  floatGroup.add(antennaTip);
+
+  // Position based on configuration
+  floatGroup.position.set(ARGO_FLOAT_CONFIG.x, ARGO_FLOAT_CONFIG.y, ARGO_FLOAT_CONFIG.z);
+  floatGroup.scale.setScalar(ARGO_FLOAT_CONFIG.scale);
+  return floatGroup;
+}
+
+const argoFloat = createArgoFloatModel();
+scene.add(argoFloat);
+
+// Submersible exploration light that illuminates the Argo float in deep water
+const argoDiveLight = new THREE.PointLight(0x70d6ff, 0.0, 25);
+scene.add(argoDiveLight);
+
+// ============================================================================
+// 7. RESPONSIVE RESIZE HANDLING
 // ============================================================================
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -476,10 +659,10 @@ window.setOceanDepth = function(ratio) {
   const targetCamY = startCamY - ratio * maxUnderwaterDepth;
   camera.position.y = targetCamY;
 
-  // Keep orbit control target right on the vertical axis for clean straight diving
-  controls.target.y = targetCamY + 1.2;
-  controls.target.x = 0;
-  controls.target.z = 0;
+  // Keep orbit control target centered around the diving Argo float
+  controls.target.y = targetCamY - 1.2;
+  controls.target.x = ARGO_FLOAT_CONFIG.x;
+  controls.target.z = ARGO_FLOAT_CONFIG.z;
 
   // Orbit controls constraints
   if (ratio > 0.02) {
@@ -527,7 +710,7 @@ window.setOceanDepth = function(ratio) {
   // Dims lighting dynamically into deep oceanic dark blue
   const lightFactor = Math.max(0.005, Math.pow(1.0 - Math.min(1.0, ratio * 1.5), 2.5));
   sunLight.intensity = 2.5 * lightFactor;
-  ambientLight.intensity = Math.max(0.02, 0.9 * Math.pow(1.0 - ratio, 2.0));
+  ambientLight.intensity = Math.max(0.14, 0.9 * Math.pow(1.0 - ratio, 2.0));
 
   // Darker bluish oceanic palette
   // Surface: soft sky blue / golden
@@ -542,7 +725,7 @@ window.setOceanDepth = function(ratio) {
   const deepMidnightBlue = new THREE.Color(0x00081c);
   skyMat.uniforms.uHorizonColor.value.lerpColors(surfaceHorizon, deepMidnightBlue, Math.min(1.0, ratio * 1.8));
 
-  // Water shader color darkening
+  // 4. WATER SHADER COLOR & SPECULAR DARKENING:
   const surfaceWater = new THREE.Color(0x1992b8);
   const deepOceanBlue = new THREE.Color(0x000922);
   waterMaterial.uniforms.uSurfaceColor.value.lerpColors(surfaceWater, deepOceanBlue, Math.min(1.0, ratio * 2.0));
@@ -551,7 +734,17 @@ window.setOceanDepth = function(ratio) {
   const ultraDarkBlue = new THREE.Color(0x00030a);
   waterMaterial.uniforms.uDepthColor.value.lerpColors(surfaceDepthColor, ultraDarkBlue, Math.min(1.0, ratio * 2.0));
 
-  // 4. PROCEDURAL RISING BUBBLES:
+  // 5. APEX ARGO FLOAT DIVE SYNCHRONIZATION:
+  // The Argo float plunges down into the ocean synchronously with the scroller
+  argoDiveRatio = ratio;
+  argoDiveY = - ratio * maxUnderwaterDepth;
+  argoFloat.visible = true;
+
+  // Submersible inspection light that illuminates the Argo float in deep water
+  argoDiveLight.position.set(ARGO_FLOAT_CONFIG.x, targetCamY + 2.0, ARGO_FLOAT_CONFIG.z + 4.0);
+  argoDiveLight.intensity = ratio > 0.015 ? Math.min(2.6, 0.4 + ratio * 2.4) : 0.0;
+
+  // 6. PROCEDURAL RISING BUBBLES:
   // Visible during diving, glowing softly in the dark blue water
   bubblesMesh.visible = (ratio > 0.015);
   // Bubble color shifts to bioluminescent cyan-blue in deep darkness
@@ -574,7 +767,31 @@ function animate() {
   // 1. Update Water Shader Time Uniform
   waterMaterial.uniforms.uTime.value = elapsedTime;
 
-  // 2. Animate Slow Cloud Drift across sky
+  // 2. Realistic Floating, Diving & Bobbing Effect for APEX Argo Float
+  if (argoFloat.visible) {
+    const fx = argoFloat.position.x;
+    const fz = argoFloat.position.z;
+    // Calculate water wave height at float's position
+    const waveElev = Math.sin(fx * 0.28 + elapsedTime * 1.1) * Math.cos(fz * 0.18 + elapsedTime * 1.1) * 0.38;
+
+    // Smooth transition from surface wave bobbing to underwater smooth descent
+    // At surface (ratio=0), waveInfluence is 1.0. Underwater (ratio > 0.04), it fades to 0.0
+    const surfaceInfluence = Math.max(0.0, 1.0 - argoDiveRatio * 20.0);
+
+    // Surface wave bobbing vs underwater gentle hydrodynamic motion
+    const surfaceBobbing = (waveElev - 0.08 + Math.sin(elapsedTime * 2.2) * 0.04) * surfaceInfluence;
+    const underwaterMotion = (Math.sin(elapsedTime * 1.2) * 0.05) * (1.0 - surfaceInfluence);
+
+    // Dynamic vertical position: base Y + scroller dive Y + waves/underwater current
+    argoFloat.position.y = ARGO_FLOAT_CONFIG.y + argoDiveY + surfaceBobbing + underwaterMotion;
+
+    // Organic wave tilting at surface, stabilized underwater descent orientation
+    argoFloat.rotation.z = Math.sin(elapsedTime * 1.4) * (0.065 * surfaceInfluence + 0.015 * (1.0 - surfaceInfluence));
+    argoFloat.rotation.x = Math.cos(elapsedTime * 1.6) * (0.05 * surfaceInfluence + 0.012 * (1.0 - surfaceInfluence));
+    argoFloat.rotation.y = elapsedTime * 0.035; // Gentle slow yaw drift
+  }
+
+  // 3. Animate Slow Cloud Drift across sky
   cloudsGroup.children.forEach(cloud => {
     cloud.position.x += cloud.userData.speed;
     if (cloud.position.x > 150) {
@@ -582,10 +799,10 @@ function animate() {
     }
   });
 
-  // 3. Subtle Sun Glow pulsation
+  // 4. Subtle Sun Glow pulsation
   sunGlowMesh.scale.setScalar(1.0 + 0.04 * Math.sin(elapsedTime * 1.5));
 
-  // 4. Animate Rising Bubbles (when diving underwater)
+  // 5. Animate Rising Bubbles (when diving underwater)
   if (bubblesMesh.visible) {
     const camY = camera.position.y;
     for (let i = 0; i < BUBBLE_COUNT; i++) {
@@ -609,7 +826,7 @@ function animate() {
     bubblesMesh.instanceMatrix.needsUpdate = true;
   }
 
-  // 5. Update camera controls
+  // 6. Update camera controls
   controls.update();
 
   renderer.render(scene, camera);
