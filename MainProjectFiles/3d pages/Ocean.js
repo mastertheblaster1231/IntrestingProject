@@ -336,6 +336,11 @@ const waterFragmentShader = `
     vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
     vec3 normal = normalize(vNormal);
 
+    // Smooth lighting when viewed from underwater looking up
+    if (cameraPosition.y < vWorldPosition.y) {
+      normal = -normal;
+    }
+
     // 1. Water color based on wave elevation (deep indigo blue to vibrant turquoise)
     float mixStrength = (vElevation + uColorOffset) * uColorMultiplier;
     mixStrength = clamp(mixStrength, 0.0, 1.0);
@@ -368,7 +373,7 @@ const waterFragmentShader = `
     float fog = smoothstep(60.0, 240.0, dist);
     finalColor = mix(finalColor, uSkyHorizonColor, fog * 0.9);
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(finalColor, 0.92);
   }
 `;
 
@@ -395,10 +400,12 @@ const waterMaterial = new THREE.ShaderMaterial({
     uColorOffset: { value: 0.15 },
     uColorMultiplier: { value: 2.2 },
     // Sun & Reflection
-    uSunPosition: { value: sunPosition },
+    uSunPosition: { value: sunPosition.clone() },
     uSunColor: { value: new THREE.Color(0xffe875) },         // Golden yellow sun reflection
     uSkyHorizonColor: { value: new THREE.Color(0xffe6a3) }   // Warm horizon
   },
+  side: THREE.DoubleSide,
+  transparent: true,
   wireframe: false
 });
 
@@ -407,7 +414,46 @@ water.position.y = 0;
 scene.add(water);
 
 // ============================================================================
-// 5. RESPONSIVE RESIZE HANDLING
+// 5. PROCEDURAL RISING OCEAN BUBBLES
+// ============================================================================
+const BUBBLE_COUNT = 450;
+const bubbleGeo = new THREE.SphereGeometry(1, 14, 14);
+const bubbleMat = new THREE.MeshPhysicalMaterial({
+  color: 0xdbf7ff,
+  transmission: 0.88,
+  opacity: 0.8,
+  transparent: true,
+  roughness: 0.08,
+  ior: 1.12,
+  metalness: 0.05
+});
+
+const bubblesMesh = new THREE.InstancedMesh(bubbleGeo, bubbleMat, BUBBLE_COUNT);
+bubblesMesh.visible = false;
+scene.add(bubblesMesh);
+
+const dummy = new THREE.Object3D();
+const bubbleData = [];
+
+for (let i = 0; i < BUBBLE_COUNT; i++) {
+  const x = (Math.random() - 0.5) * 45;
+  const y = -Math.random() * 22;
+  const z = (Math.random() - 0.5) * 45;
+  const scale = 0.06 + Math.random() * 0.22;
+  const speed = 0.035 + Math.random() * 0.07;
+  const phase = Math.random() * Math.PI * 2;
+
+  bubbleData.push({ x, y, z, scale, speed, phase });
+
+  dummy.position.set(x, y, z);
+  dummy.scale.set(scale, scale, scale);
+  dummy.updateMatrix();
+  bubblesMesh.setMatrixAt(i, dummy.matrix);
+}
+bubblesMesh.instanceMatrix.needsUpdate = true;
+
+// ============================================================================
+// 6. RESPONSIVE RESIZE HANDLING
 // ============================================================================
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -417,7 +463,106 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================================================
-// 6. ANIMATION LOOP
+// 7. INTERACTIVE DEPTH PROFILING & EXTREME UNDERWATER DIVING
+// ============================================================================
+window.setOceanDepth = function(ratio) {
+  // ratio: 0.0 (0m, Top level) -> 1.0 (4000m, Extreme Hadal Abyss)
+  const depthMeters = Math.round(ratio * 4000);
+
+  // 1. STRAIGHT VERTICAL DIVE:
+  // Deep camera travel: plunges straight down from y = 3.2 to y = -90.0
+  const startCamY = 3.2;
+  const maxUnderwaterDepth = 95.0; 
+  const targetCamY = startCamY - ratio * maxUnderwaterDepth;
+  camera.position.y = targetCamY;
+
+  // Keep orbit control target right on the vertical axis for clean straight diving
+  controls.target.y = targetCamY + 1.2;
+  controls.target.x = 0;
+  controls.target.z = 0;
+
+  // Orbit controls constraints
+  if (ratio > 0.02) {
+    // Underwater: full spherical look-around freedom
+    controls.maxPolarAngle = Math.PI - 0.05;
+    controls.minPolarAngle = 0.05;
+  } else {
+    // Above water: keep scenic angle
+    controls.maxPolarAngle = Math.PI / 2 - 0.02;
+    controls.minPolarAngle = 0.05;
+  }
+
+  // 2. UPPER LEVEL COMPLETELY DISAPPEARS (Clouds, Sun, and Surface Fade Out):
+  // As user dives past 150m (ratio > 0.04), clouds disappear
+  if (ratio > 0.04) {
+    cloudsGroup.visible = false;
+  } else {
+    cloudsGroup.visible = true;
+    cloudsGroup.children.forEach(cloud => {
+      cloud.children.forEach(puff => {
+        puff.material.opacity = Math.max(0, 0.88 - ratio * 20.0);
+      });
+    });
+  }
+
+  // Sun disc and glow fade out completely as you descend into deep water
+  const sunFade = Math.max(0.0, 1.0 - ratio * 4.0); // Completely disappears by ~1000m
+  sunMesh.material.opacity = sunFade;
+  sunGlowMesh.material.opacity = sunFade * 0.7;
+  sunGroup.visible = (sunFade > 0.01);
+
+  // Surface water plane fades out when looking from extreme depths
+  const surfaceFade = Math.max(0.0, 1.0 - ratio * 3.5);
+  waterMaterial.opacity = surfaceFade;
+  water.visible = (surfaceFade > 0.01);
+
+  // Sun ascends as camera plunges down
+  const newSunY = 32.0 + ratio * 250.0;
+  sunGroup.position.y = newSunY;
+  sunLight.position.y = newSunY;
+  waterMaterial.uniforms.uSunPosition.value.y = newSunY;
+  skyMat.uniforms.uSunPosition.value.y = newSunY;
+
+  // 3. PROGRESSIVE DARKER BLUISH OCEANIC LIGHTING (0m -> 4000m):
+  // Dims lighting dynamically into deep oceanic dark blue
+  const lightFactor = Math.max(0.005, Math.pow(1.0 - Math.min(1.0, ratio * 1.5), 2.5));
+  sunLight.intensity = 2.5 * lightFactor;
+  ambientLight.intensity = Math.max(0.02, 0.9 * Math.pow(1.0 - ratio, 2.0));
+
+  // Darker bluish oceanic palette
+  // Surface: soft sky blue / golden
+  // 500m: deep oceanic royal navy (#001845)
+  // 1500m: dark midnight blue (#000b21)
+  // 3000m - 4000m: pitch-dark abyss blue (#00040f)
+  const surfaceSkyTop = new THREE.Color(0x2a75b3);
+  const darkAbyssBlue = new THREE.Color(0x00040f);
+  skyMat.uniforms.uTopColor.value.lerpColors(surfaceSkyTop, darkAbyssBlue, Math.min(1.0, ratio * 1.6));
+
+  const surfaceHorizon = new THREE.Color(0xffe6a3);
+  const deepMidnightBlue = new THREE.Color(0x00081c);
+  skyMat.uniforms.uHorizonColor.value.lerpColors(surfaceHorizon, deepMidnightBlue, Math.min(1.0, ratio * 1.8));
+
+  // Water shader color darkening
+  const surfaceWater = new THREE.Color(0x1992b8);
+  const deepOceanBlue = new THREE.Color(0x000922);
+  waterMaterial.uniforms.uSurfaceColor.value.lerpColors(surfaceWater, deepOceanBlue, Math.min(1.0, ratio * 2.0));
+
+  const surfaceDepthColor = new THREE.Color(0x0a2b5e);
+  const ultraDarkBlue = new THREE.Color(0x00030a);
+  waterMaterial.uniforms.uDepthColor.value.lerpColors(surfaceDepthColor, ultraDarkBlue, Math.min(1.0, ratio * 2.0));
+
+  // 4. PROCEDURAL RISING BUBBLES:
+  // Visible during diving, glowing softly in the dark blue water
+  bubblesMesh.visible = (ratio > 0.015);
+  // Bubble color shifts to bioluminescent cyan-blue in deep darkness
+  const bubbleBright = new THREE.Color(0xdbf7ff);
+  const bubbleDeep = new THREE.Color(0x1ee3cf);
+  bubbleMat.color.lerpColors(bubbleBright, bubbleDeep, ratio);
+  bubbleMat.opacity = Math.max(0.2, 0.75 - ratio * 0.35);
+};
+
+// ============================================================================
+// 8. ANIMATION LOOP
 // ============================================================================
 const clock = new THREE.Clock();
 
@@ -432,7 +577,6 @@ function animate() {
   // 2. Animate Slow Cloud Drift across sky
   cloudsGroup.children.forEach(cloud => {
     cloud.position.x += cloud.userData.speed;
-    // Loop clouds when they move off screen
     if (cloud.position.x > 150) {
       cloud.position.x = -150;
     }
@@ -441,10 +585,35 @@ function animate() {
   // 3. Subtle Sun Glow pulsation
   sunGlowMesh.scale.setScalar(1.0 + 0.04 * Math.sin(elapsedTime * 1.5));
 
-  // 4. Update camera controls
+  // 4. Animate Rising Bubbles (when diving underwater)
+  if (bubblesMesh.visible) {
+    const camY = camera.position.y;
+    for (let i = 0; i < BUBBLE_COUNT; i++) {
+      const b = bubbleData[i];
+      b.y += b.speed;
+      b.x += Math.sin(elapsedTime * 2.5 + b.phase) * 0.015;
+      b.z += Math.cos(elapsedTime * 2.0 + b.phase) * 0.015;
+
+      // When bubble reaches the water surface, reset beneath camera
+      if (b.y >= -0.1) {
+        b.y = Math.min(-1.0, camY - 8.0 - Math.random() * 12.0);
+        b.x = camera.position.x + (Math.random() - 0.5) * 35;
+        b.z = camera.position.z + (Math.random() - 0.5) * 35;
+      }
+
+      dummy.position.set(b.x, b.y, b.z);
+      dummy.scale.set(b.scale, b.scale, b.scale);
+      dummy.updateMatrix();
+      bubblesMesh.setMatrixAt(i, dummy.matrix);
+    }
+    bubblesMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // 5. Update camera controls
   controls.update();
 
   renderer.render(scene, camera);
 }
 
 animate();
+

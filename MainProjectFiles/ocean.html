@@ -6,7 +6,7 @@
     <title>3D Ocean & Sun Waves - Three.js</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
       * {
         box-sizing: border-box;
@@ -20,13 +20,48 @@
         overflow: hidden;
         background-color: #020713;
         font-family: 'Outfit', sans-serif;
+        color: #e2e8f0;
       }
       canvas {
         display: block;
         width: 100vw;
         height: 100vh;
       }
-      /* Floating navigation */
+
+      /* Glassmorphism Common Style */
+      .glass-panel {
+        background: rgba(6, 18, 38, 0.72);
+        backdrop-filter: blur(18px) saturate(160%);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
+        border: 1px solid rgba(0, 229, 255, 0.22);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+      }
+
+      /* Floating Header */
+      .header-pill {
+        position: absolute;
+        top: 20px;
+        left: 24px;
+        z-index: 10;
+        padding: 12px 20px;
+        border-color: rgba(255, 224, 66, 0.25);
+      }
+      .header-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .header-sub {
+        font-size: 0.78rem;
+        color: #ffe6a3;
+        margin-top: 2px;
+      }
+
+      /* Floating Navigation Back to Globe */
       .nav-bar {
         position: absolute;
         top: 20px;
@@ -57,47 +92,268 @@
         border-color: #ffe042;
         transform: translateY(-2px);
       }
-      .header-pill {
+
+      /* ======================================================================
+         LEFT SIDE GLASSMORPHISM DEPTH CONTROLS & SCROLLBAR
+         ====================================================================== */
+      .depth-bar-container {
+        position: absolute;
+        left: 24px;
+        top: 96px;
+        bottom: 74px;
+        width: 140px;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 10px;
+        background: rgba(6, 18, 38, 0.78);
+        backdrop-filter: blur(20px) saturate(170%);
+        -webkit-backdrop-filter: blur(20px) saturate(170%);
+        border: 1.5px solid rgba(0, 229, 255, 0.3);
+        border-radius: 22px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 25px rgba(0, 229, 255, 0.15);
+        user-select: none;
+      }
+
+      /* Interactive Depth Input Box */
+      .depth-input-card {
+        width: 100%;
+        background: rgba(4, 14, 32, 0.85);
+        border: 1px solid rgba(0, 229, 255, 0.35);
+        border-radius: 12px;
+        padding: 8px 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      }
+      .input-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #8bb2db;
+        font-weight: 600;
+      }
+      .input-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        width: 100%;
+        justify-content: center;
+      }
+      .depth-num-input {
+        width: 58px;
+        background: rgba(2, 8, 20, 0.9);
+        border: 1px solid #00e5ff;
+        border-radius: 6px;
+        color: #00ffcc;
+        font-family: 'Space Mono', monospace;
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 4px 2px;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .depth-num-input:focus {
+        border-color: #ffe042;
+        box-shadow: 0 0 10px rgba(255, 224, 66, 0.5);
+      }
+      .input-unit {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.75rem;
+        color: #9ab4ce;
+        font-weight: 600;
+      }
+      .dive-go-btn {
+        background: linear-gradient(135deg, #00b4d8, #0077b6);
+        border: none;
+        color: #ffffff;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+        text-transform: uppercase;
+      }
+      .dive-go-btn:hover {
+        background: linear-gradient(135deg, #00f0ff, #0096c7);
+        transform: translateY(-1px);
+        box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+      }
+
+      /* Endpoints (Top level and Depth) */
+      .depth-endpoint {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 1px;
+        width: 100%;
+      }
+      .depth-endpoint.top {
+        margin-top: 6px;
+      }
+      .depth-endpoint.bottom {
+        margin-top: 4px;
+        border-top: 1px solid rgba(0, 229, 255, 0.2);
+        padding-top: 6px;
+      }
+      .endpoint-title {
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      .depth-endpoint.top .endpoint-title {
+        color: #ffe042;
+        text-shadow: 0 0 8px rgba(255, 224, 66, 0.4);
+      }
+      .depth-endpoint.bottom .endpoint-title {
+        color: #00e5ff;
+        text-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+      }
+      .endpoint-num {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.65rem;
+        color: #8dafcb;
+      }
+
+      /* Vertical Track Area */
+      .depth-track-container {
+        position: relative;
+        flex: 1;
+        width: 100%;
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        margin: 6px 0;
+        cursor: pointer;
+        padding-left: 20px;
+      }
+
+      /* Central Track Line */
+      .depth-track {
+        position: relative;
+        width: 10px;
+        height: 100%;
+        background: rgba(3, 11, 26, 0.85);
+        border: 1px solid rgba(0, 229, 255, 0.35);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      /* Dynamic Gradient Depth Fill (bright yellow -> deep darkness) */
+      .depth-track-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 0%;
+        background: linear-gradient(to bottom, #ffe042 0%, #00e5ff 25%, #0052a3 50%, #021a38 75%, #01040a 100%);
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.6);
+        border-radius: 6px;
+        transition: height 0.05s linear;
+      }
+
+      /* Depth Tick Marks (100m steps up to 1000m) */
+      .depth-ticks {
+        position: absolute;
+        left: 38px;
+        top: 0;
+        bottom: 0;
+        right: 4px;
+        pointer-events: none;
+      }
+      .depth-tick {
+        position: absolute;
+        font-family: 'Space Mono', monospace;
+        font-size: 0.55rem;
+        color: #729bbb;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .depth-tick.major {
+        color: #00e5ff;
+        font-weight: 700;
+      }
+      .depth-tick::before {
+        content: '';
+        width: 5px;
+        height: 1px;
+        background: rgba(0, 229, 255, 0.4);
+      }
+
+      /* Interactive Draggable Thumb Knob */
+      .depth-thumb {
+        position: absolute;
+        top: 0%;
+        left: 25px;
+        transform: translate(-50%, -50%);
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 2px solid #00e5ff;
+        box-shadow: 0 0 14px rgba(0, 229, 255, 0.95), 0 4px 10px rgba(0, 0, 0, 0.8);
+        cursor: grab;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 5;
+        transition: transform 0.1s ease;
+      }
+      .depth-thumb:active {
+        cursor: grabbing;
+        transform: translate(-50%, -50%) scale(1.2);
+      }
+      .thumb-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #020713;
+      }
+
+      /* Live Bathymetric Zone Badge on Right */
+      .zone-indicator {
         position: absolute;
         top: 20px;
-        left: 24px;
+        left: 360px;
         z-index: 10;
-        background: rgba(6, 18, 38, 0.75);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 224, 66, 0.25);
-        border-radius: 14px;
-        padding: 12px 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-      }
-      .header-title {
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: #ffffff;
+        padding: 8px 16px;
         display: flex;
         align-items: center;
         gap: 8px;
+        font-size: 0.8rem;
+        color: #d1ecf1;
       }
-      .header-sub {
-        font-size: 0.78rem;
-        color: #ffe6a3;
-        margin-top: 2px;
+      .zone-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ffe042;
+        box-shadow: 0 0 8px #ffe042;
       }
+
+      /* Controls Hint Pill */
       .info-pill {
         position: absolute;
         bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 10;
-        background: rgba(6, 18, 38, 0.65);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 20px;
         padding: 8px 20px;
         color: #f7eed2;
         font-size: 0.78rem;
         display: flex;
-        gap: 14px;
+        gap: 16px;
         pointer-events: none;
       }
       .info-pill span strong {
@@ -106,20 +362,197 @@
     </style>
   </head>
   <body>
-    <div class="header-pill">
+    <!-- Header -->
+    <div class="header-pill glass-panel">
       <div class="header-title">☀️ Ocean Waves & Golden Sun</div>
-      <div class="header-sub">Custom GLSL Shader Waves • 60% Sky & Clouds / 40% Ocean</div>
+      <div class="header-sub">Custom GLSL Shader Waves • Vertical Depth Diving</div>
     </div>
 
+    <!-- Bathymetric Zone Indicator -->
+    <div class="zone-indicator glass-panel" id="zoneIndicator">
+      <div class="zone-dot" id="zoneDot"></div>
+      <span id="zoneText">0m • Sunlight Zone (Epipelagic)</span>
+    </div>
+
+    <!-- Navigation -->
     <div class="nav-bar">
       <a href="/index.html" class="nav-btn">🌍 3D World Globe</a>
     </div>
 
-    <div class="info-pill">
-      <span>🖱️ <strong>Left Click + Drag:</strong> Pan Horizon</span>
-      <span>🔍 <strong>Scroll:</strong> Zoom</span>
-      <span>🌊 <strong>Custom Shaders:</strong> Dynamic Swells & Specular Shimmer</span>
+    <!-- LEFT-SIDE GLASSMORPHIC SCROLLBAR & DEPTH ENTER BOX -->
+    <div class="depth-bar-container">
+      <!-- Direct Depth Input Box -->
+      <div class="depth-input-card">
+        <span class="input-label">Enter Depth</span>
+        <div class="input-group">
+          <input type="number" id="depthInput" class="depth-num-input" min="0" max="4000" step="50" value="0" />
+          <span class="input-unit">m</span>
+          <button id="diveBtn" class="dive-go-btn" title="Dive to depth">Go</button>
+        </div>
+      </div>
+
+      <!-- Top level -->
+      <div class="depth-endpoint top">
+        <span style="font-size: 0.95rem;">☀️</span>
+        <span class="endpoint-title">Top level</span>
+        <span class="endpoint-num">0 m</span>
+      </div>
+
+      <!-- Vertical Slider Track (0 to 4000 meters) -->
+      <div class="depth-track-container" id="depthTrackContainer">
+        <div class="depth-track">
+          <div class="depth-track-fill" id="depthTrackFill"></div>
+        </div>
+
+        <!-- Ticks: Depth steps up to 4000m -->
+        <div class="depth-ticks">
+          <div class="depth-tick major" style="top: 0%">0m</div>
+          <div class="depth-tick" style="top: 12.5%">500m</div>
+          <div class="depth-tick major" style="top: 25%">1000m</div>
+          <div class="depth-tick" style="top: 37.5%">1500m</div>
+          <div class="depth-tick major" style="top: 50%">2000m</div>
+          <div class="depth-tick" style="top: 62.5%">2500m</div>
+          <div class="depth-tick major" style="top: 75%">3000m</div>
+          <div class="depth-tick" style="top: 87.5%">3500m</div>
+          <div class="depth-tick major" style="top: 100%">4000m</div>
+        </div>
+
+        <!-- Draggable Thumb -->
+        <div class="depth-thumb" id="depthThumb">
+          <div class="thumb-dot"></div>
+        </div>
+      </div>
+
+      <!-- Depth -->
+      <div class="depth-endpoint bottom">
+        <span class="endpoint-title">Depth</span>
+        <span class="endpoint-num">4000 m (Abyss)</span>
+        <span style="font-size: 0.95rem;">⚓</span>
+      </div>
     </div>
+
+    <!-- Controls Hint -->
+    <div class="info-pill glass-panel">
+      <span>🖱️ <strong>Left Click + Drag:</strong> Pan / Inspect</span>
+      <span>↕️ <strong>Scroll or Enter Depth:</strong> Descend to 4000m Abyss</span>
+      <span>🌊 <strong>Custom Shaders:</strong> GLSL Swells</span>
+    </div>
+
+    <!-- Depth Scroll Bar & Input Box Logic -->
+    <script>
+      (function() {
+        const container = document.getElementById('depthTrackContainer');
+        const fill = document.getElementById('depthTrackFill');
+        const thumb = document.getElementById('depthThumb');
+        const depthInput = document.getElementById('depthInput');
+        const diveBtn = document.getElementById('diveBtn');
+        const zoneText = document.getElementById('zoneText');
+        const zoneDot = document.getElementById('zoneDot');
+
+        const MAX_DEPTH = 4000;
+        let isDragging = false;
+        let currentRatio = 0.0;
+
+        function updateDepth(ratio, updateInputField = true) {
+          ratio = Math.max(0, Math.min(1, ratio));
+          currentRatio = ratio;
+
+          // Update fill and thumb position
+          const percent = (ratio * 100).toFixed(1);
+          fill.style.height = `${percent}%`;
+          thumb.style.top = `${percent}%`;
+
+          // Calculate depth in meters (0m to 4000m)
+          const depthMeters = Math.round(ratio * MAX_DEPTH);
+          if (updateInputField && document.activeElement !== depthInput) {
+            depthInput.value = depthMeters;
+          }
+
+          // Update Bathymetric Zone description & color indicator
+          if (depthMeters === 0) {
+            zoneText.textContent = `0m • Surface / Top Level (Sun & Clouds)`;
+            zoneDot.style.background = '#ffe042';
+            zoneDot.style.boxShadow = '0 0 8px #ffe042';
+          } else if (depthMeters <= 200) {
+            zoneText.textContent = `${depthMeters}m • Sunlight Zone (Sunlight fading)`;
+            zoneDot.style.background = '#00f0ff';
+            zoneDot.style.boxShadow = '0 0 8px #00f0ff';
+          } else if (depthMeters <= 1000) {
+            zoneText.textContent = `${depthMeters}m • Twilight Zone (Deepening Blue darkness)`;
+            zoneDot.style.background = '#0077b6';
+            zoneDot.style.boxShadow = '0 0 8px #0077b6';
+          } else if (depthMeters <= 3000) {
+            zoneText.textContent = `${depthMeters}m • Midnight Zone (Upper level disappeared)`;
+            zoneDot.style.background = '#03045e';
+            zoneDot.style.boxShadow = '0 0 8px #0077b6';
+          } else {
+            zoneText.textContent = `${depthMeters}m • Abyssal Plain (Ultra-Dark Blue Abyss)`;
+            zoneDot.style.background = '#000814';
+            zoneDot.style.boxShadow = '0 0 10px #00e5ff';
+          }
+
+          // Pass to Three.js Ocean scene
+          if (window.setOceanDepth) {
+            window.setOceanDepth(ratio);
+          }
+        }
+
+        // Direct Input Handling
+        function onInputChange() {
+          let val = parseFloat(depthInput.value) || 0;
+          val = Math.max(0, Math.min(MAX_DEPTH, val));
+          depthInput.value = Math.round(val);
+          updateDepth(val / MAX_DEPTH, false);
+        }
+
+        depthInput.addEventListener('change', onInputChange);
+        depthInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            onInputChange();
+          }
+        });
+        diveBtn.addEventListener('click', onInputChange);
+
+        // Pointer Dragging on Slider Track
+        function handlePointer(e) {
+          const rect = container.getBoundingClientRect();
+          const offsetY = e.clientY - rect.top;
+          const ratio = offsetY / rect.height;
+          updateDepth(ratio, true);
+        }
+
+        container.addEventListener('pointerdown', (e) => {
+          isDragging = true;
+          container.setPointerCapture(e.pointerId);
+          handlePointer(e);
+        });
+
+        container.addEventListener('pointermove', (e) => {
+          if (isDragging) {
+            handlePointer(e);
+          }
+        });
+
+        container.addEventListener('pointerup', (e) => {
+          isDragging = false;
+          try { container.releasePointerCapture(e.pointerId); } catch(err) {}
+        });
+
+        container.addEventListener('pointercancel', () => {
+          isDragging = false;
+        });
+
+        // Mouse wheel over the depth bar scrolls depth smoothly
+        container.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const step = (e.deltaY > 0) ? 0.025 : -0.025;
+          updateDepth(currentRatio + step, true);
+        }, { passive: false });
+
+        // Initialize at Top level (0m)
+        updateDepth(0.0);
+      })();
+    </script>
 
     <script type="module" src="/3d pages/Ocean.js"></script>
   </body>
