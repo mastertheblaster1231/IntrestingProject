@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>INCOIS Ocean Observation Network - 3D World Globe</title>
+    <title>INCOIS Ocean Observation Network - 3D World Globe & Argo Profiling Floats</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -30,7 +30,7 @@
 
       /* Glassmorphism Common Utilities */
       .glass-panel {
-        background: rgba(6, 18, 38, 0.72);
+        background: rgba(6, 18, 38, 0.75);
         backdrop-filter: blur(18px) saturate(160%);
         -webkit-backdrop-filter: blur(18px) saturate(160%);
         border: 1px solid rgba(0, 229, 255, 0.22);
@@ -70,6 +70,15 @@
       .hud-subtitle {
         font-size: 0.8rem;
         color: #8bb2db;
+      }
+
+      /* Top Ocean View Switcher */
+      .top-ocean-btn {
+        position: absolute;
+        top: 20px;
+        right: 424px;
+        z-index: 15;
+        text-decoration: none;
       }
 
       /* Sidebar Toggle Floating Button */
@@ -119,13 +128,14 @@
         display: flex;
         flex-direction: column;
         transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
-        transform: translateX(0);
-        opacity: 1;
-      }
-      .hud-sidebar.collapsed {
         transform: translateX(-370px);
         opacity: 0;
         pointer-events: none;
+      }
+      .hud-sidebar.open {
+        transform: translateX(0);
+        opacity: 1;
+        pointer-events: auto;
       }
 
       .sidebar-header {
@@ -239,6 +249,514 @@
         margin-top: 2px;
       }
 
+      /* ======================================================================
+         🧭 GLOBE NAVIGATION CONTROLS (Left Dock, matching screenshot)
+         ====================================================================== */
+      .globe-nav-controls {
+        position: absolute;
+        top: 140px;
+        left: 24px;
+        z-index: 22;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        pointer-events: auto;
+      }
+      .nav-ctrl-btn {
+        background: rgba(9, 19, 36, 0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #cbd5e1;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 229, 255, 0.1);
+        font-family: inherit;
+        font-size: 1.25rem;
+        font-weight: 600;
+        outline: none;
+      }
+      .nav-ctrl-btn:hover {
+        background: rgba(14, 30, 56, 0.95);
+        color: #00f0ff;
+        border-color: rgba(0, 229, 255, 0.45);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65), 0 0 14px rgba(0, 229, 255, 0.3);
+      }
+      .nav-ctrl-btn:active {
+        transform: translateY(0);
+      }
+      .nav-zoom-group {
+        background: rgba(9, 19, 36, 0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+        overflow: hidden;
+      }
+      .nav-zoom-group .nav-ctrl-btn {
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        width: 44px;
+        height: 40px;
+        background: transparent;
+      }
+      .nav-btn-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        margin: 0 6px;
+      }
+
+      /* ======================================================================
+         📊 ARGO FLOAT BASIC DATA PANEL (Right side, matching screenshot)
+         ====================================================================== */
+      .argo-float-panel {
+        position: absolute;
+        top: 20px;
+        right: 24px;
+        bottom: 24px;
+        width: 380px;
+        max-width: calc(100vw - 48px);
+        z-index: 30;
+        background: rgba(10, 18, 34, 0.94);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+        transform: translateX(0);
+        opacity: 1;
+      }
+      .argo-float-panel:not(.visible) {
+        transform: translateX(420px);
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* Header */
+      .argo-header {
+        padding: 18px 20px 12px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .argo-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .argo-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ff7a00;
+        box-shadow: 0 0 12px rgba(255, 122, 0, 0.85);
+        display: inline-block;
+      }
+      .argo-title {
+        font-size: 1.12rem;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: 0.2px;
+      }
+      .argo-close-btn {
+        background: transparent;
+        border: none;
+        color: #7b8fa7;
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        line-height: 1;
+      }
+      .argo-close-btn:hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      /* Subheader: Float ID & Status Badge */
+      .argo-id-row {
+        padding: 0 20px 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .argo-id-lbl {
+        font-size: 0.76rem;
+        color: #7e8f9f;
+        margin-bottom: 2px;
+      }
+      .argo-id-val {
+        font-size: 1.55rem;
+        font-weight: 700;
+        color: #ffffff;
+        font-family: inherit;
+        letter-spacing: 0.5px;
+      }
+      .argo-status-badge {
+        background: #0b3223;
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.45);
+        padding: 4px 14px;
+        border-radius: 16px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+      }
+
+      /* Tab Navigation */
+      .argo-tabs-nav {
+        display: flex;
+        padding: 0 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        gap: 6px;
+      }
+      .argo-tab-btn {
+        background: transparent;
+        border: none;
+        color: #7b8fa7;
+        font-family: inherit;
+        font-size: 0.84rem;
+        font-weight: 500;
+        padding: 10px 12px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease;
+      }
+      .argo-tab-btn:hover {
+        color: #d1e2f3;
+      }
+      .argo-tab-btn.active {
+        color: #00e5ff;
+        font-weight: 600;
+      }
+      .argo-tab-btn.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 8px;
+        right: 8px;
+        height: 2px;
+        background: #00e5ff;
+        border-radius: 2px;
+        box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
+      }
+
+      /* Tab Panes Container */
+      .argo-content-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .argo-content-body::-webkit-scrollbar {
+        width: 5px;
+      }
+      .argo-content-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .argo-content-body::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 4px;
+      }
+
+      .argo-tab-pane {
+        display: none;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .argo-tab-pane.active {
+        display: flex;
+      }
+
+      /* Properties List */
+      .prop-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.83rem;
+        padding: 4px 0;
+      }
+      .prop-label-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #8295a9;
+      }
+      .prop-icon {
+        width: 16px;
+        height: 16px;
+        color: #8295a9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .prop-val {
+        color: #e2e8f0;
+        font-weight: 500;
+        text-align: right;
+      }
+
+      /* Subsections */
+      .section-heading {
+        font-size: 0.86rem;
+        font-weight: 600;
+        color: #cdd9e5;
+        margin-top: 4px;
+      }
+
+      /* Observation 2-Card Grid */
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .metric-card {
+        background: rgba(14, 25, 45, 0.65);
+        border-radius: 14px;
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: transform 0.2s ease;
+      }
+      .metric-card:hover {
+        transform: translateY(-2px);
+      }
+      .temp-card {
+        border: 1px solid rgba(255, 122, 0, 0.22);
+      }
+      .sal-card {
+        border: 1px solid rgba(56, 189, 248, 0.22);
+      }
+      .metric-icon-wrap {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .temp-icon {
+        background: rgba(255, 122, 0, 0.12);
+        color: #ff8c26;
+      }
+      .sal-icon {
+        background: rgba(56, 189, 248, 0.12);
+        color: #38bdf8;
+      }
+      .metric-info {
+        display: flex;
+        flex-direction: column;
+      }
+      .metric-label {
+        font-size: 0.72rem;
+        color: #7b8fa7;
+      }
+      .metric-num {
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .temp-num {
+        color: #ff9436;
+      }
+      .sal-num {
+        color: #38bdf8;
+      }
+
+      /* Vertical Profile Chart */
+      .chart-container {
+        background: rgba(6, 13, 26, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 14px;
+        padding: 12px 10px 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+      }
+      .chart-legend {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 14px;
+        font-size: 0.72rem;
+        padding-right: 8px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .legend-dot-temp {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ff7a00;
+      }
+      .legend-dot-sal {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #38bdf8;
+      }
+      .chart-y-title {
+        position: absolute;
+        top: 65px;
+        left: 2px;
+        font-size: 0.68rem;
+        color: #6b7c93;
+        transform: rotate(-90deg);
+        transform-origin: center;
+        font-family: 'Space Mono', monospace;
+      }
+      #profileChartSvg {
+        width: 100%;
+        height: 180px;
+        display: block;
+      }
+      .chart-mini-tooltip {
+        position: absolute;
+        top: 10px;
+        left: 12px;
+        font-size: 0.7rem;
+        color: #00f0ff;
+        font-family: 'Space Mono', monospace;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+        background: rgba(2, 7, 19, 0.9);
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 229, 255, 0.4);
+      }
+      .chart-axes-labels {
+        display: flex;
+        justify-content: space-around;
+        padding-top: 4px;
+        font-size: 0.7rem;
+        font-family: 'Space Mono', monospace;
+      }
+      .axis-temp-lbl {
+        color: #ff9436;
+      }
+      .axis-sal-lbl {
+        color: #38bdf8;
+      }
+
+      /* Profile Table (Tab 2) */
+      .profile-table-wrap {
+        max-height: 240px;
+        overflow-y: auto;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+      }
+      .profile-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.74rem;
+        font-family: 'Space Mono', monospace;
+      }
+      .profile-table th {
+        background: rgba(14, 25, 45, 0.9);
+        padding: 8px 6px;
+        text-align: right;
+        color: #8bb2db;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        position: sticky;
+        top: 0;
+      }
+      .profile-table th:first-child {
+        text-align: left;
+        padding-left: 10px;
+      }
+      .profile-table td {
+        padding: 6px;
+        text-align: right;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        color: #cbd5e1;
+      }
+      .profile-table td:first-child {
+        text-align: left;
+        padding-left: 10px;
+        color: #ffffff;
+      }
+
+      /* Details Grid */
+      .details-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(14, 25, 45, 0.5);
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      /* Raw Data JSON (Tab 4) */
+      .raw-data-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .copy-btn {
+        background: rgba(0, 229, 255, 0.15);
+        border: 1px solid rgba(0, 229, 255, 0.4);
+        color: #00f0ff;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.74rem;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: 600;
+        transition: all 0.2s ease;
+      }
+      .copy-btn:hover {
+        background: #00e5ff;
+        color: #020713;
+      }
+      .raw-json-box {
+        background: rgba(4, 9, 20, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 12px;
+        font-family: 'Space Mono', monospace;
+        font-size: 0.7rem;
+        color: #86efac;
+        max-height: 280px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .api-note-box {
+        background: rgba(0, 229, 255, 0.06);
+        border: 1px dashed rgba(0, 229, 255, 0.35);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 0.74rem;
+        color: #93c5fd;
+        line-height: 1.4;
+      }
+
       /* Interactive Hover Tooltip */
       #tooltip {
         position: absolute;
@@ -271,7 +789,7 @@
         color: #ffffff;
       }
 
-      /* Controls Hint Pill */
+      /* Bottom Controls Hint Pill */
       .hud-controls {
         position: absolute;
         bottom: 20px;
@@ -293,9 +811,55 @@
       .hud-controls strong {
         color: #00e5ff;
       }
+
+      /* Dive into Ocean Button */
+      .dive-ocean-btn {
+        background: linear-gradient(135deg, #00b4d8, #0077b6);
+        border: 1px solid rgba(0, 229, 255, 0.45);
+        color: #ffffff;
+        padding: 11px 16px;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 0.84rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), 0 0 12px rgba(0, 229, 255, 0.3);
+        margin-top: 6px;
+      }
+      .dive-ocean-btn:hover {
+        background: linear-gradient(135deg, #00f0ff, #0096c7);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 26px rgba(0, 229, 255, 0.5);
+        color: #020713;
+      }
+
+      /* Seamless Transition Overlay */
+      .transition-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #020713;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .transition-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
     </style>
   </head>
   <body>
+    <!-- Transition Overlay -->
+    <div id="transitionOverlay" class="transition-overlay"></div>
+
     <!-- Top Header -->
     <div class="hud-header glass-panel">
       <div>
@@ -303,21 +867,19 @@
           <span>⚓ INCOIS Ocean Observation Buoys</span>
           <span class="badge">OON / ARGO</span>
         </div>
-        <div class="hud-subtitle">3D Globe Visualization with Arabian Sea & Bay of Bengal Stations</div>
+        <div class="hud-subtitle">3D Globe & APEX Profiling Floats Network</div>
       </div>
     </div>
 
     <!-- Top Right Ocean View Switcher -->
-    <div style="position: absolute; top: 20px; right: 24px; z-index: 15;">
-      <a href="/ocean.html" class="sidebar-toggle-btn" style="position: static; text-decoration: none; border-color: rgba(255, 224, 66, 0.45); color: #fff4bd;">
-        <span>🌊 3D Ocean Waves</span>
-      </a>
-    </div>
+    <a href="/ocean.html" class="sidebar-toggle-btn top-ocean-btn" style="border-color: rgba(255, 224, 66, 0.45); color: #fff4bd;">
+      <span>🌊 3D Ocean Waves</span>
+    </a>
 
     <!-- Floating Open/Close Sidebar Toggle Button -->
     <button id="sidebarToggle" class="sidebar-toggle-btn" onclick="toggleSidebar()">
-      <span class="toggle-icon">◀</span>
-      <span id="toggleText">Hide Stations</span>
+      <span class="toggle-icon">▶</span>
+      <span id="toggleText">Observation Points</span>
     </button>
 
     <!-- Glassmorphic Collapsible Sidebar -->
@@ -335,10 +897,10 @@
             <span class="card-id">⚓ A1</span>
             <span class="card-code">AD07</span>
           </div>
-          <div class="card-sea">Arabian Sea (West of Goa)</div>
+          <div class="card-sea">Indian Ocean (Equatorial Basin)</div>
           <div class="card-coords">
-            <span>15.00°N</span>
-            <span>69.00°E</span>
+            <span>12.35°S</span>
+            <span>78.62°E</span>
           </div>
         </div>
 
@@ -428,10 +990,269 @@
       </div>
     </div>
 
+    <!-- ======================================================================
+         🧭 GLOBE NAVIGATION CONTROLS (Left Dock matching user screenshot)
+         ====================================================================== -->
+    <div class="globe-nav-controls">
+      <!-- Compass / North Reset -->
+      <button class="nav-ctrl-btn nav-compass-btn" onclick="navResetNorth()" title="Reset view to North">
+        <svg viewBox="0 0 32 32" width="24" height="24">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="1.5"/>
+          <polygon points="16,5 12,16 16,13 20,16" fill="#ef4444"/>
+          <polygon points="16,27 12,16 16,19 20,16" fill="#94a3b8"/>
+          <text x="16" y="10" font-size="7.5" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="'Space Mono', monospace">N</text>
+        </svg>
+      </button>
+
+      <!-- Zoom In & Out -->
+      <div class="nav-zoom-group">
+        <button class="nav-ctrl-btn" onclick="navZoomIn()" title="Zoom In">+</button>
+        <div class="nav-btn-divider"></div>
+        <button class="nav-ctrl-btn" onclick="navZoomOut()" title="Zoom Out">−</button>
+      </div>
+
+      <!-- Center / Reset Target -->
+      <button class="nav-ctrl-btn" onclick="navCenterView()" title="Center Ocean View">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="7"/>
+          <line x1="12" y1="2" x2="12" y2="6"/>
+          <line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/>
+          <line x1="18" y1="12" x2="22" y2="12"/>
+          <circle cx="12" cy="12" r="2" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ======================================================================
+         📊 ARGO FLOAT BASIC DATA PANEL (Right side matching user screenshot)
+         ====================================================================== -->
+    <div id="argoFloatPanel" class="argo-float-panel visible">
+      <!-- Header -->
+      <div class="argo-header">
+        <div class="argo-title-wrap">
+          <span class="argo-dot"></span>
+          <span class="argo-title">Argo Float</span>
+        </div>
+        <button class="argo-close-btn" onclick="closeArgoFloatPanel()" title="Close details panel">✕</button>
+      </div>
+
+      <!-- Float ID & Status Pill -->
+      <div class="argo-id-row">
+        <div>
+          <div class="argo-id-lbl">Float ID</div>
+          <div class="argo-id-val" id="argoFloatId">2902345</div>
+        </div>
+        <div class="argo-status-badge" id="argoStatusPill">Active</div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="argo-tabs-nav">
+        <button class="argo-tab-btn active" data-tab="overview" onclick="switchArgoTab('overview')">Overview</button>
+        <button class="argo-tab-btn" data-tab="profile" onclick="switchArgoTab('profile')">Profile</button>
+        <button class="argo-tab-btn" data-tab="location" onclick="switchArgoTab('location')">Location</button>
+        <button class="argo-tab-btn" data-tab="raw" onclick="switchArgoTab('raw')">Raw Data</button>
+      </div>
+
+      <!-- Content Body -->
+      <div class="argo-content-body">
+        <!-- 1. OVERVIEW TAB -->
+        <div id="tab-overview" class="argo-tab-pane active">
+          <!-- Metadata Properties -->
+          <div class="prop-row">
+            <div class="prop-label-group">
+              <span class="prop-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              </span>
+              <span>Location</span>
+            </div>
+            <div class="prop-val" id="argoValLocation">12.35° S, 78.62° E</div>
+          </div>
+
+          <div class="prop-row">
+            <div class="prop-label-group">
+              <span class="prop-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </span>
+              <span>Last Observation</span>
+            </div>
+            <div class="prop-val" id="argoValLastObs">12 Aug 2025, 10:30 UTC</div>
+          </div>
+
+          <div class="prop-row">
+            <div class="prop-label-group">
+              <span class="prop-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 19 19 12"/><line x1="5" y1="5" x2="19" y2="5"/></svg>
+              </span>
+              <span>Max Depth</span>
+            </div>
+            <div class="prop-val" id="argoValMaxDepth">2000 m</div>
+          </div>
+
+          <div class="prop-row">
+            <div class="prop-label-group">
+              <span class="prop-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              </span>
+              <span>Measurements</span>
+            </div>
+            <div class="prop-val" id="argoValMeasurements">Temperature, Salinity</div>
+          </div>
+
+          <!-- Section: Latest Observation (at surface) -->
+          <div class="section-heading">Latest Observation <span style="font-weight:400; color:#8bb2db; font-size:0.78rem;">(at surface)</span></div>
+
+          <div class="metrics-grid">
+            <!-- Temperature Card -->
+            <div class="metric-card temp-card">
+              <div class="metric-icon-wrap temp-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Temperature</span>
+                <span class="metric-num temp-num" id="argoSurfaceTemp">28.4 °C</span>
+              </div>
+            </div>
+
+            <!-- Salinity Card -->
+            <div class="metric-card sal-card">
+              <div class="metric-icon-wrap sal-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+              </div>
+              <div class="metric-info">
+                <span class="metric-label">Salinity</span>
+                <span class="metric-num sal-num" id="argoSurfaceSalinity">34.8 PSU</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Vertical Profile (Latest Cycle) -->
+          <div class="section-heading">Vertical Profile <span style="font-weight:400; color:#8bb2db; font-size:0.78rem;">(Latest Cycle)</span></div>
+
+          <div class="chart-container">
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="legend-dot-temp"></span>
+                <span style="color:#d1e2f3;">Temperature (°C)</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot-sal"></span>
+                <span style="color:#d1e2f3;">Salinity (PSU)</span>
+              </div>
+            </div>
+
+            <div class="chart-y-title">Depth (m)</div>
+            <div id="chartMiniTip" class="chart-mini-tooltip"></div>
+            
+            <svg id="profileChartSvg" viewBox="0 0 310 180"></svg>
+
+            <div class="chart-axes-labels">
+              <span class="axis-temp-lbl">Temperature (°C)</span>
+              <span class="axis-sal-lbl">Salinity (PSU)</span>
+            </div>
+          </div>
+
+          <!-- Direct Link to 3D Ocean Simulation for this float -->
+          <button class="dive-ocean-btn" onclick="transitionToOcean(window.selectedStationId || 'A1')" title="Open 3D Ocean Simulation & Float Surface Model">
+            <span>🌊 Open 3D Ocean Simulation & Float</span>
+            <span>→</span>
+          </button>
+        </div>
+
+        <!-- 2. PROFILE TAB -->
+        <div id="tab-profile" class="argo-tab-pane">
+          <div class="details-list">
+            <div class="prop-row">
+              <span style="color:#8295a9;">Cycle Number</span>
+              <span class="prop-val" id="argoCycleNum" style="color:#00f0ff;">Cycle #84</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">Battery Voltage</span>
+              <span class="prop-val" id="argoBattery">14.1 V</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">Telemetry</span>
+              <span class="prop-val" id="argoTransmission" style="color:#10b981;">Iridium SBD - 100% OK</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">CTD Sensor</span>
+              <span class="prop-val">Sea-Bird SBE 41CP</span>
+            </div>
+          </div>
+
+          <div class="section-heading">Depth Layer Measurements</div>
+          <div class="profile-table-wrap">
+            <table class="profile-table">
+              <thead>
+                <tr>
+                  <th>Depth</th>
+                  <th>Temp</th>
+                  <th>Salinity</th>
+                  <th>Pressure</th>
+                  <th>Density</th>
+                </tr>
+              </thead>
+              <tbody id="argoProfileTableBody">
+                <!-- Injected via oceanDataService -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3. LOCATION TAB -->
+        <div id="tab-location" class="argo-tab-pane">
+          <div class="details-list">
+            <div class="prop-row">
+              <span style="color:#8295a9;">Ocean Basin</span>
+              <span class="prop-val" id="argoSeaBasin">Indian Ocean</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">Coordinates</span>
+              <span class="prop-val" id="argoExactCoords" style="font-family:'Space Mono', monospace;">12.3500°N, 78.6200°E</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">Current Drift</span>
+              <span class="prop-val" id="argoDriftSpeed">0.45 kts @ 114°</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">Est. 24h Drift</span>
+              <span class="prop-val" id="argoDistance24h">20.0 km / 24h</span>
+            </div>
+            <div class="prop-row">
+              <span style="color:#8295a9;">GDAC Center</span>
+              <span class="prop-val">INCOIS Hyderabad (India)</span>
+            </div>
+          </div>
+
+          <div class="api-note-box">
+            📍 <strong>Geodetic Reference:</strong> Positions are derived from GPS surface fixes transmitted via Argos/Iridium satellite constellation during float surfacing interval.
+          </div>
+        </div>
+
+        <!-- 4. RAW DATA TAB (API READY) -->
+        <div id="tab-raw" class="argo-tab-pane">
+          <div class="raw-data-header">
+            <span style="font-size:0.8rem; color:#8bb2db;">REST / NetCDF JSON Payload</span>
+            <button id="copyJsonBtn" class="copy-btn" onclick="copyRawDataJson()">Copy JSON</button>
+          </div>
+
+          <div class="raw-json-box" id="argoRawJsonView">
+            Loading data schema...
+          </div>
+
+          <div class="api-note-box">
+            🌐 <strong>Future API Endpoint:</strong><br>
+            <code id="argoApiEndpoint" style="color:#00e5ff; font-size:0.7rem;">/api/v1/argo/floats/2902345</code><br>
+            Switch to live backend anytime with <code>oceanDataService.setProvider('api', { baseUrl })</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Mouse Controls Hint -->
     <div class="hud-controls glass-panel">
-      <span>🖱️ <strong>Left Click:</strong> Rotate Globe</span>
-      <span>🔍 <strong>Scroll:</strong> Zoom (shrinks anchors)</span>
+      <span>🖱️ <strong>Left Click:</strong> Rotate / Select Buoy</span>
+      <span>🔍 <strong>Scroll:</strong> Zoom</span>
       <span>✋ <strong>Right Click:</strong> Pan</span>
     </div>
 
@@ -443,14 +1264,14 @@
         const sidebar = document.getElementById('sidebar');
         const icon = document.querySelector('.toggle-icon');
         const toggleText = document.getElementById('toggleText');
-        const isCollapsed = sidebar.classList.toggle('collapsed');
+        const isOpen = sidebar.classList.toggle('open');
 
-        if (isCollapsed) {
-          icon.textContent = '▶';
-          toggleText.textContent = 'Show Stations';
-        } else {
+        if (isOpen) {
           icon.textContent = '◀';
           toggleText.textContent = 'Hide Stations';
+        } else {
+          icon.textContent = '▶';
+          toggleText.textContent = 'Observation Points';
         }
       }
     </script>

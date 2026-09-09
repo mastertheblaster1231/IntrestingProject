@@ -1,5 +1,104 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { oceanDataService, getStationById } from "./oceanDataService.js";
+
+// ============================================================================
+// ☀️ DYNAMIC SOLAR TIME & SUN DIRECTION PRESETS
+// Every time the ocean view is opened, a different time of day is loaded!
+// ============================================================================
+export const SOLAR_PRESETS = [
+  {
+    id: "golden-hour",
+    name: "Golden Hour Sunset",
+    timeStr: "18:15 Solar Time",
+    sunPos: new THREE.Vector3(45, 20, -180),
+    sunColor: new THREE.Color(0xff7a00),
+    horizonColor: new THREE.Color(0xffb03a),
+    topColor: new THREE.Color(0x1a3366),
+    sunLightColor: new THREE.Color(0xff8a1a),
+    sunLightIntensity: 2.6,
+    ambientColor: new THREE.Color(0xffd5b3),
+    ambientIntensity: 0.85,
+    waterSurfaceColor: new THREE.Color(0x38bdf8),
+    waterDepthColor: new THREE.Color(0x061e38),
+    badgeEmoji: "🌅",
+  },
+  {
+    id: "midday",
+    name: "Midday Solar Zenith",
+    timeStr: "12:30 Solar Time",
+    sunPos: new THREE.Vector3(-25, 110, -140),
+    sunColor: new THREE.Color(0xfff5c0),
+    horizonColor: new THREE.Color(0xd0f2ff),
+    topColor: new THREE.Color(0x1565c0),
+    sunLightColor: new THREE.Color(0xffffff),
+    sunLightIntensity: 3.0,
+    ambientColor: new THREE.Color(0xe0f2fe),
+    ambientIntensity: 1.1,
+    waterSurfaceColor: new THREE.Color(0x00f0ff),
+    waterDepthColor: new THREE.Color(0x021f45),
+    badgeEmoji: "☀️",
+  },
+  {
+    id: "dawn",
+    name: "Early Tropical Dawn",
+    timeStr: "06:10 Solar Time",
+    sunPos: new THREE.Vector3(-150, 16, -130),
+    sunColor: new THREE.Color(0xffa153),
+    horizonColor: new THREE.Color(0xff8866),
+    topColor: new THREE.Color(0x1e2749),
+    sunLightColor: new THREE.Color(0xffb077),
+    sunLightIntensity: 2.2,
+    ambientColor: new THREE.Color(0xffd7c4),
+    ambientIntensity: 0.75,
+    waterSurfaceColor: new THREE.Color(0x2dd4bf),
+    waterDepthColor: new THREE.Color(0x071b30),
+    badgeEmoji: "🌄",
+  },
+  {
+    id: "twilight",
+    name: "Dusk Twilight / Blue Hour",
+    timeStr: "19:05 Solar Time",
+    sunPos: new THREE.Vector3(70, 6, -195),
+    sunColor: new THREE.Color(0xff3300),
+    horizonColor: new THREE.Color(0x7c3aed),
+    topColor: new THREE.Color(0x0c152e),
+    sunLightColor: new THREE.Color(0xec4899),
+    sunLightIntensity: 1.5,
+    ambientColor: new THREE.Color(0x818cf8),
+    ambientIntensity: 0.65,
+    waterSurfaceColor: new THREE.Color(0x38bdf8),
+    waterDepthColor: new THREE.Color(0x040d1a),
+    badgeEmoji: "🌆",
+  },
+  {
+    id: "night",
+    name: "Oceanic Night & Moon",
+    timeStr: "23:45 Solar Time",
+    sunPos: new THREE.Vector3(-60, 95, -120),
+    sunColor: new THREE.Color(0xbae6fd),
+    horizonColor: new THREE.Color(0x071536),
+    topColor: new THREE.Color(0x020713),
+    sunLightColor: new THREE.Color(0x7dd3fc),
+    sunLightIntensity: 1.2,
+    ambientColor: new THREE.Color(0x1e3a8a),
+    ambientIntensity: 0.45,
+    waterSurfaceColor: new THREE.Color(0x06b6d4),
+    waterDepthColor: new THREE.Color(0x01050d),
+    badgeEmoji: "🌙",
+  },
+];
+
+// Automatically select next solar time preset on every load
+let currentPresetIndex = 0;
+const storedSolarIdx = parseInt(sessionStorage.getItem("ocean_solar_idx"), 10);
+if (!isNaN(storedSolarIdx)) {
+  currentPresetIndex = (storedSolarIdx + 1) % SOLAR_PRESETS.length;
+} else {
+  currentPresetIndex = Math.floor(Math.random() * SOLAR_PRESETS.length);
+}
+sessionStorage.setItem("ocean_solar_idx", String(currentPresetIndex));
+const initialPreset = SOLAR_PRESETS[currentPresetIndex];
 
 // ============================================================================
 // 1. SCENE & CAMERA SETUP (Framed for 60% Sky & Sun / 40% Ocean)
@@ -11,7 +110,7 @@ const camera = new THREE.PerspectiveCamera(
   55,
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  1000,
 );
 
 // Camera placed near water level, angled so horizon is at 40% from bottom with Argo float in view
@@ -26,7 +125,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 document.body.appendChild(renderer.domElement);
 
-// Orbit Controls (restricted so user can enjoy the scenic 60/40 view)
+// Orbit Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -38,7 +137,6 @@ controls.maxDistance = 35;
 // ============================================================================
 // 2. SUN & SKY SETUP
 // ============================================================================
-// Sky gradient background using procedural hemispherical dome
 const vertexSkyShader = `
   varying vec3 vWorldPosition;
   void main() {
@@ -77,31 +175,30 @@ const skyMat = new THREE.ShaderMaterial({
   vertexShader: vertexSkyShader,
   fragmentShader: fragmentSkyShader,
   uniforms: {
-    uTopColor: { value: new THREE.Color(0x2a75b3) },       // Soft sky blue
-    uHorizonColor: { value: new THREE.Color(0xffe6a3) },   // Warm white-yellow horizon
-    uSunPosition: { value: new THREE.Vector3(0, 32, -180) },
-    uSunColor: { value: new THREE.Color(0xffea78) }        // Yellow sun glow
+    uTopColor: { value: initialPreset.topColor.clone() },
+    uHorizonColor: { value: initialPreset.horizonColor.clone() },
+    uSunPosition: { value: initialPreset.sunPos.clone() },
+    uSunColor: { value: initialPreset.sunColor.clone() },
   },
-  side: THREE.BackSide
+  side: THREE.BackSide,
 });
 const sky = new THREE.Mesh(skyGeo, skyMat);
 scene.add(sky);
 
-// Vibrant Yellow 3D Sun
+// 3D Sun Mesh Group
 const sunGroup = new THREE.Group();
-const sunPosition = new THREE.Vector3(0, 32, -180);
-sunGroup.position.copy(sunPosition);
+sunGroup.position.copy(initialPreset.sunPos);
 
 // Core Sun Sphere
 const sunGeo = new THREE.SphereGeometry(12, 32, 32);
 const sunMat = new THREE.MeshBasicMaterial({
-  color: 0xffe042, // Vibrant golden yellow
-  fog: false
+  color: initialPreset.sunColor.clone(),
+  fog: false,
 });
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 sunGroup.add(sunMesh);
 
-// Soft Outer Sun Halo / Corona
+// Soft Outer Sun Corona
 const sunGlowMat = new THREE.ShaderMaterial({
   vertexShader: `
     varying vec3 vNormal;
@@ -119,18 +216,27 @@ const sunGlowMat = new THREE.ShaderMaterial({
   `,
   transparent: true,
   blending: THREE.AdditiveBlending,
-  side: THREE.BackSide
+  side: THREE.BackSide,
 });
-const sunGlowMesh = new THREE.Mesh(new THREE.SphereGeometry(17, 32, 32), sunGlowMat);
+const sunGlowMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(17, 32, 32),
+  sunGlowMat,
+);
 sunGroup.add(sunGlowMesh);
 scene.add(sunGroup);
 
-// Sun Directional Light & Warm Ambient Light
-const sunLight = new THREE.DirectionalLight(0xfff0a8, 2.5);
-sunLight.position.copy(sunPosition);
+// Sun Directional Light & Ambient Light
+const sunLight = new THREE.DirectionalLight(
+  initialPreset.sunLightColor.clone(),
+  initialPreset.sunLightIntensity,
+);
+sunLight.position.copy(initialPreset.sunPos);
 scene.add(sunLight);
 
-const ambientLight = new THREE.AmbientLight(0xfff4d6, 0.9);
+const ambientLight = new THREE.AmbientLight(
+  initialPreset.ambientColor.clone(),
+  initialPreset.ambientIntensity,
+);
 scene.add(ambientLight);
 
 // ============================================================================
@@ -143,12 +249,12 @@ scene.add(cloudsGroup);
 function createFluffyCloud(x, y, z, scale) {
   const cloud = new THREE.Group();
   const puffMat = new THREE.MeshStandardMaterial({
-    color: 0xfffae6,       // Lightish warm white-yellow
+    color: 0xfffae6, // Lightish warm white-yellow
     roughness: 0.8,
     metalness: 0.05,
     transparent: true,
     opacity: 0.88,
-    flatShading: true
+    flatShading: true,
   });
 
   // Multiple randomized overlapping puffs forming a natural cumulus cloud
@@ -160,9 +266,13 @@ function createFluffyCloud(x, y, z, scale) {
     puff.position.set(
       (Math.random() - 0.5) * 8 * scale,
       (Math.random() - 0.2) * 2.5 * scale,
-      (Math.random() - 0.5) * 4 * scale
+      (Math.random() - 0.5) * 4 * scale,
     );
-    puff.scale.set(1 + Math.random() * 0.3, 0.8 + Math.random() * 0.4, 1 + Math.random() * 0.3);
+    puff.scale.set(
+      1 + Math.random() * 0.3,
+      0.8 + Math.random() * 0.4,
+      1 + Math.random() * 0.3,
+    );
     cloud.add(puff);
   }
 
@@ -182,10 +292,10 @@ const cloudConfigs = [
   { x: -120, y: 25, z: -130, scale: 2.4 },
   { x: 0, y: 44, z: -120, scale: 1.6 },
   { x: -40, y: 18, z: -90, scale: 1.3 },
-  { x: 50, y: 20, z: -95, scale: 1.4 }
+  { x: 50, y: 20, z: -95, scale: 1.4 },
 ];
 
-cloudConfigs.forEach(c => createFluffyCloud(c.x, c.y, c.z, c.scale));
+cloudConfigs.forEach((c) => createFluffyCloud(c.x, c.y, c.z, c.scale));
 
 // ============================================================================
 // 4. CUSTOM WATER SHADERS (GLSL Ocean Waves with Specular Sun Glint)
@@ -393,24 +503,532 @@ const waterMaterial = new THREE.ShaderMaterial({
     uSmallWavesFrequency: { value: 1.6 },
     uSmallWavesSpeed: { value: 0.35 },
     // Color parameters
-    uDepthColor: { value: new THREE.Color(0x0a2b5e) },       // Deep ocean navy
-    uSurfaceColor: { value: new THREE.Color(0x1992b8) },     // Surface turquoise blue
-    uFoamColor: { value: new THREE.Color(0xf6ffff) },        // White foam crests
+    uDepthColor: { value: initialPreset.waterDepthColor.clone() },
+    uSurfaceColor: { value: initialPreset.waterSurfaceColor.clone() },
+    uFoamColor: { value: new THREE.Color(0xf6ffff) }, // White foam crests
     uColorOffset: { value: 0.15 },
     uColorMultiplier: { value: 2.2 },
     // Sun & Reflection
-    uSunPosition: { value: sunPosition.clone() },
-    uSunColor: { value: new THREE.Color(0xffe875) },         // Golden yellow sun reflection
-    uSkyHorizonColor: { value: new THREE.Color(0xffe6a3) }   // Warm horizon
+    uSunPosition: { value: initialPreset.sunPos.clone() },
+    uSunColor: { value: initialPreset.sunColor.clone() },
+    uSkyHorizonColor: { value: initialPreset.horizonColor.clone() },
   },
   side: THREE.DoubleSide,
   transparent: true,
-  wireframe: false
+  wireframe: false,
 });
 
 const water = new THREE.Mesh(waterGeometry, waterMaterial);
 water.position.y = 0;
 scene.add(water);
+
+// ============================================================================
+// ☀️ APPLY SOLAR PRESET & DYNAMIC LIGHTING
+// ============================================================================
+export function applySolarPreset(preset) {
+  // Update sky uniforms
+  if (skyMat && skyMat.uniforms) {
+    skyMat.uniforms.uSunPosition.value.copy(preset.sunPos);
+    skyMat.uniforms.uSunColor.value.copy(preset.sunColor);
+    skyMat.uniforms.uHorizonColor.value.copy(preset.horizonColor);
+    skyMat.uniforms.uTopColor.value.copy(preset.topColor);
+  }
+
+  // Update 3D Sun Mesh position & color
+  if (sunGroup) {
+    sunGroup.position.copy(preset.sunPos);
+  }
+  if (sunMat) {
+    sunMat.color.copy(preset.sunColor);
+  }
+
+  // Update Directional Sun Light
+  if (sunLight) {
+    sunLight.position.copy(preset.sunPos);
+    sunLight.color.copy(preset.sunLightColor);
+    sunLight.intensity = preset.sunLightIntensity;
+  }
+
+  // Update Ambient Light
+  if (ambientLight) {
+    ambientLight.color.copy(preset.ambientColor);
+    ambientLight.intensity = preset.ambientIntensity;
+  }
+
+  // Update Water Shader uniforms
+  if (waterMaterial && waterMaterial.uniforms) {
+    waterMaterial.uniforms.uSunPosition.value.copy(preset.sunPos);
+    waterMaterial.uniforms.uSunColor.value.copy(preset.sunColor);
+    waterMaterial.uniforms.uSkyHorizonColor.value.copy(preset.horizonColor);
+    waterMaterial.uniforms.uSurfaceColor.value.copy(preset.waterSurfaceColor);
+    waterMaterial.uniforms.uDepthColor.value.copy(preset.waterDepthColor);
+  }
+
+  // Update UI description pill
+  const solarTimeEl = document.getElementById("descSolarTime");
+  const sunEmojiEl = document.getElementById("sunBadgeEmoji");
+  if (solarTimeEl)
+    solarTimeEl.textContent = `${preset.name} (${preset.timeStr})`;
+  if (sunEmojiEl) sunEmojiEl.textContent = preset.badgeEmoji;
+}
+
+window.cycleSolarTime = function () {
+  currentPresetIndex = (currentPresetIndex + 1) % SOLAR_PRESETS.length;
+  sessionStorage.setItem("ocean_solar_idx", String(currentPresetIndex));
+  applySolarPreset(SOLAR_PRESETS[currentPresetIndex]);
+};
+
+// Live dynamic float state
+let currentFloatData = null;
+window.oceanDataService = oceanDataService;
+window.getCurrentFloatData = () => currentFloatData;
+
+// ============================================================================
+// DYNAMIC DEPTH TELEMETRY: REAL-TIME PHYSICAL OCEAN PROPERTY INTERPOLATION
+// As user dives down (0m -> 4000m), water temperature, salinity, oxygen, and
+// chlorophyll dynamically reflect the vertical CTD gradient.
+// ============================================================================
+window.updateLiveDepthData = function (depthMeters) {
+  if (!currentFloatData) return;
+  const interp = oceanDataService.interpolateAtDepth(
+    currentFloatData,
+    depthMeters,
+  );
+
+  const tempEl = document.getElementById("descTemp");
+  const tempLabelEl = document.getElementById("descTempLabel");
+  const salEl = document.getElementById("descSalinity");
+  const depthEl = document.getElementById("descDepth");
+  const oxyEl = document.getElementById("descOxygen");
+  const chlEl = document.getElementById("descChlorophyll");
+
+  if (tempEl) {
+    tempEl.textContent = `${interp.temperatureC.toFixed(1)} °C`;
+  }
+  if (tempLabelEl) {
+    tempLabelEl.textContent =
+      depthMeters === 0 ? "🌡 Surface Temp" : `🌡 Temp (@ ${depthMeters}m)`;
+  }
+  if (salEl) {
+    salEl.textContent = `${interp.salinityPSU.toFixed(1)} PSU`;
+  }
+  if (depthEl) {
+    depthEl.textContent = `${depthMeters} m / 2000 m`;
+  }
+  if (oxyEl) {
+    oxyEl.textContent = `${interp.dissolvedOxygenUmolKg} μmol/kg`;
+  }
+  if (chlEl) {
+    chlEl.textContent = `${interp.chlorophyllMgM3.toFixed(2)} mg/m³`;
+  }
+
+  // Update live depth marker line on the docked SVG profile chart
+  const marker = document.getElementById("profileChartDepthMarker");
+  if (marker) {
+    const padTop = 15;
+    const plotH = 200 - 15 - 25;
+    const markerY = padTop + (Math.min(2000, depthMeters) / 2000) * plotH;
+    marker.setAttribute("y1", markerY.toFixed(1));
+    marker.setAttribute("y2", markerY.toFixed(1));
+  }
+};
+
+/**
+ * Renders high-resolution CTD vertical profile SVG chart
+ */
+function renderProfileChart(profileData) {
+  const svg = document.getElementById("modalChartSvg");
+  if (!svg || !profileData || profileData.length === 0) return;
+
+  const w = 700;
+  const h = 300;
+  const padLeft = 65;
+  const padRight = 30;
+  const padTop = 25;
+  const padBottom = 30;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+
+  // Depth domain: 0 to 2000m (inverted Y axis, surface on top)
+  const maxDepth = 2000;
+  const getY = (depth) =>
+    padTop + (Math.min(maxDepth, depth) / maxDepth) * plotH;
+
+  // Value scales:
+  // Temp: 0 to 30 °C
+  const getXTemp = (temp) =>
+    padLeft + (Math.max(0, Math.min(30, temp)) / 30) * plotW;
+  // Salinity: 33.5 to 36.0 PSU
+  const getXSal = (sal) =>
+    padLeft + ((Math.max(33.5, Math.min(36.0, sal)) - 33.5) / 2.5) * plotW;
+  // Oxygen: 0 to 220 μmol/kg
+  const getXOxy = (o2) =>
+    padLeft + (Math.max(0, Math.min(220, o2)) / 220) * plotW;
+
+  let elements = [];
+
+  // Background Depth Zone Shading & Atmospheric Bathymetry Bands
+  const y0 = getY(0);
+  const y200 = getY(200);
+  const y1000 = getY(1000);
+  const y2000 = getY(2000);
+
+  // 1. Epipelagic (Sunlight Zone: 0 - 200m)
+  elements.push(
+    `<rect x="${padLeft}" y="${y0}" width="${plotW}" height="${y200 - y0}" fill="rgba(0, 229, 255, 0.05)" rx="4" />`
+  );
+  elements.push(
+    `<text x="${w - padRight - 10}" y="${(y0 + y200) / 2 + 4}" fill="#00e5ff" font-family="'Space Mono', monospace" font-size="9.5" text-anchor="end" opacity="0.8">☀️ Sunlight Epipelagic (0–200m)</text>`
+  );
+
+  // 2. Mesopelagic (Twilight & OMZ: 200 - 1000m)
+  elements.push(
+    `<rect x="${padLeft}" y="${y200}" width="${plotW}" height="${y1000 - y200}" fill="rgba(192, 132, 252, 0.05)" rx="4" />`
+  );
+  elements.push(
+    `<text x="${w - padRight - 10}" y="${(y200 + y1000) / 2 + 4}" fill="#c084fc" font-family="'Space Mono', monospace" font-size="9.5" text-anchor="end" opacity="0.8">🌘 Twilight & OMZ (200–1000m)</text>`
+  );
+
+  // 3. Bathypelagic (Midnight Abyss: 1000 - 2000m)
+  elements.push(
+    `<rect x="${padLeft}" y="${y1000}" width="${plotW}" height="${y2000 - y1000}" fill="rgba(15, 23, 42, 0.38)" rx="4" />`
+  );
+  elements.push(
+    `<text x="${w - padRight - 10}" y="${(y1000 + y2000) / 2 + 4}" fill="#94a3b8" font-family="'Space Mono', monospace" font-size="9.5" text-anchor="end" opacity="0.8">🌌 Midnight Abyss (1000–2000m)</text>`
+  );
+
+  // Gridlines & Y-axis depth markers
+  const depthTicks = [0, 200, 500, 1000, 1500, 2000];
+  depthTicks.forEach((d) => {
+    const y = getY(d);
+    elements.push(
+      `<line x1="${padLeft}" y1="${y}" x2="${w - padRight}" y2="${y}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="3,3" />`
+    );
+    elements.push(
+      `<text x="${padLeft - 8}" y="${y + 4}" fill="#94a3b8" font-family="'Space Mono', monospace" font-size="9.5" text-anchor="end">${d}m</text>`
+    );
+  });
+
+  // Vertical axis lines
+  elements.push(
+    `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + plotH}" stroke="rgba(0,229,255,0.3)" stroke-width="1.2" />`
+  );
+  elements.push(
+    `<line x1="${padLeft}" y1="${padTop + plotH}" x2="${w - padRight}" y2="${padTop + plotH}" stroke="rgba(255,255,255,0.2)" />`
+  );
+
+  // Build line paths
+  let tempPts = [];
+  let salPts = [];
+  let oxyPts = [];
+
+  profileData.forEach((pt) => {
+    const y = getY(pt.depthMeters);
+    tempPts.push(`${getXTemp(pt.temperatureC).toFixed(1)},${y.toFixed(1)}`);
+    salPts.push(`${getXSal(pt.salinityPSU).toFixed(1)},${y.toFixed(1)}`);
+    oxyPts.push(
+      `${getXOxy(pt.dissolvedOxygenUmolKg).toFixed(1)},${y.toFixed(1)}`
+    );
+  });
+
+  // Draw Polylines
+  elements.push(
+    `<polyline fill="none" stroke="#ff9436" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" points="${tempPts.join(" ")}" />`
+  );
+  elements.push(
+    `<polyline fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="${salPts.join(" ")}" />`
+  );
+  elements.push(
+    `<polyline fill="none" stroke="#c084fc" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="${oxyPts.join(" ")}" />`
+  );
+
+  // Data point dots on temperature
+  profileData.forEach((pt) => {
+    const x = getXTemp(pt.temperatureC);
+    const y = getY(pt.depthMeters);
+    elements.push(
+      `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="#ff9436" stroke="#040a16" stroke-width="1.8"><title>${pt.depthMeters}m: ${pt.temperatureC}°C</title></circle>`
+    );
+  });
+
+  // Live depth tracker line across chart (from scroller)
+  elements.push(
+    `<line id="profileChartDepthMarker" x1="${padLeft}" y1="${padTop}" x2="${w - padRight}" y2="${padTop}" stroke="#00f0ff" stroke-width="1.8" stroke-dasharray="4,2" opacity="0.95"><title>Current depth</title></line>`
+  );
+
+  // Interactive mouse pointer observation crosshair line
+  elements.push(
+    `<line id="cursorLineH" x1="${padLeft}" y1="${padTop}" x2="${w - padRight}" y2="${padTop}" stroke="#ffe042" stroke-width="1.8" stroke-dasharray="3,2" opacity="0.95" style="display:none;"></line>`
+  );
+
+  // Observation intersection dots
+  elements.push(
+    `<circle id="cursorDotTemp" r="5.5" fill="#ff9436" stroke="#ffffff" stroke-width="2" style="display:none; filter:drop-shadow(0 0 6px #ff9436);"></circle>`
+  );
+  elements.push(
+    `<circle id="cursorDotSal" r="5.5" fill="#38bdf8" stroke="#ffffff" stroke-width="2" style="display:none; filter:drop-shadow(0 0 6px #38bdf8);"></circle>`
+  );
+  elements.push(
+    `<circle id="cursorDotOxy" r="5.5" fill="#c084fc" stroke="#ffffff" stroke-width="2" style="display:none; filter:drop-shadow(0 0 6px #c084fc);"></circle>`
+  );
+
+  svg.innerHTML = elements.join("");
+
+  // Wire mouse pointer tracking and click-to-dive observation events
+  attachChartPointerEvents();
+}
+
+/**
+ * Attaches interactive mouse pointer observation events to the profile chart SVG
+ */
+function attachChartPointerEvents() {
+  const svg = document.getElementById("modalChartSvg");
+  if (!svg || svg.dataset.pointerBound) return;
+  svg.dataset.pointerBound = "true";
+
+  const w = 700;
+  const h = 300;
+  const padLeft = 65;
+  const padRight = 30;
+  const padTop = 25;
+  const padBottom = 30;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+
+  const getXTemp = (temp) =>
+    padLeft + (Math.max(0, Math.min(30, temp)) / 30) * plotW;
+  const getXSal = (sal) =>
+    padLeft + ((Math.max(33.5, Math.min(36.0, sal)) - 33.5) / 2.5) * plotW;
+  const getXOxy = (o2) =>
+    padLeft + (Math.max(0, Math.min(220, o2)) / 220) * plotW;
+
+  const hudDepth = document.getElementById("hudDepthTag");
+  const hudMetrics = document.getElementById("hudMetricsTags");
+  const hudTemp = document.getElementById("hudTempTag");
+  const hudSal = document.getElementById("hudSalTag");
+  const hudOxy = document.getElementById("hudOxyTag");
+  const hudChl = document.getElementById("hudChlTag");
+  const hudZone = document.getElementById("hudZoneTag");
+  const diveBtn = document.getElementById("hudDiveBtn");
+
+  svg.addEventListener("mousemove", (e) => {
+    if (!currentFloatData) return;
+    const rect = svg.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const scaleY = h / rect.height;
+    const svgY = mouseY * scaleY;
+
+    const clampedY = Math.max(padTop, Math.min(padTop + plotH, svgY));
+    const depthRatio = (clampedY - padTop) / plotH;
+    const depthMeters = Math.round(depthRatio * 2000);
+    window.currentPointedDepth = depthMeters;
+
+    const obs = oceanDataService.interpolateAtDepth(
+      currentFloatData,
+      depthMeters
+    );
+
+    const lineH = document.getElementById("cursorLineH");
+    const dotTemp = document.getElementById("cursorDotTemp");
+    const dotSal = document.getElementById("cursorDotSal");
+    const dotOxy = document.getElementById("cursorDotOxy");
+
+    if (lineH) {
+      lineH.style.display = "block";
+      lineH.setAttribute("y1", clampedY.toFixed(1));
+      lineH.setAttribute("y2", clampedY.toFixed(1));
+    }
+    if (dotTemp) {
+      dotTemp.style.display = "block";
+      dotTemp.setAttribute("cx", getXTemp(obs.temperatureC).toFixed(1));
+      dotTemp.setAttribute("cy", clampedY.toFixed(1));
+    }
+    if (dotSal) {
+      dotSal.style.display = "block";
+      dotSal.setAttribute("cx", getXSal(obs.salinityPSU).toFixed(1));
+      dotSal.setAttribute("cy", clampedY.toFixed(1));
+    }
+    if (dotOxy) {
+      dotOxy.style.display = "block";
+      dotOxy.setAttribute("cx", getXOxy(obs.dissolvedOxygenUmolKg).toFixed(1));
+      dotOxy.setAttribute("cy", clampedY.toFixed(1));
+    }
+
+    let layerName = "☀️ Epipelagic (Sunlight)";
+    if (depthMeters > 1000) {
+      layerName = "🌌 Bathypelagic (Abyss)";
+    } else if (depthMeters > 200) {
+      layerName = "🌘 Mesopelagic (Twilight OMZ)";
+    }
+
+    if (hudDepth) {
+      hudDepth.innerHTML = `<span class="hud-depth-icon">📍</span> Pointed Depth: <strong style="color:#ffffff; font-size:0.86rem;">${depthMeters} m</strong> <span style="font-size:0.7rem; color:#ffe042; font-weight:600;">(${layerName})</span>`;
+    }
+    if (diveBtn) {
+      diveBtn.style.display = "inline-flex";
+    }
+    if (hudMetrics) {
+      hudMetrics.style.display = "flex";
+      if (hudTemp) hudTemp.innerHTML = `🌡 Temp: <strong>${obs.temperatureC.toFixed(1)} °C</strong>`;
+      if (hudSal) hudSal.innerHTML = `💧 Salinity: <strong>${obs.salinityPSU.toFixed(1)} PSU</strong>`;
+      if (hudOxy)
+        hudOxy.innerHTML = `🫧 O₂: <strong>${obs.dissolvedOxygenUmolKg} μmol/kg</strong>`;
+      if (hudChl)
+        hudChl.innerHTML = `🌿 Chl: <strong>${obs.chlorophyllMgM3.toFixed(2)} mg/m³</strong>`;
+      if (hudZone) {
+        hudZone.textContent = layerName;
+      }
+    }
+  });
+
+  svg.addEventListener("mouseleave", () => {
+    const lineH = document.getElementById("cursorLineH");
+    const dotTemp = document.getElementById("cursorDotTemp");
+    const dotSal = document.getElementById("cursorDotSal");
+    const dotOxy = document.getElementById("cursorDotOxy");
+
+    if (lineH) lineH.style.display = "none";
+    if (dotTemp) dotTemp.style.display = "none";
+    if (dotSal) dotSal.style.display = "none";
+    if (dotOxy) dotOxy.style.display = "none";
+
+    if (hudDepth) {
+      hudDepth.innerHTML = `<span class="hud-depth-icon">📏</span> Move cursor over chart to inspect depth observations · Click to dive`;
+    }
+    if (diveBtn) {
+      diveBtn.style.display = "none";
+    }
+  });
+
+  // Clicking anywhere on the chart dives to that exact depth
+  svg.addEventListener("click", (e) => {
+    const rect = svg.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const scaleY = h / rect.height;
+    const svgY = mouseY * scaleY;
+    const clampedY = Math.max(padTop, Math.min(padTop + plotH, svgY));
+    const depthRatio = (clampedY - padTop) / plotH;
+    const depthMeters = Math.round(depthRatio * 2000);
+
+    if (window.jumpToDepth) {
+      window.jumpToDepth(depthMeters);
+    }
+  });
+}
+
+/**
+ * Populates Trajectory modal drift history table
+ */
+function renderTrajectoryTable(history) {
+  const tbody = document.getElementById("trajectoryTableBody");
+  if (!tbody || !history) return;
+
+  tbody.innerHTML = history
+    .map(
+      (h) => `
+    <tr>
+      <td style="color:#00e5ff; font-weight:700;">#${h.cycleNumber}</td>
+      <td style="color:#94a3b8;">${h.date}</td>
+      <td style="color:#ffffff;">${h.lat.toFixed(4)}° N, ${h.lon.toFixed(4)}° E</td>
+      <td style="color:#ff9436; font-weight:700;">${h.tempC.toFixed(1)} °C</td>
+      <td style="color:#38bdf8;">${h.speedMs} m/s ${h.direction}</td>
+    </tr>
+  `,
+    )
+    .join("");
+}
+
+// Asynchronously load float metadata & populate right-hand description bar
+async function initFloatDescription() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const buoyId = urlParams.get("id") || "A7";
+  const station = getStationById(buoyId);
+  const floatData = await oceanDataService.getFloatDetails(station);
+  currentFloatData = floatData;
+
+  const nameEl = document.getElementById("descStationName");
+  const codeEl = document.getElementById("descStationCode");
+  const locPrimEl = document.getElementById("descLocPrimary");
+  const locSecEl = document.getElementById("descLocSecondary");
+  const coordsEl = document.getElementById("descCoords");
+  const tempEl = document.getElementById("descTemp");
+  const tempLabelEl = document.getElementById("descTempLabel");
+  const salEl = document.getElementById("descSalinity");
+  const depthEl = document.getElementById("descDepth");
+  const oxyEl = document.getElementById("descOxygen");
+  const chlEl = document.getElementById("descChlorophyll");
+  const currentEl = document.getElementById("descCurrent");
+  const qualityEl = document.getElementById("descQuality");
+  const cycleEl = document.getElementById("descCycle");
+  const lastProfEl = document.getElementById("descLastProfile");
+  const batteryEl = document.getElementById("descBattery");
+  const statusEl = document.getElementById("descStatusPill");
+  const modalCycleEl = document.getElementById("modalProfileCycle");
+
+  if (nameEl) nameEl.textContent = `Argo Float #${floatData.floatId}`;
+  if (codeEl)
+    codeEl.textContent = `${floatData.stationCode} · ${floatData.platformType}`;
+  if (statusEl)
+    statusEl.textContent = (floatData.status || "ACTIVE").toUpperCase();
+
+  if (locPrimEl)
+    locPrimEl.textContent =
+      floatData.locationPrimary ||
+      floatData.coordinates.seaPrimary ||
+      floatData.coordinates.seaBasin;
+  if (locSecEl)
+    locSecEl.textContent =
+      floatData.locationSecondary ||
+      floatData.coordinates.seaSecondary ||
+      "Port Blair";
+
+  if (coordsEl) {
+    const latStr = `${Math.abs(floatData.coordinates.lat).toFixed(4)}° ${floatData.coordinates.lat >= 0 ? "N" : "S"}`;
+    const lonStr = `${Math.abs(floatData.coordinates.lon).toFixed(4)}° ${floatData.coordinates.lon >= 0 ? "E" : "W"}`;
+    coordsEl.textContent = `${latStr}, ${lonStr}`;
+  }
+
+  const sci = floatData.scientificData || {};
+  if (tempEl)
+    tempEl.textContent = `${sci.surfaceTempC !== undefined ? sci.surfaceTempC.toFixed(1) : "28.3"} °C`;
+  if (tempLabelEl) tempLabelEl.textContent = "🌡 Surface Temp";
+  if (salEl)
+    salEl.textContent = `${sci.surfaceSalinityPSU !== undefined ? sci.surfaceSalinityPSU.toFixed(1) : "34.3"} PSU`;
+  if (depthEl) depthEl.textContent = "0 m / 2000 m";
+  if (oxyEl) oxyEl.textContent = `${sci.dissolvedOxygenUmolKg || 198} μmol/kg`;
+  if (chlEl)
+    chlEl.textContent = `${sci.chlorophyllMgM3 !== undefined ? sci.chlorophyllMgM3.toFixed(2) : "0.42"} mg/m³`;
+  if (currentEl)
+    currentEl.textContent =
+      sci.currentDisplay ||
+      `${sci.currentSpeedMs || 0.42} m/s → ${sci.currentDirection || "NE"}`;
+  if (qualityEl) qualityEl.textContent = sci.dataQuality || "GOOD";
+
+  const mission = floatData.mission || {};
+  if (cycleEl)
+    cycleEl.textContent =
+      mission.cycleDisplay || `#${mission.cycleNumber || 147}`;
+  if (lastProfEl)
+    lastProfEl.textContent = mission.lastProfileRelative || "18 min ago";
+  if (batteryEl)
+    batteryEl.textContent =
+      mission.batteryDisplay || `${mission.batteryPercent || 82}%`;
+  if (modalCycleEl)
+    modalCycleEl.textContent = `Cycle ${mission.cycleDisplay || "#147"}`;
+
+  // Render SVG profile chart and trajectory table
+  if (floatData.verticalProfile) {
+    renderProfileChart(floatData.verticalProfile);
+  }
+  if (floatData.trajectoryHistory) {
+    renderTrajectoryTable(floatData.trajectoryHistory);
+  }
+
+  // Apply the initial time of day preset
+  applySolarPreset(initialPreset);
+}
+
+initFloatDescription();
 
 // ============================================================================
 // 5. PROCEDURAL RISING OCEAN BUBBLES
@@ -424,7 +1042,7 @@ const bubbleMat = new THREE.MeshPhysicalMaterial({
   transparent: true,
   roughness: 0.08,
   ior: 1.12,
-  metalness: 0.05
+  metalness: 0.05,
 });
 
 const bubblesMesh = new THREE.InstancedMesh(bubbleGeo, bubbleMat, BUBBLE_COUNT);
@@ -464,8 +1082,8 @@ bubblesMesh.instanceMatrix.needsUpdate = true;
 export const ARGO_FLOAT_CONFIG = {
   x: 0.0,
   y: 0.0,
-  z: 1.5,        // <--- [CHANGE POSITION HERE] Moved back to 1.5 (was 7.5). Set to 0.0 or -2.0 to move further back!
-  scale: 1.0     // Overall scale of the float model
+  z: 1.5, // <--- [CHANGE POSITION HERE] Moved back to 1.5 (was 7.5). Set to 0.0 or -2.0 to move further back!
+  scale: 1.0, // Overall scale of the float model
 };
 window.ARGO_FLOAT_CONFIG = ARGO_FLOAT_CONFIG;
 
@@ -478,45 +1096,45 @@ function createArgoFloatModel() {
 
   // Materials matching the real APEX Argo float
   const yellowHullMat = new THREE.MeshStandardMaterial({
-    color: 0xf6c500,        // Vibrant marine safety yellow
+    color: 0xf6c500, // Vibrant marine safety yellow
     roughness: 0.28,
-    metalness: 0.12
+    metalness: 0.12,
   });
 
   const yellowBaseMat = new THREE.MeshStandardMaterial({
     color: 0xefbd00,
     roughness: 0.35,
-    metalness: 0.1
+    metalness: 0.1,
   });
 
   const blackHardwareMat = new THREE.MeshStandardMaterial({
-    color: 0x18191c,        // Dark anodized aluminum / graphite
+    color: 0x18191c, // Dark anodized aluminum / graphite
     roughness: 0.45,
-    metalness: 0.4
+    metalness: 0.4,
   });
 
   const whiteCollarMat = new THREE.MeshStandardMaterial({
-    color: 0xf8f9fa,        // Damping collar white
+    color: 0xf8f9fa, // Damping collar white
     roughness: 0.22,
-    metalness: 0.05
+    metalness: 0.05,
   });
 
   const antennaMat = new THREE.MeshStandardMaterial({
-    color: 0x121214,        // High-frequency satellite antenna
+    color: 0x121214, // High-frequency satellite antenna
     roughness: 0.3,
-    metalness: 0.75
+    metalness: 0.75,
   });
 
   const sensorMetalMat = new THREE.MeshStandardMaterial({
-    color: 0xdde3ea,        // Conductivity sensor probe chrome/metal
+    color: 0xdde3ea, // Conductivity sensor probe chrome/metal
     roughness: 0.15,
-    metalness: 0.9
+    metalness: 0.9,
   });
 
   const HULL_RADIUS = 0.24;
 
   // 1. Bottom Flared Base (External Hydraulic Oil Bladder Housing)
-  const baseFlangeGeo = new THREE.CylinderGeometry(0.32, 0.38, 0.30, 32);
+  const baseFlangeGeo = new THREE.CylinderGeometry(0.32, 0.38, 0.3, 32);
   const baseFlange = new THREE.Mesh(baseFlangeGeo, yellowBaseMat);
   baseFlange.position.y = -2.15;
   floatGroup.add(baseFlange);
@@ -533,13 +1151,23 @@ function createArgoFloatModel() {
   floatGroup.add(baseJoint);
 
   // 2. Lower Yellow Cylindrical Pressure Hull
-  const lowerHullGeo = new THREE.CylinderGeometry(HULL_RADIUS, HULL_RADIUS, 1.95, 32);
+  const lowerHullGeo = new THREE.CylinderGeometry(
+    HULL_RADIUS,
+    HULL_RADIUS,
+    1.95,
+    32,
+  );
   const lowerHull = new THREE.Mesh(lowerHullGeo, yellowHullMat);
   lowerHull.position.y = -0.92;
   floatGroup.add(lowerHull);
 
   // Hull joint seam band
-  const seamBandGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.005, HULL_RADIUS + 0.005, 0.03, 32);
+  const seamBandGeo = new THREE.CylinderGeometry(
+    HULL_RADIUS + 0.005,
+    HULL_RADIUS + 0.005,
+    0.03,
+    32,
+  );
   const seamBand = new THREE.Mesh(seamBandGeo, blackHardwareMat);
   seamBand.position.y = -0.95;
   floatGroup.add(seamBand);
@@ -551,30 +1179,58 @@ function createArgoFloatModel() {
   collarDisk.position.y = 0.14;
   floatGroup.add(collarDisk);
 
-  const collarSupportGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.025, HULL_RADIUS + 0.025, 0.08, 32);
+  const collarSupportGeo = new THREE.CylinderGeometry(
+    HULL_RADIUS + 0.025,
+    HULL_RADIUS + 0.025,
+    0.08,
+    32,
+  );
   const collarSupport = new THREE.Mesh(collarSupportGeo, whiteCollarMat);
   collarSupport.position.y = 0.11;
   floatGroup.add(collarSupport);
 
   // 4. Upper Yellow Pressure Hull Section
-  const upperHullGeo = new THREE.CylinderGeometry(HULL_RADIUS, HULL_RADIUS, 1.05, 32);
+  const upperHullGeo = new THREE.CylinderGeometry(
+    HULL_RADIUS,
+    HULL_RADIUS,
+    1.05,
+    32,
+  );
   const upperHull = new THREE.Mesh(upperHullGeo, yellowHullMat);
   upperHull.position.y = 0.68;
   floatGroup.add(upperHull);
 
   // Upper joint seam band
-  const upperSeamGeo = new THREE.CylinderGeometry(HULL_RADIUS + 0.005, HULL_RADIUS + 0.005, 0.025, 32);
+  const upperSeamGeo = new THREE.CylinderGeometry(
+    HULL_RADIUS + 0.005,
+    HULL_RADIUS + 0.005,
+    0.025,
+    32,
+  );
   const upperSeam = new THREE.Mesh(upperSeamGeo, blackHardwareMat);
   upperSeam.position.y = 1.18;
   floatGroup.add(upperSeam);
 
   // 5. Dark Graphite Domed Shoulder Cap
-  const shoulderGeo = new THREE.CylinderGeometry(0.19, HULL_RADIUS + 0.005, 0.22, 32);
+  const shoulderGeo = new THREE.CylinderGeometry(
+    0.19,
+    HULL_RADIUS + 0.005,
+    0.22,
+    32,
+  );
   const shoulder = new THREE.Mesh(shoulderGeo, blackHardwareMat);
-  shoulder.position.y = 1.30;
+  shoulder.position.y = 1.3;
   floatGroup.add(shoulder);
 
-  const domeCapGeo = new THREE.SphereGeometry(0.19, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+  const domeCapGeo = new THREE.SphereGeometry(
+    0.19,
+    32,
+    16,
+    0,
+    Math.PI * 2,
+    0,
+    Math.PI / 2,
+  );
   const domeCap = new THREE.Mesh(domeCapGeo, blackHardwareMat);
   domeCap.position.y = 1.41;
   floatGroup.add(domeCap);
@@ -591,7 +1247,11 @@ function createArgoFloatModel() {
     const ribGeo = new THREE.BoxGeometry(0.02, 0.52, 0.02);
     const rib = new THREE.Mesh(ribGeo, blackHardwareMat);
     const angle = (r * Math.PI) / 2;
-    rib.position.set(0.045 + Math.cos(angle) * 0.075, 1.74, Math.sin(angle) * 0.075);
+    rib.position.set(
+      0.045 + Math.cos(angle) * 0.075,
+      1.74,
+      Math.sin(angle) * 0.075,
+    );
     floatGroup.add(rib);
   }
 
@@ -601,7 +1261,10 @@ function createArgoFloatModel() {
   sensorTube.position.set(-0.045, 1.72, 0.03);
   floatGroup.add(sensorTube);
 
-  const sensorTubeCap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.07, 12), whiteCollarMat);
+  const sensorTubeCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.07, 12),
+    whiteCollarMat,
+  );
   sensorTubeCap.position.set(-0.045, 2.0, 0.03);
   floatGroup.add(sensorTubeCap);
 
@@ -623,7 +1286,11 @@ function createArgoFloatModel() {
   floatGroup.add(antennaTip);
 
   // Position based on configuration
-  floatGroup.position.set(ARGO_FLOAT_CONFIG.x, ARGO_FLOAT_CONFIG.y, ARGO_FLOAT_CONFIG.z);
+  floatGroup.position.set(
+    ARGO_FLOAT_CONFIG.x,
+    ARGO_FLOAT_CONFIG.y,
+    ARGO_FLOAT_CONFIG.z,
+  );
   floatGroup.scale.setScalar(ARGO_FLOAT_CONFIG.scale);
   return floatGroup;
 }
@@ -638,7 +1305,7 @@ scene.add(argoDiveLight);
 // ============================================================================
 // 7. RESPONSIVE RESIZE HANDLING
 // ============================================================================
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -648,14 +1315,14 @@ window.addEventListener('resize', () => {
 // ============================================================================
 // 7. INTERACTIVE DEPTH PROFILING & EXTREME UNDERWATER DIVING
 // ============================================================================
-window.setOceanDepth = function(ratio) {
+window.setOceanDepth = function (ratio) {
   // ratio: 0.0 (0m, Top level) -> 1.0 (4000m, Extreme Hadal Abyss)
   const depthMeters = Math.round(ratio * 4000);
 
   // 1. STRAIGHT VERTICAL DIVE:
   // Deep camera travel: plunges straight down from y = 3.2 to y = -90.0
   const startCamY = 3.2;
-  const maxUnderwaterDepth = 95.0; 
+  const maxUnderwaterDepth = 95.0;
   const targetCamY = startCamY - ratio * maxUnderwaterDepth;
   camera.position.y = targetCamY;
 
@@ -681,8 +1348,8 @@ window.setOceanDepth = function(ratio) {
     cloudsGroup.visible = false;
   } else {
     cloudsGroup.visible = true;
-    cloudsGroup.children.forEach(cloud => {
-      cloud.children.forEach(puff => {
+    cloudsGroup.children.forEach((cloud) => {
+      cloud.children.forEach((puff) => {
         puff.material.opacity = Math.max(0, 0.88 - ratio * 20.0);
       });
     });
@@ -692,12 +1359,12 @@ window.setOceanDepth = function(ratio) {
   const sunFade = Math.max(0.0, 1.0 - ratio * 4.0); // Completely disappears by ~1000m
   sunMesh.material.opacity = sunFade;
   sunGlowMesh.material.opacity = sunFade * 0.7;
-  sunGroup.visible = (sunFade > 0.01);
+  sunGroup.visible = sunFade > 0.01;
 
   // Surface water plane fades out when looking from extreme depths
   const surfaceFade = Math.max(0.0, 1.0 - ratio * 3.5);
   waterMaterial.opacity = surfaceFade;
-  water.visible = (surfaceFade > 0.01);
+  water.visible = surfaceFade > 0.01;
 
   // Sun ascends as camera plunges down
   const newSunY = 32.0 + ratio * 250.0;
@@ -708,7 +1375,10 @@ window.setOceanDepth = function(ratio) {
 
   // 3. PROGRESSIVE DARKER BLUISH OCEANIC LIGHTING (0m -> 4000m):
   // Dims lighting dynamically into deep oceanic dark blue
-  const lightFactor = Math.max(0.005, Math.pow(1.0 - Math.min(1.0, ratio * 1.5), 2.5));
+  const lightFactor = Math.max(
+    0.005,
+    Math.pow(1.0 - Math.min(1.0, ratio * 1.5), 2.5),
+  );
   sunLight.intensity = 2.5 * lightFactor;
   ambientLight.intensity = Math.max(0.14, 0.9 * Math.pow(1.0 - ratio, 2.0));
 
@@ -719,34 +1389,55 @@ window.setOceanDepth = function(ratio) {
   // 3000m - 4000m: pitch-dark abyss blue (#00040f)
   const surfaceSkyTop = new THREE.Color(0x2a75b3);
   const darkAbyssBlue = new THREE.Color(0x00040f);
-  skyMat.uniforms.uTopColor.value.lerpColors(surfaceSkyTop, darkAbyssBlue, Math.min(1.0, ratio * 1.6));
+  skyMat.uniforms.uTopColor.value.lerpColors(
+    surfaceSkyTop,
+    darkAbyssBlue,
+    Math.min(1.0, ratio * 1.6),
+  );
 
   const surfaceHorizon = new THREE.Color(0xffe6a3);
   const deepMidnightBlue = new THREE.Color(0x00081c);
-  skyMat.uniforms.uHorizonColor.value.lerpColors(surfaceHorizon, deepMidnightBlue, Math.min(1.0, ratio * 1.8));
+  skyMat.uniforms.uHorizonColor.value.lerpColors(
+    surfaceHorizon,
+    deepMidnightBlue,
+    Math.min(1.0, ratio * 1.8),
+  );
 
   // 4. WATER SHADER COLOR & SPECULAR DARKENING:
   const surfaceWater = new THREE.Color(0x1992b8);
   const deepOceanBlue = new THREE.Color(0x000922);
-  waterMaterial.uniforms.uSurfaceColor.value.lerpColors(surfaceWater, deepOceanBlue, Math.min(1.0, ratio * 2.0));
+  waterMaterial.uniforms.uSurfaceColor.value.lerpColors(
+    surfaceWater,
+    deepOceanBlue,
+    Math.min(1.0, ratio * 2.0),
+  );
 
   const surfaceDepthColor = new THREE.Color(0x0a2b5e);
   const ultraDarkBlue = new THREE.Color(0x00030a);
-  waterMaterial.uniforms.uDepthColor.value.lerpColors(surfaceDepthColor, ultraDarkBlue, Math.min(1.0, ratio * 2.0));
+  waterMaterial.uniforms.uDepthColor.value.lerpColors(
+    surfaceDepthColor,
+    ultraDarkBlue,
+    Math.min(1.0, ratio * 2.0),
+  );
 
   // 5. APEX ARGO FLOAT DIVE SYNCHRONIZATION:
   // The Argo float plunges down into the ocean synchronously with the scroller
   argoDiveRatio = ratio;
-  argoDiveY = - ratio * maxUnderwaterDepth;
+  argoDiveY = -ratio * maxUnderwaterDepth;
   argoFloat.visible = true;
 
   // Submersible inspection light that illuminates the Argo float in deep water
-  argoDiveLight.position.set(ARGO_FLOAT_CONFIG.x, targetCamY + 2.0, ARGO_FLOAT_CONFIG.z + 4.0);
-  argoDiveLight.intensity = ratio > 0.015 ? Math.min(2.6, 0.4 + ratio * 2.4) : 0.0;
+  argoDiveLight.position.set(
+    ARGO_FLOAT_CONFIG.x,
+    targetCamY + 2.0,
+    ARGO_FLOAT_CONFIG.z + 4.0,
+  );
+  argoDiveLight.intensity =
+    ratio > 0.015 ? Math.min(2.6, 0.4 + ratio * 2.4) : 0.0;
 
   // 6. PROCEDURAL RISING BUBBLES:
   // Visible during diving, glowing softly in the dark blue water
-  bubblesMesh.visible = (ratio > 0.015);
+  bubblesMesh.visible = ratio > 0.015;
   // Bubble color shifts to bioluminescent cyan-blue in deep darkness
   const bubbleBright = new THREE.Color(0xdbf7ff);
   const bubbleDeep = new THREE.Color(0x1ee3cf);
@@ -772,27 +1463,37 @@ function animate() {
     const fx = argoFloat.position.x;
     const fz = argoFloat.position.z;
     // Calculate water wave height at float's position
-    const waveElev = Math.sin(fx * 0.28 + elapsedTime * 1.1) * Math.cos(fz * 0.18 + elapsedTime * 1.1) * 0.38;
+    const waveElev =
+      Math.sin(fx * 0.28 + elapsedTime * 1.1) *
+      Math.cos(fz * 0.18 + elapsedTime * 1.1) *
+      0.38;
 
     // Smooth transition from surface wave bobbing to underwater smooth descent
     // At surface (ratio=0), waveInfluence is 1.0. Underwater (ratio > 0.04), it fades to 0.0
     const surfaceInfluence = Math.max(0.0, 1.0 - argoDiveRatio * 20.0);
 
     // Surface wave bobbing vs underwater gentle hydrodynamic motion
-    const surfaceBobbing = (waveElev - 0.08 + Math.sin(elapsedTime * 2.2) * 0.04) * surfaceInfluence;
-    const underwaterMotion = (Math.sin(elapsedTime * 1.2) * 0.05) * (1.0 - surfaceInfluence);
+    const surfaceBobbing =
+      (waveElev - 0.08 + Math.sin(elapsedTime * 2.2) * 0.04) * surfaceInfluence;
+    const underwaterMotion =
+      Math.sin(elapsedTime * 1.2) * 0.05 * (1.0 - surfaceInfluence);
 
     // Dynamic vertical position: base Y + scroller dive Y + waves/underwater current
-    argoFloat.position.y = ARGO_FLOAT_CONFIG.y + argoDiveY + surfaceBobbing + underwaterMotion;
+    argoFloat.position.y =
+      ARGO_FLOAT_CONFIG.y + argoDiveY + surfaceBobbing + underwaterMotion;
 
     // Organic wave tilting at surface, stabilized underwater descent orientation
-    argoFloat.rotation.z = Math.sin(elapsedTime * 1.4) * (0.065 * surfaceInfluence + 0.015 * (1.0 - surfaceInfluence));
-    argoFloat.rotation.x = Math.cos(elapsedTime * 1.6) * (0.05 * surfaceInfluence + 0.012 * (1.0 - surfaceInfluence));
+    argoFloat.rotation.z =
+      Math.sin(elapsedTime * 1.4) *
+      (0.065 * surfaceInfluence + 0.015 * (1.0 - surfaceInfluence));
+    argoFloat.rotation.x =
+      Math.cos(elapsedTime * 1.6) *
+      (0.05 * surfaceInfluence + 0.012 * (1.0 - surfaceInfluence));
     argoFloat.rotation.y = elapsedTime * 0.035; // Gentle slow yaw drift
   }
 
   // 3. Animate Slow Cloud Drift across sky
-  cloudsGroup.children.forEach(cloud => {
+  cloudsGroup.children.forEach((cloud) => {
     cloud.position.x += cloud.userData.speed;
     if (cloud.position.x > 150) {
       cloud.position.x = -150;
@@ -833,4 +1534,3 @@ function animate() {
 }
 
 animate();
-

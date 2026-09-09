@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>3D Ocean & Sun Waves - Three.js</title>
+    <title>3D APEX Argo Ocean Simulation - Core Scientific Data</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -30,67 +30,390 @@
 
       /* Glassmorphism Common Style */
       .glass-panel {
-        background: rgba(6, 18, 38, 0.72);
-        backdrop-filter: blur(18px) saturate(160%);
-        -webkit-backdrop-filter: blur(18px) saturate(160%);
+        background: rgba(8, 18, 36, 0.82);
+        backdrop-filter: blur(22px) saturate(170%);
+        -webkit-backdrop-filter: blur(22px) saturate(170%);
         border: 1px solid rgba(0, 229, 255, 0.22);
-        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        border-radius: 18px;
       }
 
-      /* Floating Header */
-      .header-pill {
+      /* ======================================================================
+         TOP LEFT: BACK ARROW TO 3D GLOBE
+         ====================================================================== */
+      .back-globe-btn {
         position: absolute;
         top: 20px;
         left: 24px;
-        z-index: 10;
-        padding: 12px 20px;
-        border-color: rgba(255, 224, 66, 0.25);
-      }
-      .header-title {
-        font-size: 1.05rem;
+        z-index: 50;
+        background: rgba(6, 18, 38, 0.88);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1.5px solid rgba(0, 229, 255, 0.38);
+        color: #00e5ff;
+        padding: 10px 18px;
+        border-radius: 14px;
+        font-family: inherit;
+        font-size: 0.88rem;
         font-weight: 700;
-        color: #ffffff;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
+        text-decoration: none;
+        transition: all 0.25s ease;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 229, 255, 0.2);
+        cursor: pointer;
       }
-      .header-sub {
-        font-size: 0.78rem;
-        color: #ffe6a3;
-        margin-top: 2px;
+      .back-globe-btn:hover {
+        background: rgba(0, 229, 255, 0.2);
+        border-color: #00f0ff;
+        transform: translateX(-3px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(0, 229, 255, 0.4);
+        color: #ffffff;
+      }
+      .back-arrow-icon {
+        font-size: 1.2rem;
+        transition: transform 0.25s ease;
+      }
+      .back-globe-btn:hover .back-arrow-icon {
+        transform: translateX(-4px);
       }
 
-      /* Floating Navigation Back to Globe */
-      .nav-bar {
+      /* Bathymetric Zone Indicator */
+      .zone-indicator {
+        position: absolute;
+        top: 20px;
+        left: 200px;
+        z-index: 20;
+        padding: 10px 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #d1ecf1;
+      }
+      .zone-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ffe042;
+        box-shadow: 0 0 10px #ffe042;
+      }
+
+      /* ======================================================================
+         RIGHT SIDE: ARGO FLOAT CONTAINER & DOCKED SUBTABS
+         ====================================================================== */
+      .argo-right-container {
         position: absolute;
         top: 20px;
         right: 24px;
-        z-index: 100;
+        width: 360px;
+        max-width: calc(100vw - 48px);
+        max-height: calc(100vh - 40px);
+        z-index: 40;
         display: flex;
-        gap: 12px;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none; /* Crucial: clicks and drags pass through to 3D ocean scene */
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-bottom: 12px;
       }
-      .nav-btn {
-        background: rgba(6, 18, 38, 0.75);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 224, 66, 0.35);
-        color: #fff4bd;
-        padding: 10px 18px;
-        border-radius: 12px;
-        text-decoration: none;
-        font-size: 0.88rem;
-        font-weight: 600;
+      .argo-right-container::-webkit-scrollbar {
+        width: 4px;
+      }
+      .argo-right-container::-webkit-scrollbar-thumb {
+        background: rgba(0, 229, 255, 0.3);
+        border-radius: 4px;
+      }
+
+      .argo-desc-panel {
+        width: 100%;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+        pointer-events: auto; /* Panel captures interactions */
+        flex-shrink: 0;
+      }
+
+      /* Docked Subtab Card Under Argo Float Card */
+      .argo-subtab-card {
+        width: 100%;
+        padding: 14px 16px;
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: auto; /* Subtab captures interactions */
+        flex-shrink: 0;
+        animation: subtabSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        border: 1.5px solid rgba(0, 229, 255, 0.38);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 229, 255, 0.18);
+      }
+      .argo-subtab-card.open {
+        display: flex;
+      }
+
+      @keyframes subtabSlideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .desc-header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        transition: all 0.2s ease;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        justify-content: space-between;
       }
-      .nav-btn:hover {
-        background: rgba(255, 224, 66, 0.2);
+      .desc-title-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .desc-beacon-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ff7a00;
+        box-shadow: 0 0 14px rgba(255, 122, 0, 0.95);
+        display: inline-block;
+        flex-shrink: 0;
+      }
+      .desc-station-name {
+        font-size: 1.08rem;
+        font-weight: 700;
+        color: #ffffff;
+      }
+      .desc-sub-code {
+        font-size: 0.72rem;
+        color: #8bb2db;
+        margin-top: 1px;
+      }
+      .desc-status-pill {
+        background: #0b3223;
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.45);
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+      }
+
+      .desc-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.09);
+        margin: 2px -4px;
+      }
+      .desc-sub-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.05);
+        margin: 2px 0;
+      }
+
+      .desc-metrics-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .desc-metric-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.81rem;
+      }
+      .desc-lbl {
+        color: #8295a9;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 500;
+      }
+      .desc-val {
+        color: #ffffff;
+        font-weight: 600;
+        text-align: right;
+      }
+      .desc-val-multiline {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        font-weight: 600;
+        color: #ffffff;
+        font-size: 0.81rem;
+      }
+      .desc-val-sub {
+        font-size: 0.72rem;
+        color: #8bb2db;
+        font-weight: 400;
+      }
+      .code-font {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.74rem;
+        color: #93c5fd;
+      }
+      .temp-glow {
+        color: #ff9436;
+        text-shadow: 0 0 8px rgba(255, 148, 54, 0.45);
+        font-family: 'Space Mono', monospace;
+      }
+      .sal-glow {
+        color: #38bdf8;
+        text-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+        font-family: 'Space Mono', monospace;
+      }
+      .depth-glow {
+        color: #00ffcc;
+        text-shadow: 0 0 8px rgba(0, 255, 204, 0.45);
+        font-family: 'Space Mono', monospace;
+      }
+      .oxy-glow {
+        color: #c084fc;
+        text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
+        font-family: 'Space Mono', monospace;
+      }
+      .chl-glow {
+        color: #4ade80;
+        text-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
+        font-family: 'Space Mono', monospace;
+      }
+      .current-glow {
+        color: #38bdf8;
+        font-family: 'Space Mono', monospace;
+      }
+      .quality-badge {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      /* Mission Telemetry Section */
+      .desc-mission-section {
+        background: rgba(4, 12, 26, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .mission-header {
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #8bb2db;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+      .mission-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+      }
+      .mission-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .mission-lbl {
+        font-size: 0.68rem;
+        color: #64748b;
+      }
+      .mission-val {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #ffffff;
+        font-family: 'Space Mono', monospace;
+      }
+      .battery-val {
+        color: #10b981;
+      }
+
+      /* Action Buttons */
+      .desc-actions-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .desc-action-btn {
+        padding: 9px 10px;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 0.76rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.22s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .desc-action-btn.primary {
+        background: linear-gradient(135deg, #00b4d8, #0077b6);
+        border: 1px solid rgba(0, 229, 255, 0.45);
+        color: #ffffff;
+        box-shadow: 0 4px 14px rgba(0, 180, 216, 0.3);
+      }
+      .desc-action-btn.primary:hover {
+        background: linear-gradient(135deg, #00f0ff, #0096c7);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 229, 255, 0.5);
+        color: #020713;
+      }
+      .desc-action-btn.secondary {
+        background: rgba(14, 28, 54, 0.75);
+        border: 1px solid rgba(0, 229, 255, 0.28);
+        color: #00e5ff;
+      }
+      .desc-action-btn.secondary:hover {
+        background: rgba(0, 229, 255, 0.15);
+        border-color: #00f0ff;
+        transform: translateY(-2px);
+        color: #ffffff;
+      }
+      .desc-action-btn.active {
+        background: linear-gradient(135deg, #00f0ff, #0077b6) !important;
+        border-color: #00f0ff !important;
+        color: #020713 !important;
+        box-shadow: 0 0 20px rgba(0, 229, 255, 0.65) !important;
+        transform: translateY(-1px);
+        font-weight: 800;
+      }
+
+      /* Solar Time Switcher Button */
+      .cycle-sun-btn {
+        background: rgba(14, 28, 54, 0.85);
+        border: 1px solid rgba(255, 224, 66, 0.35);
+        border-radius: 12px;
+        color: #ffe6a3;
+        padding: 9px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: all 0.22s ease;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+      }
+      .cycle-sun-btn:hover {
+        background: rgba(255, 224, 66, 0.18);
         border-color: #ffe042;
         transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(255, 224, 66, 0.25);
+        color: #ffffff;
       }
 
       /* ======================================================================
@@ -99,7 +422,7 @@
       .depth-bar-container {
         position: absolute;
         left: 24px;
-        top: 96px;
+        top: 86px;
         bottom: 74px;
         width: 140px;
         z-index: 30;
@@ -117,7 +440,6 @@
         user-select: none;
       }
 
-      /* Interactive Depth Input Box */
       .depth-input-card {
         width: 100%;
         background: rgba(4, 14, 32, 0.85);
@@ -187,7 +509,6 @@
         box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
       }
 
-      /* Endpoints (Top level and Depth) */
       .depth-endpoint {
         display: flex;
         flex-direction: column;
@@ -224,7 +545,6 @@
         color: #8dafcb;
       }
 
-      /* Vertical Track Area */
       .depth-track-container {
         position: relative;
         flex: 1;
@@ -236,8 +556,6 @@
         cursor: pointer;
         padding-left: 20px;
       }
-
-      /* Central Track Line */
       .depth-track {
         position: relative;
         width: 10px;
@@ -247,8 +565,6 @@
         border-radius: 6px;
         overflow: hidden;
       }
-
-      /* Dynamic Gradient Depth Fill (bright yellow -> deep darkness) */
       .depth-track-fill {
         position: absolute;
         top: 0;
@@ -260,8 +576,6 @@
         border-radius: 6px;
         transition: height 0.05s linear;
       }
-
-      /* Depth Tick Marks (100m steps up to 1000m) */
       .depth-ticks {
         position: absolute;
         left: 38px;
@@ -290,8 +604,6 @@
         height: 1px;
         background: rgba(0, 229, 255, 0.4);
       }
-
-      /* Interactive Draggable Thumb Knob */
       .depth-thumb {
         position: absolute;
         top: 0%;
@@ -299,47 +611,26 @@
         transform: translate(-50%, -50%);
         width: 22px;
         height: 22px;
+        background: #00e5ff;
+        border: 2px solid #ffffff;
         border-radius: 50%;
-        background: #ffffff;
-        border: 2px solid #00e5ff;
-        box-shadow: 0 0 14px rgba(0, 229, 255, 0.95), 0 4px 10px rgba(0, 0, 0, 0.8);
+        box-shadow: 0 0 16px #00e5ff, 0 4px 8px rgba(0, 0, 0, 0.6);
         cursor: grab;
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 5;
-        transition: transform 0.1s ease;
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
       }
       .depth-thumb:active {
         cursor: grabbing;
         transform: translate(-50%, -50%) scale(1.2);
+        box-shadow: 0 0 24px #00f0ff;
       }
       .thumb-dot {
         width: 6px;
         height: 6px;
-        border-radius: 50%;
         background: #020713;
-      }
-
-      /* Live Bathymetric Zone Badge on Right */
-      .zone-indicator {
-        position: absolute;
-        top: 20px;
-        left: 360px;
-        z-index: 10;
-        padding: 8px 16px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 0.8rem;
-        color: #d1ecf1;
-      }
-      .zone-dot {
-        width: 8px;
-        height: 8px;
         border-radius: 50%;
-        background: #ffe042;
-        box-shadow: 0 0 8px #ffe042;
       }
 
       /* Controls Hint Pill */
@@ -359,14 +650,478 @@
       .info-pill span strong {
         color: #ffe042;
       }
+
+      /* ======================================================================
+         DOCKED SUBTAB: PROFILE & TRAJECTORY UNDER ARGO CARD
+         ====================================================================== */
+      .subtab-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .subtab-title {
+        font-size: 0.86rem;
+        font-weight: 700;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .subtab-badge {
+        font-size: 0.68rem;
+        color: #00e5ff;
+        font-family: 'Space Mono', monospace;
+        background: rgba(0, 229, 255, 0.12);
+        border: 1px solid rgba(0, 229, 255, 0.3);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .subtab-close-btn {
+        background: transparent;
+        border: none;
+        color: #94a3b8;
+        font-size: 1.25rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+      }
+      .subtab-close-btn:hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .subtab-body {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .subtab-caption {
+        font-size: 0.72rem;
+        color: #94a3b8;
+        line-height: 1.35;
+      }
+      .subtab-chart-box {
+        background: rgba(4, 10, 22, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 8px 6px 4px 6px;
+      }
+      .subtab-chart-legend {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        font-size: 0.67rem;
+        margin-bottom: 2px;
+      }
+      .subtab-sensor-box {
+        background: rgba(14, 28, 54, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.7rem;
+        color: #cbd5e1;
+        display: flex;
+        justify-content: space-between;
+      }
+      .subtab-traj-box {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 170px;
+      }
+      .subtab-traj-box::-webkit-scrollbar {
+        width: 3px;
+        height: 3px;
+      }
+      .subtab-traj-box::-webkit-scrollbar-thumb {
+        background: rgba(0, 229, 255, 0.3);
+        border-radius: 3px;
+      }
+      /* Enlarged Subtab Card & Statistics Graph Expansion - Full Half-Screen View */
+      .argo-subtab-card.enlarged {
+        position: fixed !important;
+        top: 16px !important;
+        right: 20px !important;
+        width: 52vw !important;
+        min-width: 640px !important;
+        max-width: 980px !important;
+        height: calc(100vh - 32px) !important;
+        max-height: calc(100vh - 32px) !important;
+        margin-left: 0 !important;
+        z-index: 1200 !important;
+        overflow-y: auto !important;
+        background: rgba(5, 14, 30, 0.95) !important;
+        backdrop-filter: blur(28px) saturate(190%) !important;
+        -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+        border: 1.5px solid rgba(0, 229, 255, 0.55) !important;
+        border-radius: 20px !important;
+        box-shadow: -15px 0 50px rgba(0, 0, 0, 0.92), 0 0 35px rgba(0, 229, 255, 0.3) !important;
+        padding: 18px 22px !important;
+        animation: subtabEnlargeHalfScreen 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+      }
+
+      @keyframes subtabEnlargeHalfScreen {
+        from {
+          opacity: 0.8;
+          transform: translateX(20px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+        }
+      }
+
+      .argo-subtab-card.enlarged #modalChartSvg {
+        height: 290px !important;
+      }
+
+      .argo-subtab-card.enlarged .subtab-chart-box {
+        padding: 12px 14px 8px 14px;
+        background: rgba(2, 8, 20, 0.88);
+        border: 1px solid rgba(0, 229, 255, 0.3);
+        border-radius: 14px;
+      }
+
+      .argo-subtab-card.enlarged .profile-layers-grid {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .subtab-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .subtab-action-icon-btn {
+        background: rgba(0, 229, 255, 0.12);
+        border: 1px solid rgba(0, 229, 255, 0.35);
+        color: #00e5ff;
+        padding: 4px 11px;
+        border-radius: 7px;
+        font-family: inherit;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .subtab-action-icon-btn:hover {
+        background: rgba(0, 229, 255, 0.25);
+        border-color: #00f0ff;
+        color: #ffffff;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+      }
+
+      /* Real-Time Observation HUD Banner on Chart */
+      .chart-observation-hud {
+        background: rgba(3, 9, 22, 0.94);
+        border: 1.5px solid rgba(0, 229, 255, 0.35);
+        border-radius: 12px;
+        padding: 8px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        transition: all 0.2s ease;
+      }
+      .hud-depth-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .hud-depth-main {
+        color: #00e5ff;
+        font-family: 'Space Mono', monospace;
+        font-weight: 700;
+        font-size: 0.78rem;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .hud-dive-btn {
+        background: linear-gradient(135deg, #00b4d8, #0077b6);
+        border: 1px solid rgba(0, 229, 255, 0.4);
+        color: #ffffff;
+        border-radius: 6px;
+        padding: 3px 9px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .hud-dive-btn:hover {
+        background: linear-gradient(135deg, #00f0ff, #0096c7);
+        color: #020713;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+      }
+      .hud-metrics-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .hud-tag {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .hud-tag.temp { color: #ff9436; border: 1px solid rgba(255, 148, 54, 0.35); background: rgba(255, 148, 54, 0.1); }
+      .hud-tag.sal { color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); background: rgba(56, 189, 248, 0.1); }
+      .hud-tag.oxy { color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.35); background: rgba(192, 132, 252, 0.1); }
+      .hud-tag.chl { color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.1); }
+      .hud-tag.zone { color: #ffe042; border: 1px solid rgba(255, 224, 66, 0.35); background: rgba(255, 224, 66, 0.1); }
+
+      /* Ocean Layers Breakdown Cards in Enlarged View */
+      .profile-layers-grid {
+        display: none;
+      }
+      .layer-card {
+        background: rgba(8, 18, 38, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .layer-card.epipelagic {
+        border-color: rgba(0, 229, 255, 0.35);
+        background: rgba(0, 229, 255, 0.04);
+      }
+      .layer-card.mesopelagic {
+        border-color: rgba(192, 132, 252, 0.35);
+        background: rgba(192, 132, 252, 0.04);
+      }
+      .layer-card.bathypelagic {
+        border-color: rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.4);
+      }
+      .layer-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .layer-title {
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: #ffffff;
+      }
+      .layer-pill {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .layer-pill.sunlight {
+        background: rgba(0, 229, 255, 0.18);
+        color: #00e5ff;
+      }
+      .layer-pill.twilight {
+        background: rgba(192, 132, 252, 0.18);
+        color: #c084fc;
+      }
+      .layer-pill.midnight {
+        background: rgba(148, 163, 184, 0.18);
+        color: #94a3b8;
+      }
+      .layer-desc {
+        font-size: 0.7rem;
+        color: #94a3b8;
+        line-height: 1.35;
+      }
+      .layer-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 0.68rem;
+        color: #cbd5e1;
+        font-family: 'Space Mono', monospace;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        padding-top: 4px;
+      }
+      .layer-stats strong {
+        color: #00e5ff;
+      }
+
+      /* Info Circle 'i' Button on Metric Rows */
+      .info-circle-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: rgba(0, 229, 255, 0.1);
+        border: 1px solid rgba(0, 229, 255, 0.4);
+        color: #00e5ff;
+        font-size: 0.62rem;
+        font-weight: 700;
+        cursor: pointer;
+        margin-left: 5px;
+        transition: all 0.2s ease;
+        vertical-align: middle;
+        flex-shrink: 0;
+        user-select: none;
+      }
+      .info-circle-btn:hover,
+      .desc-metric-row:hover .info-circle-btn {
+        background: #00e5ff;
+        color: #020713;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.85);
+        transform: scale(1.18);
+      }
+
+      /* Floating Glassmorphism Glossary Tooltip */
+      .glossary-tooltip-card {
+        position: fixed;
+        z-index: 9999;
+        width: 320px;
+        max-width: calc(100vw - 32px);
+        background: rgba(5, 14, 30, 0.96);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1.5px solid rgba(0, 229, 255, 0.48);
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 25px rgba(0, 229, 255, 0.25);
+        padding: 12px 14px;
+        display: none;
+        flex-direction: column;
+        gap: 7px;
+        pointer-events: none;
+        animation: tooltipFadeScale 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      .glossary-tooltip-card.active {
+        display: flex;
+      }
+      @keyframes tooltipFadeScale {
+        from {
+          opacity: 0;
+          transform: translateY(6px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      .tooltip-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+        padding-bottom: 6px;
+      }
+      .tooltip-title {
+        font-weight: 700;
+        font-size: 0.86rem;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tooltip-badge {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.69rem;
+        color: #00e5ff;
+        background: rgba(0, 229, 255, 0.12);
+        border: 1px solid rgba(0, 229, 255, 0.3);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      .tooltip-sensor {
+        font-size: 0.69rem;
+        color: #8bb2db;
+        font-style: italic;
+      }
+      .tooltip-desc {
+        font-size: 0.74rem;
+        color: #e2e8f0;
+        line-height: 1.45;
+      }
+      .tooltip-footer {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        border-top: 1px dashed rgba(255, 255, 255, 0.08);
+        padding-top: 6px;
+        font-size: 0.69rem;
+      }
+      .tooltip-significance {
+        color: #93c5fd;
+        line-height: 1.35;
+      }
+      .tooltip-range {
+        color: #4ade80;
+        font-family: 'Space Mono', monospace;
+        font-weight: 600;
+      }
+
+      /* Trajectory Table */
+      .traj-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.72rem;
+        font-family: 'Space Mono', monospace;
+      }
+      .traj-table th {
+        background: rgba(14, 28, 54, 0.85);
+        padding: 6px 8px;
+        text-align: left;
+        color: #8bb2db;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        white-space: nowrap;
+      }
+      .traj-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        color: #e2e8f0;
+        white-space: nowrap;
+      }
+
+      /* Seamless Transition Overlay */
+      .transition-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: #020713;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .transition-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
     </style>
   </head>
   <body>
-    <!-- Header -->
-    <div class="header-pill glass-panel">
-      <div class="header-title">☀️ Ocean Waves & Golden Sun</div>
-      <div class="header-sub">Custom GLSL Shader Waves • Vertical Depth Diving</div>
-    </div>
+    <!-- Transition Overlay -->
+    <div id="transitionOverlay" class="transition-overlay"></div>
+
+    <!-- TOP LEFT: Dedicated Back Arrow Button to 3D Earth Globe -->
+    <a href="/index.html" class="back-globe-btn" id="backToGlobeBtn" onclick="return transitionBackToGlobe(event)" title="Return to 3D Earth Globe">
+      <span class="back-arrow-icon">←</span>
+      <span>Earth Globe</span>
+    </a>
 
     <!-- Bathymetric Zone Indicator -->
     <div class="zone-indicator glass-panel" id="zoneIndicator">
@@ -374,14 +1129,291 @@
       <span id="zoneText">0m • Sunlight Zone (Epipelagic)</span>
     </div>
 
-    <!-- Navigation -->
-    <div class="nav-bar">
-      <a href="/index.html" class="nav-btn">🌍 3D World Globe</a>
+    <!-- ======================================================================
+         RIGHT SIDE: ARGO FLOAT CONTAINER & DOCKED SUBTABS
+         ====================================================================== -->
+    <div class="argo-right-container" id="argoRightContainer">
+      <div class="argo-desc-panel glass-panel" id="argoDescPanel">
+      <!-- Title Header -->
+      <div class="desc-header">
+        <div class="desc-title-group">
+          <span class="desc-beacon-dot"></span>
+          <div>
+            <div class="desc-station-name" id="descStationName">Argo Float #2902351</div>
+            <div class="desc-sub-code" id="descStationCode">CB01 · Coastal Observation Buoy</div>
+          </div>
+        </div>
+        <span class="desc-status-pill" id="descStatusPill">ACTIVE</span>
+      </div>
+
+      <div class="desc-divider"></div>
+
+      <!-- Core Scientific Metrics List -->
+      <div class="desc-metrics-list">
+        <!-- 📍 Location -->
+        <div class="desc-metric-row">
+          <span class="desc-lbl">📍 Location</span>
+          <span class="desc-val-multiline">
+            <span id="descLocPrimary">Andaman Sea</span>
+            <span class="desc-val-sub" id="descLocSecondary">Port Blair</span>
+          </span>
+        </div>
+
+        <!-- 🌐 Coordinates -->
+        <div class="desc-metric-row">
+          <span class="desc-lbl">🌐 Coordinates</span>
+          <span class="desc-val code-font" id="descCoords">11.6000° N, 92.5000° E</span>
+        </div>
+
+        <!-- 🌡 Surface / Live Water Temp -->
+        <div class="desc-metric-row" data-param="temperature">
+          <span class="desc-lbl">
+            <span id="descTempLabel">🌡 Surface Temp</span>
+            <span class="info-circle-btn" data-glossary="temperature" title="Sea Water Temperature Definition">ⓘ</span>
+          </span>
+          <span class="desc-val temp-glow" id="descTemp">28.3 °C</span>
+        </div>
+
+        <!-- 💧 Salinity -->
+        <div class="desc-metric-row" data-param="salinity">
+          <span class="desc-lbl">
+            <span>💧 Salinity</span>
+            <span class="info-circle-btn" data-glossary="salinity" title="Practical Salinity Definition">ⓘ</span>
+          </span>
+          <span class="desc-val sal-glow" id="descSalinity">34.3 PSU</span>
+        </div>
+
+        <!-- 📏 Depth -->
+        <div class="desc-metric-row" data-param="depth">
+          <span class="desc-lbl">
+            <span>📏 Depth</span>
+            <span class="info-circle-btn" data-glossary="depth" title="Profiling Depth Definition">ⓘ</span>
+          </span>
+          <span class="desc-val depth-glow" id="descDepth">0 m / 2000 m</span>
+        </div>
+
+        <div class="desc-sub-divider"></div>
+
+        <!-- 🫧 Oxygen -->
+        <div class="desc-metric-row" data-param="oxygen">
+          <span class="desc-lbl">
+            <span>🫧 Oxygen</span>
+            <span class="info-circle-btn" data-glossary="oxygen" title="Dissolved Oxygen Definition">ⓘ</span>
+          </span>
+          <span class="desc-val oxy-glow" id="descOxygen">198 μmol/kg</span>
+        </div>
+
+        <!-- 🌿 Chlorophyll -->
+        <div class="desc-metric-row" data-param="chlorophyll">
+          <span class="desc-lbl">
+            <span>🌿 Chlorophyll</span>
+            <span class="info-circle-btn" data-glossary="chlorophyll" title="Chlorophyll-a Definition">ⓘ</span>
+          </span>
+          <span class="desc-val chl-glow" id="descChlorophyll">0.42 mg/m³</span>
+        </div>
+
+        <div class="desc-sub-divider"></div>
+
+        <!-- 🌊 Current -->
+        <div class="desc-metric-row" data-param="current">
+          <span class="desc-lbl">
+            <span>🌊 Current</span>
+            <span class="info-circle-btn" data-glossary="current" title="Ocean Current Velocity Definition">ⓘ</span>
+          </span>
+          <span class="desc-val current-glow" id="descCurrent">0.42 m/s → NE</span>
+        </div>
+
+        <!-- 📊 Data Quality -->
+        <div class="desc-metric-row" data-param="quality">
+          <span class="desc-lbl">
+            <span>📊 Data Quality</span>
+            <span class="info-circle-btn" data-glossary="quality" title="Quality Control QC Flag Definition">ⓘ</span>
+          </span>
+          <span class="desc-val quality-badge" id="descQuality">GOOD</span>
+        </div>
+      </div>
+
+      <div class="desc-divider"></div>
+
+      <!-- 📡 Mission Section -->
+      <div class="desc-mission-section">
+        <div class="mission-header">
+          <span>📡 Mission</span>
+        </div>
+        <div class="mission-grid">
+          <div class="mission-item">
+            <span class="mission-lbl">Cycle</span>
+            <span class="mission-val" id="descCycle">#147</span>
+          </div>
+          <div class="mission-item">
+            <span class="mission-lbl">Last Profile</span>
+            <span class="mission-val" id="descLastProfile">18 min ago</span>
+          </div>
+          <div class="mission-item">
+            <span class="mission-lbl">Battery</span>
+            <span class="mission-val battery-val" id="descBattery">82%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="desc-actions-group">
+        <button class="desc-action-btn primary" id="btnViewProfile" onclick="toggleSubtab('profile')">
+          <span>📊 View Ocean Profile</span>
+        </button>
+        <button class="desc-action-btn secondary" id="btnViewTrajectory" onclick="toggleSubtab('trajectory')">
+          <span>🗺️ View Trajectory</span>
+        </button>
+      </div>
+
+      <!-- Solar Direction Switcher -->
+      <button class="cycle-sun-btn" onclick="window.cycleSolarTime()">
+        <span>☀️ Change Sun Direction / Time</span>
+        <span id="sunBadgeEmoji">🌅</span>
+      </button>
     </div>
+
+    <!-- DOCKED SUBTAB CARD UNDER ARGO FLOAT CARD -->
+    <div class="argo-subtab-card glass-panel" id="argoSubtabCard">
+      <!-- TAB 1: VERTICAL OCEAN PROFILE -->
+      <div class="subtab-section" id="subtabProfileSection" style="display: none;">
+        <div class="subtab-header">
+          <div class="subtab-title">
+            <span>📊 Vertical Ocean Profile</span>
+            <span class="subtab-badge" id="modalProfileCycle">Cycle #147</span>
+          </div>
+          <div class="subtab-actions">
+            <button class="subtab-action-icon-btn" id="btnExpandChart" onclick="toggleChartSize(event)" title="Enlarge to full half-screen or compact view">⤢ Half-Screen View</button>
+            <button class="subtab-close-btn" onclick="toggleSubtab('profile')" title="Close Profile Tab">&times;</button>
+          </div>
+        </div>
+        <div class="subtab-body">
+          <!-- Real-Time Pointing Observation HUD -->
+          <div class="chart-observation-hud" id="chartObservationHud">
+            <div class="hud-depth-row">
+              <div class="hud-depth-main" id="hudDepthTag">
+                <span class="hud-depth-icon">📏</span>
+                <span class="hud-depth-txt">Move cursor over chart to inspect depth observations</span>
+              </div>
+              <button class="hud-dive-btn" id="hudDiveBtn" style="display:none;" onclick="diveToPointedDepth(event)">
+                🌊 Dive 3D View Here
+              </button>
+            </div>
+            <div class="hud-metrics-tags" id="hudMetricsTags" style="display: none;">
+              <span class="hud-tag temp" id="hudTempTag">🌡 -- °C</span>
+              <span class="hud-tag sal" id="hudSalTag">💧 -- PSU</span>
+              <span class="hud-tag oxy" id="hudOxyTag">🫧 -- μmol/kg</span>
+              <span class="hud-tag chl" id="hudChlTag">🌿 -- mg/m³</span>
+              <span class="hud-tag zone" id="hudZoneTag">☀️ Epipelagic</span>
+            </div>
+          </div>
+
+          <!-- SVG Profile Chart -->
+          <div class="subtab-chart-box" id="subtabChartBox" onclick="onChartBoxClick(event)" title="Click graph to enlarge window / click depths to dive">
+            <div class="subtab-chart-legend">
+              <span style="color:#ff9436;">● Temp (°C: 0–30)</span>
+              <span style="color:#38bdf8;">● Salinity (PSU: 33.5–36)</span>
+              <span style="color:#c084fc;">● O2 (μmol/kg: 0–220)</span>
+            </div>
+            <svg id="modalChartSvg" viewBox="0 0 700 300" style="width:100%; height:180px; cursor:crosshair;"></svg>
+          </div>
+
+          <!-- CTD Sensor Specs & Quality -->
+          <div class="subtab-sensor-box">
+            <div><strong>Sensor:</strong> Sea-Bird SBE 41CP</div>
+            <div><strong>Accuracy:</strong> ±0.002 °C / ±0.003 PSU</div>
+            <div><strong>Quality:</strong> WMO Flag 1 (Good)</div>
+          </div>
+
+          <!-- Ocean Layers Breakdown (Visible in Enlarged Half-Screen View) -->
+          <div class="profile-layers-grid" id="profileLayersGrid">
+            <div class="layer-card epipelagic">
+              <div class="layer-card-header">
+                <span class="layer-title">☀️ Epipelagic</span>
+                <span class="layer-pill sunlight">0 – 200m</span>
+              </div>
+              <div class="layer-desc">
+                Sunlit mixed layer with wind turbulence & phytoplankton photosynthesis. High uniform temperature and high dissolved oxygen.
+              </div>
+              <div class="layer-stats">
+                <span>Avg Temp: <strong>~28.5 °C</strong></span>
+                <span>O₂ Saturation: <strong>&gt;95%</strong></span>
+              </div>
+            </div>
+
+            <div class="layer-card mesopelagic">
+              <div class="layer-card-header">
+                <span class="layer-title">🌘 Mesopelagic / OMZ</span>
+                <span class="layer-pill twilight">200 – 1000m</span>
+              </div>
+              <div class="layer-desc">
+                Steepest temperature drop (Main Thermocline). Sinking organic matter decomposition creates the Oxygen Minimum Zone (OMZ).
+              </div>
+              <div class="layer-stats">
+                <span>Thermocline: <strong>28°C → 8°C</strong></span>
+                <span>OMZ Minimum O₂: <strong>~45 μmol/kg</strong></span>
+              </div>
+            </div>
+
+            <div class="layer-card bathypelagic">
+              <div class="layer-card-header">
+                <span class="layer-title">🌌 Bathypelagic Abyss</span>
+                <span class="layer-pill midnight">1000 – 2000m</span>
+              </div>
+              <div class="layer-desc">
+                Permanent darkness and intense hydrostatic pressure (100–200 atm). Stable baseline salinity and near-freezing deep polar waters.
+              </div>
+              <div class="layer-stats">
+                <span>Abyssal Temp: <strong>~2.6 °C</strong></span>
+                <span>Salinity: <strong>~34.8 PSU</strong></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: DRIFT TRAJECTORY & GPS HISTORY -->
+      <div class="subtab-section" id="subtabTrajectorySection" style="display: none;">
+        <div class="subtab-header">
+          <div class="subtab-title">
+            <span>🗺️ Drift Trajectory History</span>
+            <span class="subtab-badge">5 Cycles</span>
+          </div>
+          <button class="subtab-close-btn" onclick="toggleSubtab('trajectory')" title="Close Trajectory Tab">&times;</button>
+        </div>
+        <div class="subtab-body">
+          <div class="subtab-caption">
+            GPS surface coordinates fixed via satellite telemetry during each cycle.
+          </div>
+
+          <!-- Trajectory Table -->
+          <div class="subtab-traj-box">
+            <table class="traj-table">
+              <thead>
+                <tr>
+                  <th>Cycle</th>
+                  <th>Timestamp</th>
+                  <th>Coordinates</th>
+                  <th>SST</th>
+                  <th>Speed</th>
+                </tr>
+              </thead>
+              <tbody id="trajectoryTableBody">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="subtab-traj-footer">
+            🌊 <strong>Lagrangian Drift:</strong> Net isobaric parking at 1000 dbar.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
     <!-- LEFT-SIDE GLASSMORPHIC SCROLLBAR & DEPTH ENTER BOX -->
     <div class="depth-bar-container">
-      <!-- Direct Depth Input Box -->
       <div class="depth-input-card">
         <span class="input-label">Enter Depth</span>
         <div class="input-group">
@@ -391,20 +1423,17 @@
         </div>
       </div>
 
-      <!-- Top level -->
       <div class="depth-endpoint top">
         <span style="font-size: 0.95rem;">☀️</span>
         <span class="endpoint-title">Top level</span>
         <span class="endpoint-num">0 m</span>
       </div>
 
-      <!-- Vertical Slider Track (0 to 4000 meters) -->
       <div class="depth-track-container" id="depthTrackContainer">
         <div class="depth-track">
           <div class="depth-track-fill" id="depthTrackFill"></div>
         </div>
 
-        <!-- Ticks: Depth steps up to 4000m -->
         <div class="depth-ticks">
           <div class="depth-tick major" style="top: 0%">0m</div>
           <div class="depth-tick" style="top: 12.5%">500m</div>
@@ -417,13 +1446,11 @@
           <div class="depth-tick major" style="top: 100%">4000m</div>
         </div>
 
-        <!-- Draggable Thumb -->
         <div class="depth-thumb" id="depthThumb">
           <div class="thumb-dot"></div>
         </div>
       </div>
 
-      <!-- Depth -->
       <div class="depth-endpoint bottom">
         <span class="endpoint-title">Depth</span>
         <span class="endpoint-num">4000 m (Abyss)</span>
@@ -433,13 +1460,193 @@
 
     <!-- Controls Hint -->
     <div class="info-pill glass-panel">
-      <span>🖱️ <strong>Left Click + Drag:</strong> Pan / Inspect</span>
-      <span>↕️ <strong>Scroll or Enter Depth:</strong> Descend to 4000m Abyss</span>
-      <span>🌊 <strong>Custom Shaders:</strong> GLSL Swells</span>
+      <span>🖱️ <strong>Left Click + Drag:</strong> Pan / Inspect Float</span>
+      <span>↕️ <strong>Scroll Depth:</strong> Live Temperature & Oxygen Decay</span>
+      <span>☀️ <strong>Sun:</strong> Dynamic Solar Cycle</span>
     </div>
 
-    <!-- Depth Scroll Bar & Input Box Logic -->
+    <!-- Dynamic Glassmorphism Metric Glossary Tooltip Popover -->
+    <div class="glossary-tooltip-card" id="metricGlossaryTooltip">
+      <div class="tooltip-header">
+        <span class="tooltip-title" id="tooltipTitle">💧 Practical Salinity</span>
+        <span class="tooltip-badge" id="tooltipBadge">34.3 PSU</span>
+      </div>
+      <div class="tooltip-sensor" id="tooltipSensor">Sensor: SBE 41CP Conductivity Cell</div>
+      <div class="tooltip-desc" id="tooltipDesc">
+        Concentration of dissolved mineral salts in seawater.
+      </div>
+      <div class="tooltip-footer">
+        <div class="tooltip-significance" id="tooltipSignificance">
+          <strong>Significance:</strong> Dictates seawater density and thermohaline circulation.
+        </div>
+        <div class="tooltip-range" id="tooltipRange">Expected: 32.0 – 36.5 PSU</div>
+      </div>
+    </div>
+
+    <!-- Depth Scroll Bar Logic, Sub-Tab Handlers & Observation Tooltips -->
     <script>
+      let currentOpenTab = null; // 'profile' | 'trajectory' | null
+
+      function toggleSubtab(tabName) {
+        const card = document.getElementById('argoSubtabCard');
+        const profileSec = document.getElementById('subtabProfileSection');
+        const trajSec = document.getElementById('subtabTrajectorySection');
+        const profileBtn = document.getElementById('btnViewProfile');
+        const trajBtn = document.getElementById('btnViewTrajectory');
+
+        if (currentOpenTab === tabName) {
+          // Toggle off if already open
+          currentOpenTab = null;
+          if (card) {
+            card.classList.remove('open');
+            card.classList.remove('enlarged');
+          }
+          if (profileSec) profileSec.style.display = 'none';
+          if (trajSec) trajSec.style.display = 'none';
+          if (profileBtn) profileBtn.classList.remove('active');
+          if (trajBtn) trajBtn.classList.remove('active');
+          return;
+        }
+
+        // Open requested subtab
+        currentOpenTab = tabName;
+        if (card) card.classList.add('open');
+
+        if (tabName === 'profile') {
+          if (profileSec) profileSec.style.display = 'block';
+          if (trajSec) trajSec.style.display = 'none';
+          if (profileBtn) profileBtn.classList.add('active');
+          if (trajBtn) trajBtn.classList.remove('active');
+          // Enlarge to half-screen view so user can immediately examine the data
+          if (card) {
+            card.classList.add('enlarged');
+            const btn = document.getElementById('btnExpandChart');
+            if (btn) btn.innerHTML = '⤡ Compact View';
+          }
+        } else if (tabName === 'trajectory') {
+          if (profileSec) profileSec.style.display = 'none';
+          if (trajSec) trajSec.style.display = 'block';
+          if (profileBtn) profileBtn.classList.remove('active');
+          if (trajBtn) trajBtn.classList.add('active');
+          if (card) {
+            card.classList.remove('enlarged');
+          }
+        }
+      }
+
+      // Enlarge to Half-Screen / Compact statistics graph window
+      function toggleChartSize(e) {
+        if (e) e.stopPropagation();
+        const card = document.getElementById('argoSubtabCard');
+        const btn = document.getElementById('btnExpandChart');
+        if (!card) return;
+        const isEnlarged = card.classList.toggle('enlarged');
+        if (btn) {
+          btn.innerHTML = isEnlarged ? '⤡ Compact View' : '⤢ Half-Screen View';
+        }
+      }
+
+      function onChartBoxClick(e) {
+        // If clicking on the chart box and not yet enlarged, auto-enlarge window
+        const card = document.getElementById('argoSubtabCard');
+        if (card && !card.classList.contains('enlarged')) {
+          card.classList.add('enlarged');
+          const btn = document.getElementById('btnExpandChart');
+          if (btn) btn.innerHTML = '⤡ Compact View';
+        }
+      }
+
+      // Action button to dive directly to pointed depth from chart HUD
+      window.diveToPointedDepth = function(e) {
+        if (e) e.stopPropagation();
+        if (typeof window.currentPointedDepth === 'number' && window.jumpToDepth) {
+          window.jumpToDepth(window.currentPointedDepth);
+        }
+      };
+
+      // Jumps the 3D depth and scroller to an observation depth
+      window.jumpToDepth = function(depthMeters) {
+        const depthInput = document.getElementById('depthInput');
+        if (depthInput) {
+          depthInput.value = depthMeters;
+          depthInput.dispatchEvent(new Event('change'));
+        }
+      };
+
+      // Backwards-compatible aliases
+      function openProfileModal() { toggleSubtab('profile'); }
+      function closeProfileModal() { if (currentOpenTab === 'profile') toggleSubtab('profile'); }
+      function openTrajectoryModal() { toggleSubtab('trajectory'); }
+      function closeTrajectoryModal() { if (currentOpenTab === 'trajectory') toggleSubtab('trajectory'); }
+
+      function transitionBackToGlobe(e) {
+        if (e) e.preventDefault();
+        const overlay = document.getElementById('transitionOverlay');
+        if (overlay) overlay.classList.add('active');
+        setTimeout(() => {
+          window.location.href = '/index.html';
+        }, 380);
+        return false;
+      }
+
+      // Dynamic Scientific Glossary Tooltip Handlers
+      (function() {
+        const tooltip = document.getElementById('metricGlossaryTooltip');
+        const titleEl = document.getElementById('tooltipTitle');
+        const badgeEl = document.getElementById('tooltipBadge');
+        const sensorEl = document.getElementById('tooltipSensor');
+        const descEl = document.getElementById('tooltipDesc');
+        const sigEl = document.getElementById('tooltipSignificance');
+        const rangeEl = document.getElementById('tooltipRange');
+
+        function showTooltip(key, clientX, clientY) {
+          if (!window.oceanDataService || !tooltip) return;
+          const floatData = window.getCurrentFloatData ? window.getCurrentFloatData() : null;
+          const item = window.oceanDataService.getGlossary(key, floatData);
+          if (!item) return;
+
+          titleEl.textContent = `${item.symbol || 'ℹ️'} ${item.name || key}`;
+          badgeEl.textContent = item.unit || 'Standard Unit';
+          sensorEl.textContent = `Sensor: ${item.sensor || 'CTD Sensor Payload'}`;
+          descEl.textContent = item.whatItMeans || item.shortDesc;
+          sigEl.innerHTML = `<strong>Significance:</strong> ${item.significance || 'Physical oceanography parameter.'}`;
+          rangeEl.textContent = `Expected Range: ${item.normalRange || 'Standard Calibrated Range'}`;
+
+          // Position tooltip cleanly near cursor, avoiding screen boundaries
+          const pad = 16;
+          const tooltipWidth = 320;
+          let left = clientX - tooltipWidth - 14;
+          if (left < pad) {
+            left = clientX + 18;
+          }
+          let top = clientY - 35;
+          if (top + 240 > window.innerHeight) {
+            top = window.innerHeight - 250;
+          }
+          if (top < pad) top = pad;
+
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
+          tooltip.classList.add('active');
+        }
+
+        function hideTooltip() {
+          if (tooltip) tooltip.classList.remove('active');
+        }
+
+        // Attach listeners to all metric rows and info circle buttons
+        document.querySelectorAll('[data-glossary], [data-param]').forEach(el => {
+          const key = el.getAttribute('data-glossary') || el.getAttribute('data-param');
+          el.addEventListener('mouseenter', (e) => {
+            showTooltip(key, e.clientX, e.clientY);
+          });
+          el.addEventListener('mousemove', (e) => {
+            showTooltip(key, e.clientX, e.clientY);
+          });
+          el.addEventListener('mouseleave', hideTooltip);
+        });
+      })();
+
       (function() {
         const container = document.getElementById('depthTrackContainer');
         const fill = document.getElementById('depthTrackFill');
@@ -457,47 +1664,47 @@
           ratio = Math.max(0, Math.min(1, ratio));
           currentRatio = ratio;
 
-          // Update fill and thumb position
           const percent = (ratio * 100).toFixed(1);
           fill.style.height = `${percent}%`;
           thumb.style.top = `${percent}%`;
 
-          // Calculate depth in meters (0m to 4000m)
           const depthMeters = Math.round(ratio * MAX_DEPTH);
           if (updateInputField && document.activeElement !== depthInput) {
             depthInput.value = depthMeters;
           }
 
-          // Update Bathymetric Zone description & color indicator
+          // Trigger Live Depth-Dependent Oceanographic Property Updates!
+          if (window.updateLiveDepthData) {
+            window.updateLiveDepthData(depthMeters);
+          }
+
           if (depthMeters === 0) {
             zoneText.textContent = `0m • Surface / Top Level (Sun & Clouds)`;
             zoneDot.style.background = '#ffe042';
             zoneDot.style.boxShadow = '0 0 8px #ffe042';
           } else if (depthMeters <= 200) {
-            zoneText.textContent = `${depthMeters}m • Sunlight Zone (Sunlight fading)`;
+            zoneText.textContent = `${depthMeters}m • Sunlight Zone (Epipelagic)`;
             zoneDot.style.background = '#00f0ff';
             zoneDot.style.boxShadow = '0 0 8px #00f0ff';
           } else if (depthMeters <= 1000) {
-            zoneText.textContent = `${depthMeters}m • Twilight Zone (Deepening Blue darkness)`;
+            zoneText.textContent = `${depthMeters}m • Twilight Zone (Mesopelagic)`;
             zoneDot.style.background = '#0077b6';
             zoneDot.style.boxShadow = '0 0 8px #0077b6';
           } else if (depthMeters <= 3000) {
-            zoneText.textContent = `${depthMeters}m • Midnight Zone (Upper level disappeared)`;
+            zoneText.textContent = `${depthMeters}m • Midnight Zone (Bathypelagic)`;
             zoneDot.style.background = '#03045e';
             zoneDot.style.boxShadow = '0 0 8px #0077b6';
           } else {
-            zoneText.textContent = `${depthMeters}m • Abyssal Plain (Ultra-Dark Blue Abyss)`;
+            zoneText.textContent = `${depthMeters}m • Abyssal Plain (Abyssopelagic)`;
             zoneDot.style.background = '#000814';
             zoneDot.style.boxShadow = '0 0 10px #00e5ff';
           }
 
-          // Pass to Three.js Ocean scene
           if (window.setOceanDepth) {
             window.setOceanDepth(ratio);
           }
         }
 
-        // Direct Input Handling
         function onInputChange() {
           let val = parseFloat(depthInput.value) || 0;
           val = Math.max(0, Math.min(MAX_DEPTH, val));
@@ -507,13 +1714,10 @@
 
         depthInput.addEventListener('change', onInputChange);
         depthInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            onInputChange();
-          }
+          if (e.key === 'Enter') onInputChange();
         });
         diveBtn.addEventListener('click', onInputChange);
 
-        // Pointer Dragging on Slider Track
         function handlePointer(e) {
           const rect = container.getBoundingClientRect();
           const offsetY = e.clientY - rect.top;
@@ -528,9 +1732,7 @@
         });
 
         container.addEventListener('pointermove', (e) => {
-          if (isDragging) {
-            handlePointer(e);
-          }
+          if (isDragging) handlePointer(e);
         });
 
         container.addEventListener('pointerup', (e) => {
@@ -542,14 +1744,12 @@
           isDragging = false;
         });
 
-        // Mouse wheel over the depth bar scrolls depth smoothly
         container.addEventListener('wheel', (e) => {
           e.preventDefault();
           const step = (e.deltaY > 0) ? 0.025 : -0.025;
           updateDepth(currentRatio + step, true);
         }, { passive: false });
 
-        // Initialize at Top level (0m)
         updateDepth(0.0);
       })();
     </script>

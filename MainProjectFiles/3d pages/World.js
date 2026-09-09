@@ -1,23 +1,16 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import worldMapUrl from "../Images/Worldmap_pic.jpg";
+import { oceanDataService } from "./oceanDataService.js";
 
 // ============================================================================
 // ⚙️ ANCHOR & BADGE SIZE CONFIGURATION
-// You can adjust these numbers to change how large/small anchors appear!
 // ============================================================================
 export const ANCHOR_SIZE_CONFIG = {
-  // 1. Zoomed-out size (Orbit view of whole Earth):
-  maxScale: 0.8, // <-- Adjust this to make zoomed-out anchors bigger/smaller
-
-  // 2. Zoomed-in size (Close-up view of sea/coast):
-  minScale: 0.09, // <-- Adjust this to make zoomed-in anchors even smaller (e.g. 0.03)
-
-  // 3. Zoom distance thresholds:
-  zoomOutDistance: 4.5, // Camera distance when zoomed out
-  zoomInDistance: 1.85, // Camera distance when zoomed in close
-
-  // 4. Shrink rate power: (Higher = shrinks much faster as you start zooming in)
+  maxScale: 0.8,
+  minScale: 0.09,
+  zoomOutDistance: 4.5,
+  zoomInDistance: 1.85,
   zoomCurvePower: 2.0,
 };
 // ============================================================================
@@ -38,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(
 camera.position.set(0.9, 0.8, -4.0);
 
 // 3. Renderer setup
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -52,19 +45,20 @@ controls.dampingFactor = 0.05;
 controls.minDistance = 1.8;
 controls.maxDistance = 8.0;
 
-// 5. Axes Helper (X = Red, Y = Green, Z = Blue)
+// 5. Axes Helper (subtle)
 const axesHelper = new THREE.AxesHelper(3);
+axesHelper.visible = false; // Keep globe clean and cinematic
 scene.add(axesHelper);
 
 // 6. Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.15);
 scene.add(ambientLight);
 
-const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.85);
 sunLight.position.set(5, 4, -4);
 scene.add(sunLight);
 
-const fillLight = new THREE.DirectionalLight(0x4080ff, 0.8);
+const fillLight = new THREE.DirectionalLight(0x4080ff, 0.85);
 fillLight.position.set(-5, -2, 4);
 scene.add(fillLight);
 
@@ -79,8 +73,8 @@ const globeMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.65,
   metalness: 0.05,
 });
-const globe = new THREE.Mesh(globeGeometry, globeMaterial);
-scene.add(globe);
+export const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
+scene.add(globeMesh);
 
 // Subtle Atmosphere glow layer
 const atmosphereGeometry = new THREE.SphereGeometry(
@@ -101,14 +95,16 @@ scene.add(atmosphere);
 export const argoPoints = [
   {
     id: "A1",
+    wmoId: 2902345, // Exact reference ID from user screenshot
     code: "AD07",
-    lat: 15.0,
-    lon: 69.0,
-    sea: "Arabian Sea (West of Goa)",
-    type: "Deep Sea Moored Buoy",
+    lat: 12.35,
+    lon: 78.62,
+    sea: "Indian Ocean (Equatorial Basin)",
+    type: "APEX Profiling Float",
   },
   {
     id: "A2",
+    wmoId: 2902346,
     code: "AD08",
     lat: 12.0,
     lon: 68.5,
@@ -117,6 +113,7 @@ export const argoPoints = [
   },
   {
     id: "A3",
+    wmoId: 2902347,
     code: "CB02",
     altCode: "CALVAL / AD10",
     lat: 10.3,
@@ -126,6 +123,7 @@ export const argoPoints = [
   },
   {
     id: "A4",
+    wmoId: 2902348,
     code: "AD09",
     lat: 8.2,
     lon: 73.3,
@@ -134,6 +132,7 @@ export const argoPoints = [
   },
   {
     id: "A5",
+    wmoId: 2902349,
     code: "CB06",
     lat: 13.1,
     lon: 80.3,
@@ -142,6 +141,7 @@ export const argoPoints = [
   },
   {
     id: "A6",
+    wmoId: 2902350,
     code: "BD13",
     lat: 14.0,
     lon: 87.0,
@@ -150,6 +150,7 @@ export const argoPoints = [
   },
   {
     id: "A7",
+    wmoId: 2902351,
     code: "CB01",
     lat: 11.6,
     lon: 92.5,
@@ -158,6 +159,7 @@ export const argoPoints = [
   },
   {
     id: "A8",
+    wmoId: 2902352,
     code: "BD12",
     lat: 10.5,
     lon: 94.0,
@@ -178,6 +180,16 @@ export function latLonToVector3(lat, lon, radius) {
   return new THREE.Vector3(x, y, z);
 }
 
+// Convert 3D Cartesian Vector back to Lat/Lon
+export function vector3ToLatLon(vec, radius = GLOBE_RADIUS) {
+  const norm = vec.clone().normalize();
+  const lat = 90 - Math.acos(Math.max(-1, Math.min(1, norm.y))) * (180 / Math.PI);
+  let lon = Math.atan2(norm.z, -norm.x) * (180 / Math.PI) - 180;
+  while (lon < -180) lon += 360;
+  while (lon > 180) lon -= 360;
+  return { lat, lon };
+}
+
 // Function to generate billboard Sprite with ⚓ emoji and A1, A2... badge
 function createAnchorSprite(id, code) {
   const canvas = document.createElement("canvas");
@@ -195,12 +207,12 @@ function createAnchorSprite(id, code) {
   ctx.shadowBlur = 14;
   ctx.fillText("⚓", 128, 76);
 
-  // 2. Compact Name badge under the anchor: "A1", "A2", etc.
+  // 2. Compact Name badge under the anchor
   ctx.shadowBlur = 6;
   ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
   ctx.fillStyle = "rgba(6, 18, 38, 0.92)";
-  const badgeWidth = 116; // Compact width
-  const badgeHeight = 44; // Compact height
+  const badgeWidth = 116;
+  const badgeHeight = 44;
   const badgeX = 128 - badgeWidth / 2;
   const badgeY = 138;
 
@@ -244,12 +256,13 @@ scene.add(markersGroup);
 const clickableSprites = [];
 const beaconMeshes = [];
 let selectedStationId = null;
+let currentLoadedData = null;
 
 argoPoints.forEach((point) => {
   const surfacePos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS);
   const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.14);
 
-  // 1. Surface beacon dot (Default: Cyan / Amber; Selected: GREEN)
+  // 1. Surface beacon dot
   const defaultColor = point.id === "A3" ? 0xff7b00 : 0x00f0ff;
   const beaconGeo = new THREE.SphereGeometry(0.022, 16, 16);
   const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor });
@@ -259,7 +272,7 @@ argoPoints.forEach((point) => {
   markersGroup.add(beacon);
   beaconMeshes.push(beacon);
 
-  // 2. Connecting stem line between surface beacon and floating anchor sprite
+  // 2. Connecting stem line
   const lineGeo = new THREE.BufferGeometry().setFromPoints([
     surfacePos,
     markerPos,
@@ -273,7 +286,7 @@ argoPoints.forEach((point) => {
   const stem = new THREE.Line(lineGeo, lineMat);
   markersGroup.add(stem);
 
-  // 3. Floating billboard anchor sprite with ⚓ and A1, A2...
+  // 3. Floating billboard anchor sprite
   const sprite = createAnchorSprite(point.id, point.code);
   sprite.position.copy(markerPos);
   sprite.userData = point;
@@ -281,14 +294,220 @@ argoPoints.forEach((point) => {
   clickableSprites.push(sprite);
 });
 
-// Selection function: Turns clicked station's dot to GREEN (#00ff66)
-export function selectStation(id) {
+// Smooth Camera Transition State
+let cameraTransition = null;
+
+function animateCameraTo(targetCamPos, targetLookAt = new THREE.Vector3(0, 0, 0), duration = 900) {
+  cameraTransition = {
+    startPos: camera.position.clone(),
+    endPos: targetCamPos.clone(),
+    startLookAt: controls.target.clone(),
+    endLookAt: targetLookAt.clone(),
+    startTime: performance.now(),
+    duration: duration,
+  };
+}
+
+// Renders the Vertical Profile Chart in SVG
+function renderVerticalProfileChart(profileData) {
+  const svg = document.getElementById("profileChartSvg");
+  if (!svg) return;
+
+  const width = 310;
+  const height = 180;
+  const padLeft = 40;
+  const padRight = 20;
+  const padTop = 15;
+  const padBottom = 35;
+
+  const chartW = width - padLeft - padRight;
+  const chartH = height - padTop - padBottom;
+
+  // Ranges:
+  // Depth: 0 to 2000m
+  // Temperature: 0 to 40°C (ticks at 0, 10, 20, 30)
+  // Salinity: 32 to 36 PSU (ticks at 32, 34, 36)
+  const maxDepth = 2000;
+  const minTemp = 0;
+  const maxTemp = 36;
+  const minSal = 32.0;
+  const maxSal = 36.5;
+
+  const depthToY = (d) => padTop + (d / maxDepth) * chartH;
+  const tempToX = (t) => padLeft + ((t - minTemp) / (maxTemp - minTemp)) * chartW;
+  const salToX = (s) => padLeft + ((s - minSal) / (maxSal - minSal)) * chartW;
+
+  let gridSvg = "";
+  // Depth horizontal grid lines (0, 500, 1000, 1500, 2000)
+  const depthTicks = [0, 500, 1000, 1500, 2000];
+  depthTicks.forEach((d) => {
+    const y = depthToY(d);
+    gridSvg += `<line x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}" stroke="rgba(255,255,255,0.07)" stroke-dasharray="2,2"/>`;
+    gridSvg += `<text x="${padLeft - 6}" y="${y + 3}" fill="#6b7c93" font-size="9" text-anchor="end" font-family="'Space Mono', monospace">${d}</text>`;
+  });
+
+  // Vertical axis lines
+  gridSvg += `<line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.15)"/>`;
+  gridSvg += `<line x1="${padLeft}" y1="${padTop + chartH}" x2="${width - padRight}" y2="${padTop + chartH}" stroke="rgba(255,255,255,0.15)"/>`;
+
+  // Bottom Ticks for Temperature (orange)
+  const tempTicks = [0, 10, 20, 30];
+  tempTicks.forEach((t) => {
+    const x = tempToX(t);
+    gridSvg += `<line x1="${x}" y1="${padTop + chartH}" x2="${x}" y2="${padTop + chartH + 4}" stroke="#ff7a00" stroke-width="1.2"/>`;
+    gridSvg += `<text x="${x}" y="${padTop + chartH + 14}" fill="#ff9436" font-size="8.5" text-anchor="middle" font-family="'Space Mono', monospace">${t}</text>`;
+  });
+
+  // Bottom Ticks for Salinity (cyan/blue)
+  const salTicks = [32, 34, 36];
+  salTicks.forEach((s) => {
+    const x = salToX(s);
+    gridSvg += `<text x="${x}" y="${padTop + chartH + 26}" fill="#38bdf8" font-size="8.5" text-anchor="middle" font-family="'Space Mono', monospace">${s}</text>`;
+  });
+
+  // Build SVG Paths
+  let tempPathD = "";
+  let salPathD = "";
+  let pointsSvg = "";
+
+  profileData.forEach((pt, idx) => {
+    const y = depthToY(pt.depthMeters);
+    const xTemp = tempToX(pt.temperatureC);
+    const xSal = salToX(pt.salinityPSU);
+
+    if (idx === 0) {
+      tempPathD += `M ${xTemp} ${y}`;
+      salPathD += `M ${xSal} ${y}`;
+    } else {
+      tempPathD += ` L ${xTemp} ${y}`;
+      salPathD += ` L ${xSal} ${y}`;
+    }
+
+    // Interactive point circles
+    pointsSvg += `
+      <circle cx="${xTemp}" cy="${y}" r="3.2" fill="#ff7a00" stroke="#020713" stroke-width="1.5" class="chart-point" data-type="Temp" data-val="${pt.temperatureC}°C" data-depth="${pt.depthMeters}m" />
+      <circle cx="${xSal}" cy="${y}" r="3.2" fill="#38bdf8" stroke="#020713" stroke-width="1.5" class="chart-point" data-type="Salinity" data-val="${pt.salinityPSU} PSU" data-depth="${pt.depthMeters}m" />
+    `;
+  });
+
+  svg.innerHTML = `
+    ${gridSvg}
+    <path d="${tempPathD}" fill="none" stroke="#ff7a00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="${salPathD}" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    ${pointsSvg}
+  `;
+
+  // Attach hover tooltips on chart points
+  svg.querySelectorAll(".chart-point").forEach((pt) => {
+    pt.addEventListener("mouseenter", (e) => {
+      const type = pt.getAttribute("data-type");
+      const val = pt.getAttribute("data-val");
+      const depth = pt.getAttribute("data-depth");
+      pt.setAttribute("r", "5.5");
+
+      const tip = document.getElementById("chartMiniTip");
+      if (tip) {
+        tip.textContent = `${type}: ${val} @ ${depth}`;
+        tip.style.opacity = "1";
+      }
+    });
+    pt.addEventListener("mouseleave", () => {
+      pt.setAttribute("r", "3.2");
+      const tip = document.getElementById("chartMiniTip");
+      if (tip) tip.style.opacity = "0";
+    });
+  });
+}
+
+// Populates all tabs inside the Argo Float Data Panel
+function updateArgoFloatUI(data) {
+  currentLoadedData = data;
+
+  // 1. Header & ID
+  const elFloatId = document.getElementById("argoFloatId");
+  const elStatusPill = document.getElementById("argoStatusPill");
+  if (elFloatId) elFloatId.textContent = data.floatId;
+  if (elStatusPill) elStatusPill.textContent = data.status;
+
+  // 2. Overview tab properties
+  const elLocation = document.getElementById("argoValLocation");
+  const elLastObs = document.getElementById("argoValLastObs");
+  const elMaxDepth = document.getElementById("argoValMaxDepth");
+  const elMeasurements = document.getElementById("argoValMeasurements");
+  if (elLocation) elLocation.textContent = data.locationFormatted;
+  if (elLastObs) elLastObs.textContent = data.lastObservation;
+  if (elMaxDepth) elMaxDepth.textContent = `${data.maxDepthMeters} m`;
+  if (elMeasurements) elMeasurements.textContent = data.measurements;
+
+  // 3. Latest Observation cards (Surface Temp & Salinity)
+  const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
+  const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
+  if (elSurfaceTemp) elSurfaceTemp.textContent = `${data.latestObservation.temperatureC} °C`;
+  if (elSurfaceSal) elSurfaceSal.textContent = `${data.latestObservation.salinityPSU} PSU`;
+
+  // 4. Vertical Profile Chart
+  renderVerticalProfileChart(data.verticalProfile);
+
+  // 5. Profile Tab (Table & CTD details)
+  const elProfileTable = document.getElementById("argoProfileTableBody");
+  if (elProfileTable) {
+    elProfileTable.innerHTML = data.verticalProfile
+      .map(
+        (row) => `
+        <tr>
+          <td>${row.depthMeters} m</td>
+          <td style="color:#ff9436;">${row.temperatureC.toFixed(2)} °C</td>
+          <td style="color:#38bdf8;">${row.salinityPSU.toFixed(2)}</td>
+          <td>${row.pressureDbar} dbar</td>
+          <td>${row.densitySigmaTheta}</td>
+        </tr>
+      `,
+      )
+      .join("");
+  }
+  const elCycleNum = document.getElementById("argoCycleNum");
+  const elBattery = document.getElementById("argoBattery");
+  const elTrans = document.getElementById("argoTransmission");
+  if (elCycleNum) elCycleNum.textContent = `Cycle #${data.cycleNumber}`;
+  if (elBattery) elBattery.textContent = data.batteryVoltage;
+  if (elTrans) elTrans.textContent = data.transmissionStatus;
+
+  // 6. Location Tab
+  const elBasin = document.getElementById("argoSeaBasin");
+  const elCoords = document.getElementById("argoExactCoords");
+  const elDrift = document.getElementById("argoDriftSpeed");
+  const elDistance = document.getElementById("argoDistance24h");
+  if (elBasin) elBasin.textContent = data.coordinates.seaBasin;
+  if (elCoords) elCoords.textContent = `${data.coordinates.lat.toFixed(4)}°N, ${data.coordinates.lon.toFixed(4)}°E`;
+  if (elDrift) elDrift.textContent = `${data.drift.speedKnots} kts @ ${data.drift.bearingDegrees}°`;
+  if (elDistance) elDistance.textContent = `${data.drift.estimatedDistance24hKm} km / 24h`;
+
+  // 7. Raw Data Tab (JSON View & API Info)
+  const elRawJson = document.getElementById("argoRawJsonView");
+  const elApiEndpoint = document.getElementById("argoApiEndpoint");
+  if (elRawJson) {
+    elRawJson.textContent = JSON.stringify(data, null, 2);
+  }
+  if (elApiEndpoint) {
+    elApiEndpoint.textContent = data.apiMetadata.apiEndpointTemplate;
+  }
+
+  // Ensure panel is visible
+  const panel = document.getElementById("argoFloatPanel");
+  if (panel) {
+    panel.classList.add("visible");
+  }
+}
+
+// Selection function: Turns clicked station's dot to GREEN (#00ff66) & fetches data
+export async function selectStation(id) {
   selectedStationId = id;
+  window.selectedStationId = id;
 
   // Turn selected station's dot GREEN, reset others to default
   beaconMeshes.forEach((b) => {
     if (b.userData.id === id) {
-      b.material.color.setHex(0x00ff66); // <-- GREEN when clicked!
+      b.material.color.setHex(0x00ff66);
     } else {
       b.material.color.setHex(b.userData.defaultColor);
     }
@@ -303,14 +522,28 @@ export function selectStation(id) {
       card.classList.remove("active");
     }
   });
+
+  // Fetch procedural (or API) data asynchronously
+  const point = argoPoints.find((p) => p.id === id) || { id };
+  const floatData = await oceanDataService.getFloatDetails(point);
+  updateArgoFloatUI(floatData);
 }
+
+// Transition from 3D Earth Globe to 3D Ocean view for a selected float
+export function transitionToOcean(id) {
+  const overlay = document.getElementById("transitionOverlay");
+  if (overlay) overlay.classList.add("active");
+  setTimeout(() => {
+    window.location.href = `/ocean.html?id=${encodeURIComponent(id || selectedStationId || 'A1')}`;
+  }, 380);
+}
+window.transitionToOcean = transitionToOcean;
 
 // 9. Interactive Raycasting & Mouse Events
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const tooltip = document.getElementById("tooltip");
 
-// Hover event for tooltip
 function onPointerMove(event) {
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -333,7 +566,7 @@ function onPointerMove(event) {
           <div><strong>Basin:</strong> ${data.sea}</div>
           <div><strong>Lat/Lon:</strong> ${data.lat.toFixed(2)}°N, ${data.lon.toFixed(2)}°E</div>
           <div><strong>Type:</strong> ${data.type}</div>
-          <div style="margin-top:4px; color:#00ff66;">✦ Click to select & turn beacon Green</div>
+          <div style="margin-top:4px; color:#00ff66;">✦ Click to inspect Argo Float vertical profile</div>
         </div>
       `;
     }
@@ -343,12 +576,11 @@ function onPointerMove(event) {
   }
 }
 
-// Click event: Click on any ⚓ anchor on the 3D globe to select and turn its dot GREEN
 function onPointerClick(event) {
-  // Ignore clicks on HUD UI panels
+  // Ignore clicks on HUD UI panels and buttons
   if (
     event.target.closest &&
-    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn")
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls")
   ) {
     return;
   }
@@ -357,12 +589,50 @@ function onPointerClick(event) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
+  
+  // 1. Check if user clicked an anchor sprite
   const intersects = raycaster.intersectObjects(clickableSprites);
-
   if (intersects.length > 0) {
     const target = intersects[0].object;
     const data = target.userData;
     selectStation(data.id);
+    // Transition to 3D Ocean view for this Argo float
+    transitionToOcean(data.id);
+    return;
+  }
+
+  // 2. Check if user clicked the 3D globe sphere itself
+  const globeHits = raycaster.intersectObject(globeMesh);
+  if (globeHits.length > 0) {
+    const hitPoint = globeHits[0].point;
+    const coords = vector3ToLatLon(hitPoint, GLOBE_RADIUS);
+
+    // Find nearest argo point
+    let nearest = null;
+    let minDist = Infinity;
+    argoPoints.forEach((pt) => {
+      const d = Math.hypot(pt.lat - coords.lat, pt.lon - coords.lon);
+      if (d < minDist) {
+        minDist = d;
+        nearest = pt;
+      }
+    });
+
+    if (nearest && minDist < 18) {
+      selectStation(nearest.id);
+    } else {
+      // Procedurally generate data for this clicked oceanic spot!
+      const dynamicPoint = {
+        id: "SURF",
+        wmoId: 2900000 + Math.floor(Math.abs(coords.lat * 100) + Math.abs(coords.lon * 100)),
+        code: "LOC",
+        lat: coords.lat,
+        lon: coords.lon,
+        sea: coords.lat > 0 ? (coords.lon < 77 ? "Arabian Sea" : "Bay of Bengal") : "Equatorial Indian Ocean",
+        type: "Ocean Profile Probe"
+      };
+      oceanDataService.getFloatDetails(dynamicPoint).then(updateArgoFloatUI);
+    }
   }
 }
 
@@ -376,10 +646,87 @@ window.focusOnPoint = function (id) {
   const pt = argoPoints.find((p) => p.id === id);
   if (!pt) return;
 
-  const targetVec = latLonToVector3(pt.lat, pt.lon, GLOBE_RADIUS + 0.9);
-  camera.position.set(targetVec.x * 1.5, targetVec.y * 1.5, targetVec.z * 1.5);
-  controls.target.set(0, 0, 0);
+  // Preserve the user's current zoom distance - NEVER zoom the Earth out!
+  const currentDist = camera.position.distanceTo(controls.target);
+  // Keep the current zoom level, or gently pull in closer if currently very far out
+  const targetDist = Math.min(currentDist, 2.6);
+
+  const dirVec = latLonToVector3(pt.lat, pt.lon, 1.0).normalize();
+  const targetCam = dirVec.multiplyScalar(targetDist);
+
+  animateCameraTo(
+    targetCam,
+    new THREE.Vector3(0, 0, 0),
+    600,
+  );
+};
+
+// ============================================================================
+// 🧭 GLOBE NAVIGATION CONTROLS (Left Dock)
+// ============================================================================
+window.navResetNorth = function () {
+  cameraTransition = null;
+  const currentDist = camera.position.distanceTo(controls.target);
+  const targetCam = new THREE.Vector3(0, currentDist * 0.25, -currentDist * 0.968);
+  animateCameraTo(targetCam, new THREE.Vector3(0, 0, 0), 600);
+};
+
+// [+] ZOOM IN: Decreases distance to target (Earth gets BIGGER / closer)
+window.navZoomIn = function () {
+  cameraTransition = null;
+  const offset = camera.position.clone().sub(controls.target);
+  const currentDist = offset.length();
+  const newDist = Math.max(controls.minDistance, currentDist * 0.76);
+  offset.setLength(newDist);
+  camera.position.copy(controls.target).add(offset);
   controls.update();
+};
+
+// [-] ZOOM OUT: Increases distance to target (Earth gets SMALLER / farther)
+window.navZoomOut = function () {
+  cameraTransition = null;
+  const offset = camera.position.clone().sub(controls.target);
+  const currentDist = offset.length();
+  const newDist = Math.min(controls.maxDistance, currentDist * 1.30);
+  offset.setLength(newDist);
+  camera.position.copy(controls.target).add(offset);
+  controls.update();
+};
+
+window.navCenterView = function () {
+  cameraTransition = null;
+  const currentDist = camera.position.distanceTo(controls.target);
+  const defaultDir = new THREE.Vector3(0.9, 0.8, -4.0).normalize();
+  animateCameraTo(defaultDir.multiplyScalar(currentDist), new THREE.Vector3(0, 0, 0), 600);
+};
+
+// ============================================================================
+// 📊 ARGO FLOAT PANEL CONTROLS
+// ============================================================================
+window.closeArgoFloatPanel = function () {
+  const panel = document.getElementById("argoFloatPanel");
+  if (panel) panel.classList.remove("visible");
+};
+
+window.switchArgoTab = function (tabName) {
+  document.querySelectorAll(".argo-tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-tab") === tabName);
+  });
+  document.querySelectorAll(".argo-tab-pane").forEach((pane) => {
+    pane.classList.toggle("active", pane.id === `tab-${tabName}`);
+  });
+};
+
+window.copyRawDataJson = function () {
+  if (!currentLoadedData) return;
+  navigator.clipboard.writeText(JSON.stringify(currentLoadedData, null, 2)).then(() => {
+    const copyBtn = document.getElementById("copyJsonBtn");
+    if (copyBtn) {
+      const orig = copyBtn.textContent;
+      copyBtn.textContent = "Copied! ✓";
+      setTimeout(() => (copyBtn.textContent = orig), 2000);
+    }
+  });
 };
 
 // 10. Responsive resize handling
@@ -390,7 +737,7 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
 
-// 11. Animation loop with dynamic zoom scaling for anchor points
+// 11. Animation loop
 let clock = new THREE.Clock();
 
 function animate() {
@@ -398,13 +745,27 @@ function animate() {
 
   const elapsedTime = clock.getElapsedTime();
 
-  // DYNAMIC ZOOM SCALING:
-  // As the user zooms in (camera moves closer), shrink the anchor sprites
-  // so both the anchor and the badge decrease noticeably in size!
+  // Handle smooth camera lerping if transition is active
+  if (cameraTransition) {
+    const elapsedMs = performance.now() - cameraTransition.startTime;
+    const progress = Math.min(1.0, elapsedMs / cameraTransition.duration);
+    // Smooth easeInOutCubic
+    const ease = progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+    camera.position.lerpVectors(cameraTransition.startPos, cameraTransition.endPos, ease);
+    controls.target.lerpVectors(cameraTransition.startLookAt, cameraTransition.endLookAt, ease);
+
+    if (progress >= 1.0) {
+      cameraTransition = null;
+    }
+  }
+
+  // DYNAMIC ZOOM SCALING
   const camDist = camera.position.distanceTo(controls.target);
   const cfg = ANCHOR_SIZE_CONFIG;
 
-  // Normalized distance from 0.0 (closest zoom) to 1.0 (furthest zoom)
   const normDist = Math.max(
     0,
     Math.min(
@@ -414,7 +775,6 @@ function animate() {
     ),
   );
 
-  // Non-linear power curve: shrinks quickly as soon as you zoom in close
   const dynamicScale =
     cfg.minScale +
     Math.pow(normDist, cfg.zoomCurvePower) * (cfg.maxScale - cfg.minScale);
@@ -423,7 +783,7 @@ function animate() {
     sprite.scale.set(dynamicScale, dynamicScale, 1);
   });
 
-  // Pulse the surface beacon dots (the clicked green beacon pulses prominently)
+  // Pulse beacons
   const pulseBase = 1.0 + 0.28 * Math.sin(elapsedTime * 4);
   const zoomFactor = Math.max(0.45, Math.min(1.0, camDist / 3.8));
   beaconMeshes.forEach((b) => {
@@ -433,10 +793,13 @@ function animate() {
     b.scale.set(s, s, s);
   });
 
-  // Update controls for smooth inertia
   controls.update();
-
   renderer.render(scene, camera);
 }
 
 animate();
+
+// Initialize with Station A1 selected by default after a brief load delay
+setTimeout(() => {
+  selectStation("A1");
+}, 400);
