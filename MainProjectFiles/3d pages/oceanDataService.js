@@ -47,7 +47,12 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
    * Generates procedural Argo float data matching the requested station/float ID
    * @param {Object|string} stationInfo - ID or station object { id, code, lat, lon, sea, type }
    */
-  async getFloatData(stationInfo) {
+  /**
+   * Generates procedural Argo float data matching the requested station/float ID
+   * @param {Object|string} stationInfo - ID or station object { id, code, lat, lon, sea, type }
+   * @param {Object} [temporalFilter] - Optional temporal constraints { date: "YYYY-MM-DD", time: "HH:mm", year, cycle }
+   */
+  async getFloatData(stationInfo, temporalFilter = {}) {
     const id = typeof stationInfo === "string" ? stationInfo : stationInfo.id;
     const baseInfo = typeof stationInfo === "object" ? stationInfo : { id };
     
@@ -60,22 +65,92 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
     const stationCode = baseInfo.code || `AD${id.replace(/\D/g, "") || "07"}`;
     const buoyType = baseInfo.type || "APEX Profiling Float";
 
+    // Parse temporal parameters (Date, Year, Time)
+    const isLatest = !temporalFilter.date;
+    const reqDate = temporalFilter.date || new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const reqTime = temporalFilter.time || "12:00"; // HH:mm
+    const parsedDate = new Date(`${reqDate}T${reqTime}:00Z`);
+    const validDate = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+
+    const targetMonth = validDate.getUTCMonth(); // 0 to 11
+    const targetYear = validDate.getUTCFullYear();
+    const targetHour = validDate.getUTCHours();
+    const day = validDate.getUTCDate();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthStr = monthNames[targetMonth];
+    const hoursStr = String(targetHour).padStart(2, "0");
+    const minsStr = String(validDate.getUTCMinutes()).padStart(2, "0");
+    const formattedObservation = `${day} ${monthStr} ${targetYear}, ${hoursStr}:${minsStr} UTC`;
+
+    // 1. Seasonal Oceanographic Regime Detection for Indian Ocean / Arabian Sea / Bay of Bengal:
+    let seasonalTempAnomaly = 0;
+    let seasonalSalAnomaly = 0;
+    let seasonalChlMultiplier = 1.0;
+    let seasonalCurrentSpeed = 0.42;
+    let seasonalCurrentDir = "NE";
+    let regimeName = "Post-Monsoon Transition";
+
+    if (targetMonth >= 5 && targetMonth <= 8) {
+      // SW Monsoon (Jun-Sep): Heavy monsoonal rain freshening + strong coastal upwelling & bloom
+      regimeName = "SW Monsoon Upwelling & Rain Freshening";
+      seasonalTempAnomaly = -1.2;
+      seasonalSalAnomaly = -1.5; // Fresh surface lens from river discharge & rain
+      seasonalChlMultiplier = 2.4; // High phytoplankton bloom
+      seasonalCurrentSpeed = 0.65;
+      seasonalCurrentDir = "ENE";
+    } else if (targetMonth >= 2 && targetMonth <= 4) {
+      // Pre-Monsoon (Mar-May): Intense solar heating peak + high evaporation
+      regimeName = "Pre-Monsoon Solar Thermal Peak";
+      seasonalTempAnomaly = +1.7;
+      seasonalSalAnomaly = +0.4;
+      seasonalChlMultiplier = 0.65;
+      seasonalCurrentSpeed = 0.35;
+      seasonalCurrentDir = "E";
+    } else if (targetMonth === 10 || targetMonth === 11 || targetMonth === 0 || targetMonth === 1) {
+      // Winter Cooling (Nov-Feb): Northern cool winds & convection, reversed currents
+      regimeName = "NE Monsoon & Winter Cooling";
+      seasonalTempAnomaly = -1.8;
+      seasonalSalAnomaly = +0.6;
+      seasonalChlMultiplier = 1.15;
+      seasonalCurrentSpeed = 0.38;
+      seasonalCurrentDir = "WSW";
+    } else {
+      // October: Post-Monsoon transition
+      regimeName = "Post-Monsoon Calm Transition";
+      seasonalTempAnomaly = +0.2;
+      seasonalSalAnomaly = -0.2;
+      seasonalChlMultiplier = 1.1;
+      seasonalCurrentSpeed = 0.42;
+      seasonalCurrentDir = "NE";
+    }
+
+    // Diurnal solar skin heating anomaly (peaks 12:00-14:00 UTC)
+    const diurnalTemp = 0.35 * Math.sin(((targetHour - 6) / 24) * 2 * Math.PI);
+
     // Surface temperature & salinity variation based on latitude & basin
     const randTemp = this._pseudoRandom(`${id}_temp`);
     const randSal = this._pseudoRandom(`${id}_sal`);
-
     const isA7 = id === "A7" || baseInfo.code === "CB01" || wmoId === 2902351;
 
-    // Tropical/subtropical ocean surface temperatures:
-    // For A7 (#2902351): exactly 28.3 °C and 34.3 PSU as requested
-    const surfaceTemp = isA7 ? 28.3 : parseFloat((27.5 + randTemp * 2.3).toFixed(1));
-    const surfaceSalinity = isA7 ? 34.3 : parseFloat((34.2 + randSal * 1.3).toFixed(1));
-    const surfaceOxygen = isA7 ? 198 : Math.round(190 + randTemp * 22);
-    const surfaceChlorophyll = isA7 ? 0.42 : parseFloat((0.35 + randSal * 0.28).toFixed(2));
-    const currentSpeed = isA7 ? 0.42 : parseFloat((0.30 + randTemp * 0.32).toFixed(2));
-    const currentDir = isA7 ? "NE" : ["NE", "ENE", "E", "ESE", "SE", "NW"][Math.floor(randSal * 6)];
-    const cycleNum = isA7 ? 147 : (100 + Math.floor(this._pseudoRandom(`${id}_cycle`) * 80));
-    const lastProfile = isA7 ? "18 min ago" : `${12 + Math.floor(randTemp * 35)} min ago`;
+    // Apply baseline + seasonal + diurnal variations
+    const baseTemp = isA7 ? 28.3 : (27.5 + randTemp * 2.3);
+    const baseSal = isA7 ? 34.3 : (34.2 + randSal * 1.3);
+    const surfaceTemp = parseFloat(Math.max(22.0, Math.min(32.5, baseTemp + seasonalTempAnomaly + diurnalTemp)).toFixed(1));
+    const surfaceSalinity = parseFloat(Math.max(30.0, Math.min(37.0, baseSal + seasonalSalAnomaly)).toFixed(1));
+    const surfaceOxygen = Math.round(Math.max(145, Math.min(235, (isA7 ? 198 : (190 + randTemp * 22)) - seasonalTempAnomaly * 6)));
+    const surfaceChlorophyll = parseFloat(Math.max(0.05, Math.min(2.8, (isA7 ? 0.42 : (0.35 + randSal * 0.28)) * seasonalChlMultiplier)).toFixed(2));
+    const currentSpeed = parseFloat((seasonalCurrentSpeed + (randTemp - 0.5) * 0.08).toFixed(2));
+    const currentDir = seasonalCurrentDir;
+
+    // 2. Dynamic Argo Cycle Calculation:
+    // Real Argo floats cycle every ~10 days.
+    // Baseline reference date: 2024-09-10T12:00:00Z -> Cycle #147
+    const baselineMs = new Date("2024-09-10T12:00:00Z").getTime();
+    const diffDays = (validDate.getTime() - baselineMs) / (1000 * 86400);
+    const cycleOffset = Math.round(diffDays / 10);
+    const baseCycle = isA7 ? 147 : (100 + Math.floor(this._pseudoRandom(`${id}_cycle`) * 80));
+    const cycleNum = Math.max(1, baseCycle + cycleOffset);
+    const lastProfile = isLatest ? "18 min ago" : formattedObservation;
     const batteryPct = isA7 ? 82 : (78 + Math.floor(randSal * 18));
 
     // Sea basin and sub-region naming
@@ -89,12 +164,9 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
 
     const verticalProfile = profileLevels.map((depth) => {
       // 1. Temperature:
-      // Mixed layer (0-50m): nearly isothermal
-      // Thermocline (100-1000m): rapid exponential drop
-      // Abyss (>1000m): asymptotic approach to ~2.0 - 2.8°C
       let temp;
       if (depth <= 50) {
-        temp = surfaceTemp - (depth / 50) * 0.3;
+        temp = surfaceTemp - (depth / 50) * 0.35;
       } else if (depth <= 1000) {
         const factor = Math.exp(-depth / 320);
         temp = 3.5 + (surfaceTemp - 3.5) * factor;
@@ -115,7 +187,7 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
       }
       sal = parseFloat(sal.toFixed(2));
 
-      // 3. Dissolved Oxygen (OMZ minimum between 300m and 800m):
+      // 3. Dissolved Oxygen:
       let o2;
       if (depth <= 60) {
         o2 = surfaceOxygen;
@@ -128,7 +200,7 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
         o2 = Math.round(88 + ((depth - 1000) / 1000) * 50);
       }
 
-      // 4. Chlorophyll-a (photic zone decay):
+      // 4. Chlorophyll-a:
       let chl;
       if (depth <= 40) {
         chl = surfaceChlorophyll;
@@ -159,23 +231,71 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
     const lonStr = `${Math.abs(lon).toFixed(4)}° ${lon >= 0 ? "E" : "W"}`;
     const locationFormatted = `${latStr}, ${lonStr}`;
 
-    // Past 5 surfacing cycle GPS fixes for trajectory visualization
+    // Past 5 surfacing cycle GPS fixes synchronized with the queried date
     const trajectoryHistory = [
-      { cycle: cycleNum, lat: lat, lon: lon, date: "Today, 18 min ago", temp: surfaceTemp, speed: currentSpeed },
-      { cycle: cycleNum - 1, lat: lat - 0.08, lon: lon - 0.09, date: "10 days ago", temp: parseFloat((surfaceTemp - 0.2).toFixed(1)), speed: 0.38 },
-      { cycle: cycleNum - 2, lat: lat - 0.15, lon: lon - 0.17, date: "20 days ago", temp: parseFloat((surfaceTemp + 0.1).toFixed(1)), speed: 0.44 },
-      { cycle: cycleNum - 3, lat: lat - 0.24, lon: lon - 0.26, date: "30 days ago", temp: parseFloat((surfaceTemp - 0.3).toFixed(1)), speed: 0.35 },
-      { cycle: cycleNum - 4, lat: lat - 0.31, lon: lon - 0.34, date: "40 days ago", temp: parseFloat((surfaceTemp).toFixed(1)), speed: 0.40 }
+      {
+        cycle: cycleNum,
+        cycleNumber: cycleNum,
+        lat: lat,
+        lon: lon,
+        date: isLatest ? "Today, 18 min ago" : formattedObservation,
+        temp: surfaceTemp,
+        tempC: surfaceTemp,
+        speed: currentSpeed,
+        speedMs: currentSpeed,
+        direction: currentDir
+      },
+      {
+        cycle: Math.max(1, cycleNum - 1),
+        cycleNumber: Math.max(1, cycleNum - 1),
+        lat: parseFloat((lat - 0.08).toFixed(4)),
+        lon: parseFloat((lon - 0.09).toFixed(4)),
+        date: this._formatOffsetDate(validDate, -10),
+        temp: parseFloat((surfaceTemp - 0.2).toFixed(1)),
+        tempC: parseFloat((surfaceTemp - 0.2).toFixed(1)),
+        speed: parseFloat((currentSpeed * 0.95).toFixed(2)),
+        speedMs: parseFloat((currentSpeed * 0.95).toFixed(2)),
+        direction: currentDir
+      },
+      {
+        cycle: Math.max(1, cycleNum - 2),
+        cycleNumber: Math.max(1, cycleNum - 2),
+        lat: parseFloat((lat - 0.15).toFixed(4)),
+        lon: parseFloat((lon - 0.17).toFixed(4)),
+        date: this._formatOffsetDate(validDate, -20),
+        temp: parseFloat((surfaceTemp + 0.1).toFixed(1)),
+        tempC: parseFloat((surfaceTemp + 0.1).toFixed(1)),
+        speed: parseFloat((currentSpeed * 1.05).toFixed(2)),
+        speedMs: parseFloat((currentSpeed * 1.05).toFixed(2)),
+        direction: currentDir
+      },
+      {
+        cycle: Math.max(1, cycleNum - 3),
+        cycleNumber: Math.max(1, cycleNum - 3),
+        lat: parseFloat((lat - 0.24).toFixed(4)),
+        lon: parseFloat((lon - 0.26).toFixed(4)),
+        date: this._formatOffsetDate(validDate, -30),
+        temp: parseFloat((surfaceTemp - 0.3).toFixed(1)),
+        tempC: parseFloat((surfaceTemp - 0.3).toFixed(1)),
+        speed: parseFloat((currentSpeed * 0.92).toFixed(2)),
+        speedMs: parseFloat((currentSpeed * 0.92).toFixed(2)),
+        direction: currentDir
+      },
+      {
+        cycle: Math.max(1, cycleNum - 4),
+        cycleNumber: Math.max(1, cycleNum - 4),
+        lat: parseFloat((lat - 0.31).toFixed(4)),
+        lon: parseFloat((lon - 0.34).toFixed(4)),
+        date: this._formatOffsetDate(validDate, -40),
+        temp: parseFloat((surfaceTemp).toFixed(1)),
+        tempC: parseFloat((surfaceTemp).toFixed(1)),
+        speed: parseFloat((currentSpeed * 0.98).toFixed(2)),
+        speedMs: parseFloat((currentSpeed * 0.98).toFixed(2)),
+        direction: currentDir
+      }
     ];
 
-    const lastDate = new Date();
-    const day = lastDate.getUTCDate();
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const month = monthNames[lastDate.getUTCMonth()];
-    const year = lastDate.getUTCFullYear();
-    const hours = String(lastDate.getUTCHours()).padStart(2, "0");
-    const mins = String(lastDate.getUTCMinutes()).padStart(2, "0");
-    const lastObservationFormatted = `${day} ${month} ${year}, ${hours}:${mins} UTC`;
+    const lastObservationFormatted = formattedObservation;
 
     return {
       success: true,
@@ -232,6 +352,17 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
       },
       verticalProfile: verticalProfile,
       trajectoryHistory: trajectoryHistory,
+      temporalInfo: {
+        queriedDate: reqDate,
+        queriedTime: reqTime,
+        queriedTimestamp: validDate.toISOString(),
+        year: targetYear,
+        month: targetMonth + 1,
+        day: day,
+        regime: regimeName,
+        cycleEstimated: cycleNum,
+        isLatest: isLatest
+      },
       drift: {
         speedKnots: (currentSpeed * 1.94384).toFixed(2),
         speedMs: currentSpeed,
@@ -320,6 +451,17 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
     };
   }
 
+  _formatOffsetDate(baseDate, offsetDays) {
+    const d = new Date(baseDate.getTime() + offsetDays * 86400000);
+    const day = d.getUTCDate();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[d.getUTCMonth()];
+    const year = d.getUTCFullYear();
+    const hours = String(d.getUTCHours()).padStart(2, "0");
+    const mins = String(d.getUTCMinutes()).padStart(2, "0");
+    return `${day} ${month} ${year}, ${hours}:${mins} UTC`;
+  }
+
   _getNumericIndex(id) {
     const num = parseInt(id.replace(/\D/g, ""), 10);
     return isNaN(num) ? 5 : num;
@@ -339,18 +481,28 @@ export class ApiArgoProvider extends ArgoDataProvider {
     this.cache = new Map();
   }
 
-  async getFloatData(stationInfo) {
+  async getFloatData(stationInfo, temporalFilter = {}) {
     const id = typeof stationInfo === "string" ? stationInfo : (stationInfo.wmoId || stationInfo.code || stationInfo.id);
+    const date = temporalFilter.date || "";
+    const time = temporalFilter.time || "";
+    const cacheKey = `${id}_${date}_${time}`;
     
-    if (this.cache.has(id)) {
-      return this.cache.get(id);
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
     }
 
     try {
       const headers = { "Content-Type": "application/json" };
       if (this.apiKey) headers["Authorization"] = `Bearer ${this.apiKey}`;
 
-      const response = await fetch(`${this.apiBaseUrl}/floats/${encodeURIComponent(id)}/latest`, {
+      const queryParams = new URLSearchParams();
+      if (date) queryParams.set("date", date);
+      if (time) queryParams.set("time", time);
+      if (temporalFilter.year) queryParams.set("year", temporalFilter.year);
+      if (temporalFilter.cycle) queryParams.set("cycle", temporalFilter.cycle);
+      const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : "/latest";
+
+      const response = await fetch(`${this.apiBaseUrl}/floats/${encodeURIComponent(id)}${queryStr}`, {
         method: "GET",
         headers
       });
@@ -360,13 +512,13 @@ export class ApiArgoProvider extends ArgoDataProvider {
       }
 
       const data = await response.json();
-      this.cache.set(id, data);
+      this.cache.set(cacheKey, data);
       return data;
     } catch (err) {
       console.warn(`[ApiArgoProvider] Live API fetch failed for float ${id}, falling back to procedural mock:`, err);
-      // Graceful fallback to procedural generator
+      // Graceful fallback to procedural generator with temporal filter
       const fallbackProvider = new ProceduralArgoProvider();
-      return await fallbackProvider.getFloatData(stationInfo);
+      return await fallbackProvider.getFloatData(stationInfo, temporalFilter);
     }
   }
 }
@@ -452,6 +604,39 @@ export const PARAMETER_GLOSSARY = {
     whatItMeans: "Every Argo observation passes stringent tests: range checks, spike tests, gradient tests, and density inversion checks. 'GOOD' (Flag 1) certifies that all CTD sensors are within certified manufacturer tolerances with zero corrupted telemetry packets.",
     significance: "Ensures international oceanographers and climate models receive pristine scientific data.",
     normalRange: "Flag 1 (Good), Flag 2 (Probably Good)"
+  },
+  model_validation: {
+    key: "model_validation",
+    name: "Model vs. Observation Data Assimilation",
+    symbol: "🤖",
+    unit: "Observation - Model Residual (O - B)",
+    sensor: "INCOIS-ROMS 1/12° & HYCOM Numerical Ocean Circulation Models",
+    shortDesc: "Real-time comparison metric validating operational ocean forecast models against in-situ CTD observations.",
+    whatItMeans: "Quantifies the innovation residual (Observed value minus Model forecasted value). A near-zero residual confirms that numerical hydrographic equations accurately simulate thermoclines, boundary currents, and salinity fronts.",
+    significance: "Crucial for marine navigation safety, tropical cyclone heat potential predictions, and Indian Ocean climate modeling.",
+    normalRange: "ΔT within ±0.5°C, ΔS within ±0.15 PSU"
+  },
+  delta_temp: {
+    key: "delta_temp",
+    name: "Temperature Forecast Residual (ΔT)",
+    symbol: "🌡️",
+    unit: "°C (T_obs - T_model)",
+    sensor: "Sea-Bird SBE 41CP vs Operational Forecast",
+    shortDesc: "Difference between in-situ measured temperature and circulation model prediction.",
+    whatItMeans: "Positive ΔT indicates the ocean is warmer than predicted (potential heat wave or thermocline shoaling); negative indicates cooler conditions.",
+    significance: "Directly validates tropical cyclone heat potential forecasts.",
+    normalRange: "-0.50°C to +0.50°C (Accurate)"
+  },
+  delta_sal: {
+    key: "delta_sal",
+    name: "Salinity Forecast Residual (ΔS)",
+    symbol: "💧",
+    unit: "PSU (S_obs - S_model)",
+    sensor: "Inductive Conductivity Cell vs Model Forecast",
+    shortDesc: "Difference between in-situ practical salinity and ocean circulation model prediction.",
+    whatItMeans: "Positive ΔS reveals higher salinity (evaporation / saline intrusion); negative reveals river runoff freshening or precipitation biases in the atmospheric forcing.",
+    significance: "Calibrates halosteric sea level rise and monsoon freshwater plume dispersal.",
+    normalRange: "-0.20 to +0.20 PSU (High Fidelity)"
   }
 };
 
@@ -480,21 +665,32 @@ class OceanDataServiceManager {
   }
 
   /**
-   * Retrieves float and station details
+   * Retrieves float and station details with optional temporal query
    * @param {Object|string} stationOrId
+   * @param {Object} [temporalFilter] - { date: "YYYY-MM-DD", time: "HH:mm", year, cycle }
    */
-  async getFloatDetails(stationOrId) {
+  async getFloatDetails(stationOrId, temporalFilter = {}) {
     let data;
     if (this.activeSource === "api" && this.apiProvider) {
-      data = await this.apiProvider.getFloatData(stationOrId);
+      data = await this.apiProvider.getFloatData(stationOrId, temporalFilter);
     } else {
-      data = await this.proceduralProvider.getFloatData(stationOrId);
+      data = await this.proceduralProvider.getFloatData(stationOrId, temporalFilter);
     }
     // Attach scientific parameter glossary for dynamic UI tooltips
     if (!data.parameterGlossary) {
       data.parameterGlossary = this.glossary;
     }
     return data;
+  }
+
+  /**
+   * Quick convenience query by date and time
+   * @param {Object|string} stationOrId
+   * @param {string} dateStr - e.g. "2024-07-22"
+   * @param {string} [timeStr] - e.g. "08:30"
+   */
+  async queryByDateTime(stationOrId, dateStr, timeStr = "12:00") {
+    return await this.getFloatDetails(stationOrId, { date: dateStr, time: timeStr });
   }
 
   interpolateAtDepth(floatData, depthMeters) {
