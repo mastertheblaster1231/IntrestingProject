@@ -1,0 +1,10 @@
+{
+  "name": "sih-ocean-project-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix MainProjectFiles run dev",
+    "build": "npm --prefix MainProjectFiles run build",
+    "preview": "npm --prefix MainProjectFiles run preview"
+  }
+}

@@ -60,10 +60,18 @@ function DepthProfileGraph({ instrument }) {
   const surfaceSal = instrument.telemetry?.salinityPSU || 34.3;
   const currentDepth = instrument.depthMeters || 15;
   const maxDepthRange = currentDepth > 1500 ? 2000 : 1000;
+  const deltaT = instrument.modelValidation?.deltaTempC !== undefined ? instrument.modelValidation.deltaTempC : 0.3;
 
   const profilePoints = useMemo(() => {
     return generateDepthProfileData(surfaceTemp, surfaceSal, maxDepthRange);
   }, [surfaceTemp, surfaceSal, maxDepthRange]);
+
+  const modelPoints = useMemo(() => {
+    return profilePoints.map((p) => ({
+      depth: p.depth,
+      temp: parseFloat((p.temp - deltaT).toFixed(2)),
+    }));
+  }, [profilePoints, deltaT]);
 
   // Dimensions & Scales
   const svgWidth = 440;
@@ -79,6 +87,10 @@ function DepthProfileGraph({ instrument }) {
 
   // SVG Path Strings
   const tempPath = profilePoints
+    .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${tempToX(p.temp).toFixed(1)} ${depthToY(p.depth).toFixed(1)}`)
+    .join(' ');
+
+  const modelPath = modelPoints
     .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${tempToX(p.temp).toFixed(1)} ${depthToY(p.depth).toFixed(1)}`)
     .join(' ');
 
@@ -106,9 +118,12 @@ function DepthProfileGraph({ instrument }) {
       }
     });
 
+    const mTemp = parseFloat((closest.temp - deltaT).toFixed(2));
     setHoveredData({
       depth: pointedDepth,
       temp: closest.temp,
+      modelTemp: mTemp,
+      delta: parseFloat((closest.temp - mTemp).toFixed(2)),
       sal: closest.sal,
       y: clampedY,
     });
@@ -123,11 +138,16 @@ function DepthProfileGraph({ instrument }) {
         <div className="graph-legend">
           <div className="legend-item">
             <span className="legend-dot" style={{ background: '#ff9436' }} />
-            <span>Temp (°C)</span>
+            <span>Obs CTD</span>
           </div>
           <div className="legend-item">
-            <span className="legend-dot" style={{ background: '#00f0ff' }} />
-            <span>Instrument Depth ({currentDepth}m)</span>
+            <span className="legend-dot" style={{ background: '#38bdf8' }} />
+            <span>ROMS Model</span>
+          </div>
+          <div className="legend-item">
+            <span style={{ fontFamily: 'var(--ws-font-mono)', fontSize: '0.66rem', color: deltaT >= 0 ? '#10b981' : '#f43f5e' }}>
+              ΔT: {deltaT >= 0 ? `+${deltaT}` : deltaT}°C
+            </span>
           </div>
         </div>
 
@@ -220,7 +240,7 @@ function DepthProfileGraph({ instrument }) {
             </g>
           ))}
 
-          {/* Temperature Profile Curve */}
+          {/* Temperature Profile Curve (Observed CTD) */}
           <path
             d={tempPath}
             fill="none"
@@ -228,6 +248,18 @@ function DepthProfileGraph({ instrument }) {
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
+          />
+
+          {/* ROMS Numerical Model Profile Curve (Dashed Cyan) */}
+          <path
+            d={modelPath}
+            fill="none"
+            stroke="#38bdf8"
+            strokeWidth="2.0"
+            strokeDasharray="4,3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.9"
           />
 
           {/* Profile Data Points */}
@@ -281,8 +313,11 @@ function DepthProfileGraph({ instrument }) {
         {hoveredData && (
           <div className="graph-crosshair-info">
             <span style={{ color: '#00f0ff' }}>Depth: {hoveredData.depth}m</span>
-            <span style={{ color: '#ff9436' }}>Temp: {hoveredData.temp}°C</span>
-            <span style={{ color: '#38bdf8' }}>Sal: {hoveredData.sal} PSU</span>
+            <span style={{ color: '#ff9436' }}>Obs: {hoveredData.temp}°C</span>
+            <span style={{ color: '#38bdf8' }}>ROMS: {hoveredData.modelTemp}°C</span>
+            <span style={{ color: hoveredData.delta >= 0 ? '#10b981' : '#f43f5e' }}>
+              ΔT: {hoveredData.delta >= 0 ? `+${hoveredData.delta}` : hoveredData.delta}°C
+            </span>
           </div>
         )}
       </div>

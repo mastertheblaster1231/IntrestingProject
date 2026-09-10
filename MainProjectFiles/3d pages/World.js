@@ -7,14 +7,35 @@ import { oceanDataService } from "./oceanDataService.js";
 import { createOrbitalDiveController } from "./orbitalDive.js";
 
 // ============================================================================
-// ⚙️ ANCHOR & BADGE SIZE CONFIGURATION
+// ⚙️ ANCHOR & BADGE SIZE CONFIGURATION (User Configurable)
 // ============================================================================
 export const ANCHOR_SIZE_CONFIG = {
-  maxScale: 0.8,
-  minScale: 0.09,
-  zoomOutDistance: 4.5,
+  masterScale: 0.70,
+  minScale: 0.055,
+  maxScale: 0.42,
+  zoomOutDistance: 4.8,
   zoomInDistance: 1.85,
-  zoomCurvePower: 2.0,
+  zoomCurvePower: 1.8,
+  dynamicZoom: true,
+};
+
+// Load saved user preferences if available
+try {
+  const saved = localStorage.getItem("ocean_marker_config");
+  if (saved) {
+    Object.assign(ANCHOR_SIZE_CONFIG, JSON.parse(saved));
+  }
+} catch (e) {
+  console.warn("Could not read marker config from localStorage", e);
+}
+
+// Expose configuration globally for UI controls
+window.ANCHOR_SIZE_CONFIG = ANCHOR_SIZE_CONFIG;
+window.updateMarkerSizing = function (newCfg) {
+  Object.assign(ANCHOR_SIZE_CONFIG, newCfg);
+  try {
+    localStorage.setItem("ocean_marker_config", JSON.stringify(ANCHOR_SIZE_CONFIG));
+  } catch (e) {}
 };
 // ============================================================================
 
@@ -646,15 +667,15 @@ export function vector3ToLatLon(vec, radius = GLOBE_RADIUS) {
 // Function to generate billboard Sprite matching buoy / pin styles in user screenshots
 function createAnchorSprite(point) {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 384;
+  canvas.height = 384;
   const ctx = canvas.getContext("2d");
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   const markerType = point.markerType || "buoy-yellow";
   const code = point.code || point.id;
-  const cx = 128;
+  const cx = 192;
 
   if (markerType === "buoy-yellow") {
     // ==========================================
@@ -663,77 +684,85 @@ function createAnchorSprite(point) {
     ctx.save();
 
     // 1. Top Flashing Beacon Light Glow
-    ctx.shadowColor = "rgba(255, 234, 0, 0.95)";
-    ctx.shadowBlur = 18;
+    ctx.shadowColor = "#ffea00";
+    ctx.shadowBlur = 24;
     ctx.fillStyle = "#fff59d";
     ctx.beginPath();
-    ctx.arc(cx, 32, 9, 0, Math.PI * 2);
+    ctx.arc(cx, 44, 14, 0, Math.PI * 2);
     ctx.fill();
 
     // Inner bright core
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(cx, 32, 4.5, 0, Math.PI * 2);
+    ctx.arc(cx, 44, 7, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Antenna Mast
+    // 2. Antenna Mast with outline
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 7;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(cx, 40);
-    ctx.lineTo(cx, 68);
+    ctx.moveTo(cx, 56);
+    ctx.lineTo(cx, 98);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cx, 56);
+    ctx.lineTo(cx, 98);
     ctx.stroke();
 
     // 3. Superstructure Tower Struts
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = "#ffe082";
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(cx - 16, 72);
-    ctx.lineTo(cx, 46);
-    ctx.lineTo(cx + 16, 72);
+    ctx.moveTo(cx - 24, 106);
+    ctx.lineTo(cx, 66);
+    ctx.lineTo(cx + 24, 106);
+    ctx.stroke();
+
+    ctx.strokeStyle = "#ffe082";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 24, 106);
+    ctx.lineTo(cx, 66);
+    ctx.lineTo(cx + 24, 106);
     ctx.stroke();
 
     // Cross strut
     ctx.beginPath();
-    ctx.moveTo(cx - 10, 60);
-    ctx.lineTo(cx + 10, 60);
+    ctx.moveTo(cx - 16, 88);
+    ctx.lineTo(cx + 16, 88);
     ctx.stroke();
 
     // 4. Buoy Float Hull (conical maritime buoy float)
-    const buoyGrad = ctx.createLinearGradient(cx - 40, 72, cx + 40, 122);
+    const buoyGrad = ctx.createLinearGradient(cx - 60, 106, cx + 60, 180);
     buoyGrad.addColorStop(0, "#fff59d");
     buoyGrad.addColorStop(0.25, "#ffd600");
     buoyGrad.addColorStop(0.75, "#ffb300");
     buoyGrad.addColorStop(1, "#f57f17");
 
-    ctx.shadowColor = "rgba(255, 214, 0, 0.6)";
-    ctx.shadowBlur = 12;
-
     ctx.beginPath();
-    ctx.moveTo(cx - 22, 72);
-    ctx.lineTo(cx + 22, 72);
-    ctx.lineTo(cx + 38, 102);
-    ctx.quadraticCurveTo(cx + 36, 122, cx, 124);
-    ctx.quadraticCurveTo(cx - 36, 122, cx - 38, 102);
+    ctx.moveTo(cx - 32, 106);
+    ctx.lineTo(cx + 32, 106);
+    ctx.lineTo(cx + 56, 150);
+    ctx.quadraticCurveTo(cx + 52, 180, cx, 182);
+    ctx.quadraticCurveTo(cx - 52, 180, cx - 56, 150);
     ctx.closePath();
 
     ctx.fillStyle = buoyGrad;
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.lineWidth = 2.5;
+    // Bold dark outer border + white inner border
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 4;
     ctx.stroke();
 
     // Waterline band
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(10, 30, 60, 0.8)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(cx - 35, 98);
-    ctx.lineTo(cx + 35, 98);
-    ctx.stroke();
+    ctx.fillStyle = "#0a1932";
+    ctx.fillRect(cx - 50, 144, 100, 7);
 
     ctx.restore();
   } else if (markerType === "pin-red") {
@@ -741,12 +770,12 @@ function createAnchorSprite(point) {
     // 📍 RED LOCATION PIN (CB02, CALVAL, CB01)
     // ==========================================
     ctx.save();
-    const cy = 64;
-    const r = 34;
-    const tipY = 124;
+    const cy = 96;
+    const r = 50;
+    const tipY = 186;
 
-    ctx.shadowColor = "rgba(255, 59, 48, 0.85)";
-    ctx.shadowBlur = 18;
+    ctx.shadowColor = "#ff3b30";
+    ctx.shadowBlur = 24;
 
     const redGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, tipY);
     redGrad.addColorStop(0, "#ff5252");
@@ -761,19 +790,22 @@ function createAnchorSprite(point) {
     ctx.fillStyle = redGrad;
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 4.5;
     ctx.stroke();
 
     // Center circular dot
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 9, 0, Math.PI * 2);
     ctx.fillStyle = "#d32f2f";
     ctx.fill();
 
@@ -783,17 +815,17 @@ function createAnchorSprite(point) {
     // 🔘 GREY / PLATINUM PIN (CB06)
     // ==========================================
     ctx.save();
-    const cy = 64;
-    const r = 34;
-    const tipY = 124;
+    const cy = 96;
+    const r = 50;
+    const tipY = 186;
 
-    ctx.shadowColor = "rgba(176, 190, 197, 0.85)";
-    ctx.shadowBlur = 16;
+    ctx.shadowColor = "#cfd8dc";
+    ctx.shadowBlur = 20;
 
     const greyGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, tipY);
-    greyGrad.addColorStop(0, "#eceff1");
-    greyGrad.addColorStop(0.5, "#b0bec5");
-    greyGrad.addColorStop(1, "#546e7a");
+    greyGrad.addColorStop(0, "#ffffff");
+    greyGrad.addColorStop(0.4, "#cfd8dc");
+    greyGrad.addColorStop(1, "#607d8b");
 
     ctx.beginPath();
     ctx.arc(cx, cy, r, Math.PI * 0.85, Math.PI * 0.15, false);
@@ -803,19 +835,22 @@ function createAnchorSprite(point) {
     ctx.fillStyle = greyGrad;
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 4.5;
     ctx.stroke();
 
     // Center circular dot
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 9, 0, Math.PI * 2);
     ctx.fillStyle = "#37474f";
     ctx.fill();
 
@@ -823,19 +858,18 @@ function createAnchorSprite(point) {
   }
 
   // ==========================================
-  // 🏷️ CONVENIENT NAME BADGE UNDER MARKER
+  // 🏷️ HIGH-CONTRAST DATA BADGE UNDER MARKER
   // ==========================================
   ctx.save();
-  const badgeY = 138;
-  const badgeHeight = 44;
+  const badgeY = 206;
+  const badgeHeight = 66;
 
   // Measure text width for perfect badge sizing
-  ctx.font = 'bold 22px "Segoe UI", Inter, -apple-system, sans-serif';
+  ctx.font = '900 32px "Outfit", "Segoe UI", Inter, sans-serif';
   const textWidth = ctx.measureText(code).width;
-  const badgeWidth = Math.max(120, textWidth + 34);
+  const badgeWidth = Math.max(170, textWidth + 56);
   const badgeX = cx - badgeWidth / 2;
 
-  // Badge glow & background
   const strokeColor =
     markerType === "pin-red"
       ? "#ff3b30"
@@ -843,74 +877,96 @@ function createAnchorSprite(point) {
       ? "#cfd8dc"
       : "#ffea00";
 
-  ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = "rgba(6, 18, 38, 0.94)";
+  // 1. Solid Jet-Black Opaque Background (Prevents any clouds from bleeding through)
+  ctx.shadowColor = strokeColor;
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#020713"; // 100% Solid Dark Navy
 
   ctx.beginPath();
-  ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 10);
+  ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 14);
   ctx.fill();
 
-  // Border with station accent color
+  // 2. Thick Vibrant Accent Border with shadow glow
   ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 4;
   ctx.stroke();
 
-  // Station Code (Large & crisp)
+  // Outer black halo border
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 3. Station Code (Ultra-Bold White with Heavy Black Outline)
   ctx.shadowBlur = 0;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#ffffff";
-  ctx.font = 'bold 21px "Segoe UI", Inter, -apple-system, sans-serif';
-  ctx.fillText(code, cx, badgeY + 17);
 
-  // Subtitle (Coordinates)
+  ctx.font = '900 30px "Outfit", "Segoe UI", Inter, sans-serif';
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 6;
+  ctx.lineJoin = "round";
+  ctx.strokeText(code, cx, badgeY + 26);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(code, cx, badgeY + 26);
+
+  // 4. Subtitle Coordinates (Crisp with Black Outline)
   const subtitleColor =
     markerType === "pin-red"
       ? "#ff8a80"
       : markerType === "pin-grey"
-      ? "#b0bec5"
-      : "#ffd54f";
+      ? "#e0e0e0"
+      : "#ffe57f";
+  const coords = `${point.lat.toFixed(1)}°N, ${point.lon.toFixed(1)}°E`;
+  ctx.font = 'bold 16px "Space Mono", monospace';
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 4;
+  ctx.strokeText(coords, cx, badgeY + 50);
   ctx.fillStyle = subtitleColor;
-  ctx.font = 'bold 11px "Space Mono", monospace';
-  ctx.fillText(`${point.lat.toFixed(1)}°N, ${point.lon.toFixed(1)}°E`, cx, badgeY + 33);
+  ctx.fillText(coords, cx, badgeY + 50);
 
   ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
 
   const spriteMaterial = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false,
+    depthTest: true,
+    depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(spriteMaterial);
-  sprite.scale.set(ANCHOR_SIZE_CONFIG.maxScale, ANCHOR_SIZE_CONFIG.maxScale, 1);
+  sprite.renderOrder = 200; // ALWAYS renders ON TOP of all clouds, atmosphere & fog!
+  sprite.scale.set(ANCHOR_SIZE_CONFIG.maxScale * ANCHOR_SIZE_CONFIG.masterScale, ANCHOR_SIZE_CONFIG.maxScale * ANCHOR_SIZE_CONFIG.masterScale, 1);
   return sprite;
 }
 
 // Group to hold all interactive markers
 const markersGroup = new THREE.Group();
+markersGroup.renderOrder = 200;
 scene.add(markersGroup);
 
 const clickableSprites = [];
 const beaconMeshes = [];
+const stemLines = [];
 let selectedStationId = null;
 let currentLoadedData = null;
 
 argoPoints.forEach((point) => {
   const surfacePos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS);
-  const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.14);
+  // Snug marker altitude so stem is short, clean, and tight to the surface
+  const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.075);
 
   // 1. Surface beacon dot matching markerType
   const defaultColor = point.beaconColor || 0x00f0ff;
   const beaconGeo = new THREE.SphereGeometry(0.022, 16, 16);
-  const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor });
+  const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor, depthTest: true });
   const beacon = new THREE.Mesh(beaconGeo, beaconMat);
   beacon.position.copy(surfacePos);
   beacon.userData = { id: point.id, defaultColor: defaultColor, point: point };
+  beacon.renderOrder = 150;
   markersGroup.add(beacon);
   beaconMeshes.push(beacon);
 
@@ -922,16 +978,20 @@ argoPoints.forEach((point) => {
   const lineMat = new THREE.LineBasicMaterial({
     color: defaultColor,
     transparent: true,
-    opacity: 0.82,
+    opacity: 0.9,
     linewidth: 2,
+    depthTest: true,
   });
   const stem = new THREE.Line(lineGeo, lineMat);
+  stem.renderOrder = 120;
   markersGroup.add(stem);
+  stemLines.push(stem);
 
   // 3. Floating billboard anchor sprite
   const sprite = createAnchorSprite(point);
   sprite.position.copy(markerPos);
   sprite.userData = point;
+  sprite.renderOrder = 200;
   markersGroup.add(sprite);
   clickableSprites.push(sprite);
 });
@@ -1581,22 +1641,39 @@ function animate() {
     }
   }
 
-  // DYNAMIC ZOOM SCALING
+  // 1. HORIZON OCCLUSION CHECK (Hide markers when behind the Earth's curvature)
+  const camPos = camera.position;
+  clickableSprites.forEach((sprite, idx) => {
+    const normal = sprite.position.clone().normalize();
+    const camDir = camPos.clone().sub(sprite.position).normalize();
+    const dot = normal.dot(camDir);
+    const isVisible = dot > 0.03; // Visible hemisphere
+    sprite.visible = isVisible;
+    if (beaconMeshes[idx]) beaconMeshes[idx].visible = isVisible;
+    if (stemLines[idx]) stemLines[idx].visible = isVisible;
+  });
+
+  // 2. DYNAMIC ZOOM SCALING (Configurable in UI)
   const camDist = camera.position.distanceTo(controls.target);
   const cfg = ANCHOR_SIZE_CONFIG;
 
-  const normDist = Math.max(
-    0,
-    Math.min(
-      1,
-      (camDist - cfg.zoomInDistance) /
-        (cfg.zoomOutDistance - cfg.zoomInDistance),
-    ),
-  );
-
-  const dynamicScale =
-    cfg.minScale +
-    Math.pow(normDist, cfg.zoomCurvePower) * (cfg.maxScale - cfg.minScale);
+  let dynamicScale;
+  if (!cfg.dynamicZoom) {
+    dynamicScale = cfg.maxScale * cfg.masterScale;
+  } else {
+    const normDist = Math.max(
+      0,
+      Math.min(
+        1,
+        (camDist - cfg.zoomInDistance) /
+          (cfg.zoomOutDistance - cfg.zoomInDistance),
+      ),
+    );
+    const interpolated =
+      cfg.minScale +
+      Math.pow(normDist, cfg.zoomCurvePower) * (cfg.maxScale - cfg.minScale);
+    dynamicScale = interpolated * cfg.masterScale;
+  }
 
   clickableSprites.forEach((sprite) => {
     sprite.scale.set(dynamicScale, dynamicScale, 1);

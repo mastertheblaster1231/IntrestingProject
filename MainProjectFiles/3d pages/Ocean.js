@@ -4,12 +4,22 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { WorkspaceManager } from "./WorkspaceManager.jsx";
 import "./workspace.css";
-import { oceanDataService, getStationById } from "./oceanDataService.js";
+import {
+  oceanDataService,
+  getStationById,
+  CF_CONVENTIONS,
+  erddapOceanService,
+  netCDFParserService,
+  AsciiBuoyParser,
+  MarineHeatwaveService,
+  ShareableStateService,
+} from "./oceanDataService.js";
 import {
   createInstrumentObject,
   DEMO_INSTRUMENTS,
   createGliderSawtoothTrail,
 } from "./instruments.js";
+
 
 // ============================================================================
 // ☀️ DYNAMIC SOLAR TIME & SUN DIRECTION PRESETS
@@ -162,33 +172,71 @@ const fragmentSkyShader = `
   uniform vec3 uSunPosition;
   uniform vec3 uSunColor;
   uniform float uUnderwaterRatio;
+  uniform float uCameraDepth;
 
   void main() {
     vec3 dir = normalize(vLocalPosition);
     
-    vec3 col;
-    if (dir.y >= 0.0) {
-      col = mix(uHorizonColor, uTopColor, pow(dir.y, 0.65));
-    } else {
-      // Below horizon / underground: smooth gradient into deep oceanic blue abyss (Noticeably blueish, darker, NOT black)
-      col = mix(uHorizonColor, uBottomColor, pow(-dir.y, 0.72));
-    }
-
-    // Sun atmospheric glow (only when near surface above water)
-    if (uUnderwaterRatio < 0.25) {
+    // --- 1. ABOVE WATER ATMOSPHERIC SKY ---
+    if (uUnderwaterRatio <= 0.005) {
+      vec3 col;
+      if (dir.y >= 0.0) {
+        col = mix(uHorizonColor, uTopColor, pow(dir.y, 0.65));
+      } else {
+        col = mix(uHorizonColor, uBottomColor, pow(-dir.y, 0.72));
+      }
       vec3 sunDir = normalize(uSunPosition);
       float sunDot = max(dot(dir, sunDir), 0.0);
-      float sunGlow = (pow(sunDot, 8.0) * 0.55 + pow(sunDot, 64.0) * 0.9) * (1.0 - uUnderwaterRatio * 4.0);
+      float sunGlow = pow(sunDot, 8.0) * 0.55 + pow(sunDot, 64.0) * 0.9;
       col += uSunColor * sunGlow;
-    } else {
-      // Underwater downwelling surface light cone from the sky above
-      vec3 surfaceUp = vec3(0.0, 1.0, 0.0);
-      float upDot = max(dot(dir, surfaceUp), 0.0);
-      float downwellingGlow = pow(upDot, 2.8) * 0.25 * uUnderwaterRatio;
-      col += vec3(0.12, 0.48, 0.78) * downwellingGlow;
+      gl_FragColor = vec4(col, 1.0);
+      return;
     }
 
-    gl_FragColor = vec4(col, 1.0);
+    // --- 2. UNDERWATER OPTICAL ABYSS (Beer-Lambert Multi-Spectral Extinction) ---
+    // In real seawater, Red (680nm) absorbs in 10-15m, Green (530nm) in 50m, Blue (470nm) penetrates past 150m.
+    float effectiveDepth = uUnderwaterRatio * 2200.0;
+    
+    // Wavelength transmission coefficients:
+    float tRed = exp(-effectiveDepth * 0.0095);
+    float tGreen = exp(-effectiveDepth * 0.0032);
+    float tBlue = exp(-effectiveDepth * 0.0012);
+    vec3 spectralTransmission = vec3(tRed, tGreen, tBlue);
+
+    // Directional Gradient in Water Column:
+    // Looking up (Zenith dir.y > 0): Downwelling sunlight / surface glow
+    // Looking horizontal (dir.y ~ 0): Water mass horizontal backscatter
+    // Looking down (Nadir dir.y < 0): Oceanic midnight abyss
+    vec3 shallowZenith = vec3(0.06, 0.48, 0.82);
+    vec3 deepZenith = vec3(0.012, 0.038, 0.095);
+    vec3 zenithColor = mix(shallowZenith, deepZenith, clamp(uUnderwaterRatio * 1.5, 0.0, 1.0));
+
+    vec3 shallowHorizon = vec3(0.035, 0.28, 0.55);
+    vec3 deepHorizon = vec3(0.008, 0.022, 0.058);
+    vec3 horizonColor = mix(shallowHorizon, deepHorizon, clamp(uUnderwaterRatio * 1.5, 0.0, 1.0));
+
+    vec3 nadirColor = mix(vec3(0.012, 0.075, 0.20), vec3(0.002, 0.007, 0.020), clamp(uUnderwaterRatio * 1.3, 0.0, 1.0));
+
+    vec3 ambientWater;
+    if (dir.y >= 0.0) {
+      ambientWater = mix(horizonColor, zenithColor, pow(dir.y, 0.75));
+    } else {
+      ambientWater = mix(horizonColor, nadirColor, pow(-dir.y, 0.82));
+    }
+
+    // Downwelling Solar Cone (visible when looking upwards toward surface sun)
+    vec3 sunDir = normalize(vec3(uSunPosition.x, abs(uSunPosition.y), uSunPosition.z));
+    float sunUpDot = max(dot(dir, sunDir), 0.0);
+    float sunShaftCone = pow(sunUpDot, 4.5) * 0.55 + pow(sunUpDot, 26.0) * 1.1;
+    // Fades completely as user goes past photic zone (~200m / ratio 0.05)
+    float sunPenetration = max(0.0, 1.0 - uUnderwaterRatio * 18.0);
+    vec3 sunUnderwaterGlow = mix(vec3(0.18, 0.72, 0.95), vec3(0.08, 0.40, 0.75), clamp(uUnderwaterRatio * 8.0, 0.0, 1.0));
+    ambientWater += sunUnderwaterGlow * sunShaftCone * sunPenetration;
+
+    // Apply spectral wavelength extinction while keeping clean oceanic dark blue floor
+    ambientWater = ambientWater * spectralTransmission * 1.55 + vec3(0.0025, 0.0075, 0.020);
+
+    gl_FragColor = vec4(ambientWater, 1.0);
   }
 `;
 
@@ -203,6 +251,7 @@ const skyMat = new THREE.ShaderMaterial({
     uSunPosition: { value: initialPreset.sunPos.clone() },
     uSunColor: { value: initialPreset.sunColor.clone() },
     uUnderwaterRatio: { value: 0.0 },
+    uCameraDepth: { value: 0.0 },
   },
   side: THREE.BackSide,
 });
@@ -459,6 +508,8 @@ const waterFragmentShader = `
   uniform vec3 uSunPosition;
   uniform vec3 uSunColor;
   uniform vec3 uSkyHorizonColor;
+  uniform float uUnderwaterRatio;
+  uniform float uTime;
 
   varying float vElevation;
   varying vec3 vNormal;
@@ -466,13 +517,86 @@ const waterFragmentShader = `
   varying vec2 vUv;
 
   void main() {
+    bool isUnderwater = (cameraPosition.y < vWorldPosition.y);
+
+    // ========================================================================
+    // CASE A: VIEWED FROM UNDERWATER LOOKING UP (Snell's Window & TIR)
+    // ========================================================================
+    if (isUnderwater) {
+      vec3 toSurface = normalize(vWorldPosition - cameraPosition);
+      vec3 normalDown = -normalize(vNormal); // normal facing downward into water
+      vec3 worldUp = vec3(0.0, 1.0, 0.0);
+
+      // Angle of incidence relative to ocean surface vertical
+      float cosIncidence = dot(toSurface, worldUp);
+      
+      // Perturb Snell's window boundary organically with wave surface motion
+      float wavePerturb = normalDown.x * 0.12 + normalDown.z * 0.12;
+      float effectiveCos = cosIncidence + wavePerturb;
+
+      // Snell critical angle (for seawater n=1.333 -> cos ~ 0.661)
+      // Inside Snell's cone (effectiveCos > 0.66): Sky transmission
+      // Outside Snell's cone (effectiveCos <= 0.66): Total Internal Reflection (TIR)
+      float snellWindow = smoothstep(0.63, 0.70, effectiveCos);
+
+      // 1. SKY TRANSMISSION (Inside Snell's Window)
+      // Diver sees the sky dome, sun glint, and waving caustic refraction
+      vec3 skyTransmission = mix(vec3(0.18, 0.65, 0.92), vec3(0.35, 0.85, 1.0), vElevation * 2.0 + 0.5);
+      
+      // Animated wave caustics dancing on the window
+      float caustic1 = sin(vWorldPosition.x * 2.8 + uTime * 2.2) * cos(vWorldPosition.z * 2.8 + uTime * 1.8);
+      float caustic2 = sin((vWorldPosition.x + vWorldPosition.z) * 3.5 - uTime * 2.6);
+      float causticPattern = (caustic1 + caustic2) * 0.5;
+      skyTransmission += vec3(0.22, 0.50, 0.65) * causticPattern;
+
+      // Specular sun core refracted through the window
+      vec3 sunDir = normalize(uSunPosition);
+      float sunGlint = pow(max(dot(toSurface, sunDir), 0.0), 32.0) * 3.2;
+      sunGlint += pow(max(dot(toSurface, sunDir), 0.0), 8.0) * 0.6;
+      skyTransmission += uSunColor * sunGlint;
+
+      // Surface foam patches seen from below as bright diffuse milky scatter
+      float foam = smoothstep(0.18, 0.45, vElevation);
+      skyTransmission = mix(skyTransmission, vec3(0.92, 0.98, 1.0), foam * 0.65);
+
+      // 2. TOTAL INTERNAL REFLECTION (Outside Snell's Window)
+      // Acts as an oceanic liquid mirror reflecting the deep sapphire & navy water below
+      vec3 tirReflection = mix(vec3(0.03, 0.15, 0.32), vec3(0.008, 0.035, 0.095), clamp(uUnderwaterRatio * 1.4, 0.0, 1.0));
+      // Subtle wave facet highlights on the mirror
+      float facetShimmer = pow(max(dot(normalDown, vec3(0.0, -1.0, 0.0)), 0.0), 12.0) * 0.18;
+      tirReflection += vec3(0.05, 0.25, 0.55) * facetShimmer;
+
+      // 3. Iridescent Snell Boundary Rim (chromatic fringe at critical angle)
+      float snellRim = smoothstep(0.0, 0.5, snellWindow) * smoothstep(1.0, 0.5, snellWindow) * 3.8;
+      vec3 rimColor = vec3(0.25, 0.88, 0.98) * snellRim * 0.5;
+
+      vec3 compositeSurface = mix(tirReflection, skyTransmission, snellWindow) + rimColor;
+
+      // 4. Physical Beer-Lambert optical absorption between camera and surface:
+      // Water absorbs the light as camera descends
+      float distToSurface = length(vWorldPosition - cameraPosition);
+      float depthMeters = -cameraPosition.y;
+      
+      // Absorption coefficient (Red absorbs rapidly, green medium, blue persists)
+      vec3 waterExtinction = vec3(0.045, 0.016, 0.007);
+      vec3 absorption = exp(-waterExtinction * distToSurface * 0.38);
+
+      // Oceanic deep mist fog
+      vec3 waterMist = mix(vec3(0.02, 0.14, 0.30), vec3(0.003, 0.012, 0.035), clamp(uUnderwaterRatio * 1.5, 0.0, 1.0));
+      vec3 finalUnderwater = mix(waterMist, compositeSurface * absorption, absorption);
+
+      // Alpha attenuation: As camera goes deeper than ~250m (depthMeters > 6), surface dissolves into the dark abyss
+      float surfaceOpacity = clamp(exp(-depthMeters * 0.065), 0.0, 0.94);
+
+      gl_FragColor = vec4(finalUnderwater, surfaceOpacity);
+      return;
+    }
+
+    // ========================================================================
+    // CASE B: VIEWED FROM ABOVE WATER (Realistic Sea Surface)
+    // ========================================================================
     vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
     vec3 normal = normalize(vNormal);
-
-    // Smooth lighting when viewed from underwater looking up
-    if (cameraPosition.y < vWorldPosition.y) {
-      normal = -normal;
-    }
 
     // 1. Water color based on wave elevation (deep indigo blue to vibrant turquoise)
     float mixStrength = (vElevation + uColorOffset) * uColorMultiplier;
@@ -519,6 +643,7 @@ const waterMaterial = new THREE.ShaderMaterial({
   fragmentShader: waterFragmentShader,
   uniforms: {
     uTime: { value: 0 },
+    uUnderwaterRatio: { value: 0.0 },
     // Wave dynamics
     uBigWavesElevation: { value: 0.38 },
     uBigWavesFrequency: { value: new THREE.Vector2(0.28, 0.18) },
@@ -586,6 +711,11 @@ export function applySolarPreset(preset) {
     waterMaterial.uniforms.uSkyHorizonColor.value.copy(preset.horizonColor);
     waterMaterial.uniforms.uSurfaceColor.value.copy(preset.waterSurfaceColor);
     waterMaterial.uniforms.uDepthColor.value.copy(preset.waterDepthColor);
+  }
+
+  // Update God Ray sun beam color
+  if (typeof godRayMat !== "undefined" && godRayMat && godRayMat.uniforms) {
+    godRayMat.uniforms.uRayColor.value.copy(preset.sunColor).lerp(new THREE.Color(0x5eead4), 0.45);
   }
 
   // Update UI description pill
@@ -1183,43 +1313,232 @@ async function initFloatDescription() {
 initFloatDescription();
 
 // ============================================================================
-// 5. PROCEDURAL RISING OCEAN BUBBLES
+// 5. VOLUMETRIC CAUSTIC SUNLIGHT SHAFTS (GOD RAYS)
+// Shimmering downwelling sun rays in the photic zone (0m - 180m)
 // ============================================================================
-const BUBBLE_COUNT = 450;
-const bubbleGeo = new THREE.SphereGeometry(1, 14, 14);
-const bubbleMat = new THREE.MeshPhysicalMaterial({
-  color: 0xdbf7ff,
-  transmission: 0.88,
-  opacity: 0.8,
+const GOD_RAY_COUNT = 14;
+const godRaysGroup = new THREE.Group();
+godRaysGroup.name = "volumetric_god_rays";
+
+const godRayVertexShader = `
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
+
+const godRayFragmentShader = `
+  uniform float uTime;
+  uniform float uDepthFade;
+  uniform vec3 uRayColor;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  void main() {
+    // Vertical extinction: intense near surface y=0, exponentially decaying down to y=-16
+    float depthFade = clamp(exp(vWorldPos.y * 0.26), 0.0, 1.0);
+    
+    // Beam cross-section falloff (soft Gaussian profile across beam width)
+    float edgeFade = sin(vUv.x * 3.14159);
+    edgeFade = pow(edgeFade, 1.6);
+
+    // Shimmering caustic wave interference
+    float c1 = sin(vWorldPos.x * 0.4 + vWorldPos.z * 0.3 + uTime * 1.6);
+    float c2 = cos(vWorldPos.x * 0.35 - vWorldPos.z * 0.45 - uTime * 1.3);
+    float caustics = (c1 * c2) * 0.4 + 0.6;
+
+    float intensity = depthFade * edgeFade * caustics * uDepthFade;
+    if (intensity < 0.008) discard;
+
+    vec3 col = uRayColor * intensity;
+    gl_FragColor = vec4(col, intensity * 0.65);
+  }
+`;
+
+const godRayMat = new THREE.ShaderMaterial({
+  vertexShader: godRayVertexShader,
+  fragmentShader: godRayFragmentShader,
+  uniforms: {
+    uTime: { value: 0 },
+    uDepthFade: { value: 0.0 },
+    uRayColor: { value: new THREE.Color(0x67e8f9) },
+  },
   transparent: true,
-  roughness: 0.08,
-  ior: 1.12,
-  metalness: 0.05,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  side: THREE.DoubleSide,
 });
 
-const bubblesMesh = new THREE.InstancedMesh(bubbleGeo, bubbleMat, BUBBLE_COUNT);
-bubblesMesh.visible = false;
-scene.add(bubblesMesh);
+// Construct radiating conical light shaft geometry
+for (let i = 0; i < GOD_RAY_COUNT; i++) {
+  const angle = (i / GOD_RAY_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+  const radiusTop = 1.0 + Math.random() * 2.5;
+  const radiusBottom = 12.0 + Math.random() * 16.0;
+  const height = 18.0 + Math.random() * 8.0;
+  
+  const rayGeo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, 16, 8, true);
+  // Place top at y = -0.1 (just beneath ocean surface)
+  rayGeo.translate(0, -height / 2 - 0.1, 0);
 
-const dummy = new THREE.Object3D();
-const bubbleData = [];
-
-for (let i = 0; i < BUBBLE_COUNT; i++) {
-  const x = (Math.random() - 0.5) * 45;
-  const y = -Math.random() * 22;
-  const z = (Math.random() - 0.5) * 45;
-  const scale = 0.06 + Math.random() * 0.22;
-  const speed = 0.035 + Math.random() * 0.07;
-  const phase = Math.random() * Math.PI * 2;
-
-  bubbleData.push({ x, y, z, scale, speed, phase });
-
-  dummy.position.set(x, y, z);
-  dummy.scale.set(scale, scale, scale);
-  dummy.updateMatrix();
-  bubblesMesh.setMatrixAt(i, dummy.matrix);
+  const rayMesh = new THREE.Mesh(rayGeo, godRayMat);
+  rayMesh.rotation.y = angle;
+  rayMesh.rotation.z = (Math.random() - 0.5) * 0.18;
+  rayMesh.rotation.x = 0.15 + (Math.random() - 0.5) * 0.12;
+  rayMesh.position.set(
+    (Math.random() - 0.5) * 12,
+    0,
+    (Math.random() - 0.5) * 12
+  );
+  godRaysGroup.add(rayMesh);
 }
-bubblesMesh.instanceMatrix.needsUpdate = true;
+godRaysGroup.visible = false;
+scene.add(godRaysGroup);
+
+// ============================================================================
+// 5.5. ULTRA-REALISTIC DEEP OCEAN MARINE SNOW & BIOLUMINESCENT PARTICLES
+// Continuous microscopic organic detritus & pulsing plankton drifting in currents
+// ============================================================================
+const MARINE_SNOW_COUNT = 2800;
+const snowPositions = new Float32Array(MARINE_SNOW_COUNT * 3);
+const snowSizes = new Float32Array(MARINE_SNOW_COUNT);
+const snowSpeeds = new Float32Array(MARINE_SNOW_COUNT);
+const snowPhases = new Float32Array(MARINE_SNOW_COUNT);
+const snowBiolum = new Float32Array(MARINE_SNOW_COUNT);
+const snowColors = new Float32Array(MARINE_SNOW_COUNT * 3);
+
+for (let i = 0; i < MARINE_SNOW_COUNT; i++) {
+  const i3 = i * 3;
+  // Volume: around camera/argo travel cylinder
+  snowPositions[i3] = (Math.random() - 0.5) * 44;
+  snowPositions[i3 + 1] = -Math.random() * 95; // 0 to -95m
+  snowPositions[i3 + 2] = (Math.random() - 0.5) * 44;
+
+  snowSizes[i] = 1.2 + Math.random() * 2.8;
+  snowSpeeds[i] = 0.25 + Math.random() * 0.65;
+  snowPhases[i] = Math.random() * Math.PI * 2;
+
+  // Bioluminescent probability: ~18% of particles in deep water exhibit bio-pulses
+  const isBio = Math.random() < 0.18 ? 1.0 : 0.0;
+  snowBiolum[i] = isBio;
+
+  if (isBio > 0.5) {
+    if (Math.random() > 0.5) {
+      // Electric cyan bioluminescence
+      snowColors[i3] = 0.22;
+      snowColors[i3 + 1] = 0.92;
+      snowColors[i3 + 2] = 1.0;
+    } else {
+      // Bioluminescent emerald green
+      snowColors[i3] = 0.15;
+      snowColors[i3 + 1] = 0.98;
+      snowColors[i3 + 2] = 0.65;
+    }
+  } else {
+    // Translucent organic marine snow (silver-cyan ivory)
+    snowColors[i3] = 0.85;
+    snowColors[i3 + 1] = 0.94;
+    snowColors[i3 + 2] = 1.0;
+  }
+}
+
+const marineSnowGeo = new THREE.BufferGeometry();
+marineSnowGeo.setAttribute("position", new THREE.BufferAttribute(snowPositions, 3));
+marineSnowGeo.setAttribute("aSize", new THREE.BufferAttribute(snowSizes, 1));
+marineSnowGeo.setAttribute("aSpeed", new THREE.BufferAttribute(snowSpeeds, 1));
+marineSnowGeo.setAttribute("aPhase", new THREE.BufferAttribute(snowPhases, 1));
+marineSnowGeo.setAttribute("aBiolum", new THREE.BufferAttribute(snowBiolum, 1));
+marineSnowGeo.setAttribute("aColor", new THREE.BufferAttribute(snowColors, 3));
+
+const marineSnowVertexShader = `
+  uniform float uTime;
+  uniform float uUnderwaterRatio;
+  attribute float aSize;
+  attribute float aSpeed;
+  attribute float aPhase;
+  attribute float aBiolum;
+  attribute vec3 aColor;
+  varying vec3 vColor;
+  varying float vAlpha;
+  varying float vBiolum;
+
+  void main() {
+    vec3 pos = position;
+
+    // Gentle vertical sinking drift (loops seamlessly across 95m column)
+    float yTravel = mod(-pos.y + uTime * (0.35 + aSpeed * 0.4), 95.0);
+    pos.y = -yTravel;
+
+    // Oceanic micro-turbulence / horizontal eddy sway
+    pos.x += sin(uTime * 0.5 + aPhase) * 0.35;
+    pos.z += cos(uTime * 0.42 + aPhase * 1.2) * 0.35;
+
+    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+    
+    // Distance attenuation for point sprite
+    float pSize = aSize * (150.0 / -mvPosition.z);
+    gl_PointSize = clamp(pSize, 1.2, 6.5);
+
+    vColor = aColor;
+    vBiolum = aBiolum;
+
+    // Soft distance clipping so particles fade out smoothly
+    float dist = length(mvPosition.xyz);
+    vAlpha = smoothstep(42.0, 14.0, dist) * smoothstep(0.4, 1.8, dist);
+
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const marineSnowFragmentShader = `
+  uniform float uTime;
+  uniform float uUnderwaterRatio;
+  varying vec3 vColor;
+  varying float vAlpha;
+  varying float vBiolum;
+
+  void main() {
+    // Soft circular Gaussian disc
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    if (dist > 0.5) discard;
+    float discAlpha = smoothstep(0.5, 0.06, dist);
+
+    vec3 col = vColor;
+    float pulse = 0.0;
+    
+    // Bioluminescent pulsation in twilight/abyssal depths (>200m)
+    if (vBiolum > 0.5 && uUnderwaterRatio > 0.04) {
+      pulse = sin(uTime * 2.4 + vBiolum * 17.0) * 0.5 + 0.5;
+      col = mix(col, vec3(0.1, 0.98, 0.85), pulse * 0.7);
+    }
+
+    float finalAlpha = discAlpha * vAlpha * (0.55 + pulse * 0.45);
+    gl_FragColor = vec4(col, finalAlpha);
+  }
+`;
+
+const marineSnowMat = new THREE.ShaderMaterial({
+  vertexShader: marineSnowVertexShader,
+  fragmentShader: marineSnowFragmentShader,
+  uniforms: {
+    uTime: { value: 0 },
+    uUnderwaterRatio: { value: 0 },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const marineSnowPoints = new THREE.Points(marineSnowGeo, marineSnowMat);
+marineSnowPoints.visible = false;
+scene.add(marineSnowPoints);
+
+// Backward-compatibility alias
+const bubblesMesh = marineSnowPoints;
 
 // ============================================================================
 // 6. APEX ARGO PROFILING FLOAT 3D MODEL
@@ -1451,8 +1770,9 @@ const argoFloat = createArgoFloatModel();
 scene.add(argoFloat);
 
 // Submersible exploration light that illuminates the Argo float in deep water
-const argoDiveLight = new THREE.PointLight(0x70d6ff, 0.0, 25);
+const argoDiveLight = new THREE.SpotLight(0xe0f7fa, 0.0, 65, Math.PI / 3.4, 0.65, 1.2);
 scene.add(argoDiveLight);
+scene.add(argoDiveLight.target);
 
 // ============================================================================
 // 6.5. 3D OCEAN INSTRUMENTS FLEET (Argo Floats, Gliders, CTD Rosettes)
@@ -1473,7 +1793,7 @@ const selectionRingMat = new THREE.MeshBasicMaterial({
   opacity: 0.85,
 });
 const selectionRing = new THREE.Mesh(selectionRingGeo, selectionRingMat);
-selectionRing.rotation.x = Math.PI / 2;
+selectionRing.rotation.x = -Math.PI / 2;
 selectionRing.visible = false;
 scene.add(selectionRing);
 
@@ -1500,7 +1820,7 @@ if (ctdInst1) {
   instrumentsFleetGroup.add(ctdWinchCable);
 }
 
-// Instantiate each instrument from DEMO_INSTRUMENTS
+// Spawn Instruments Fleet
 DEMO_INSTRUMENTS.forEach((inst) => {
   // Primary surface Argo float is mapped to existing argoFloat
   if (inst.id === "argo-2902351") {
@@ -1512,6 +1832,12 @@ DEMO_INSTRUMENTS.forEach((inst) => {
     interactiveInstrumentsMap.set(inst.id, argoFloat);
     instrumentMeshes.push(argoFloat);
     return;
+  }
+
+  // If instrument has depth, compute 3D Y coordinate
+  if (inst.depth !== undefined && inst.position) {
+    const depthRatio = Math.min(1.0, inst.depth / 4000);
+    inst.position[1] = -depthRatio * 90.0;
   }
 
   const mesh = createInstrumentObject(inst);
@@ -1532,7 +1858,7 @@ if (slocumGliderMesh) {
     cycles: 4,
     wavelength: 5.5,
     diveAmplitude: 2.2,
-    ribbonWidth: 0.28,
+    ribbonWidth: 0.16,
     heading: [0.85, 0.4],
   });
   slocumTrail.position.copy(slocumGliderMesh.position);
@@ -1547,7 +1873,7 @@ if (sprayGliderMesh) {
     cycles: 4,
     wavelength: 6.8,
     diveAmplitude: 3.2,
-    ribbonWidth: 0.32,
+    ribbonWidth: 0.18,
     heading: [-0.75, 0.6],
   });
   sprayTrail.position.copy(sprayGliderMesh.position);
@@ -1717,6 +2043,506 @@ function createAbyssalSeabed() {
 
 const abyssalSeabed = createAbyssalSeabed();
 scene.add(abyssalSeabed);
+
+// ============================================================================
+// 🌊 6.7. INCOIS VOLUMETRIC MODEL FIELD & 20°C ISOTHERM ISOSURFACE ENGINE
+// Full water-column scalar fields (Temperature, Salinity, Current, Chlorophyll)
+// ============================================================================
+export const OCEAN_STATE = {
+  depthRatio: 0.0,
+  depthMeters: 0,
+  variable: "temp", // 'temp' | 'sal' | 'vel' | 'chl'
+  colormap: "thermal", // 'thermal' | 'haline' | 'turbo' | 'viridis' | 'chlorophyll'
+  verticalExaggeration: 1.0, // 1.0x to 8.0x
+  isothermActive: false, // Default false: clean open 3D ocean water
+  isothermTemp: 20.0, // °C
+  sliceVisible: false, // Default false: prevents fake cyan water level moving with float
+  sliceOpacity: 0.45,
+  transectVisible: false,
+  timeOffsetHours: 0, // -72 to +72
+  isPlaying: false,
+  playbackSpeed: 1.0,
+  roleMode: "forecaster", // 'forecaster' | 'public'
+  mhwStatus: null,
+};
+window.OCEAN_STATE = OCEAN_STATE;
+
+// Shaders for Volumetric Depth Slice
+const sliceVertexShader = `
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  void main() {
+    vUv = uv;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
+
+const sliceFragmentShader = `
+  varying vec2 vUv;
+  varying vec3 vWorldPos;
+  uniform sampler2D uScalarTexture;
+  uniform int uColormap;
+  uniform float uOpacity;
+  uniform float uTime;
+
+  vec3 colormapThermal(float t) {
+    if (t < 0.25) return mix(vec3(0.04, 0.12, 0.55), vec3(0.0, 0.85, 0.95), t * 4.0);
+    if (t < 0.50) return mix(vec3(0.0, 0.85, 0.95), vec3(0.95, 0.92, 0.18), (t - 0.25) * 4.0);
+    if (t < 0.75) return mix(vec3(0.95, 0.92, 0.18), vec3(1.0, 0.45, 0.0), (t - 0.50) * 4.0);
+    return mix(vec3(1.0, 0.45, 0.0), vec3(0.92, 0.05, 0.15), (t - 0.75) * 4.0);
+  }
+
+  vec3 colormapHaline(float t) {
+    if (t < 0.33) return mix(vec3(0.18, 0.05, 0.35), vec3(0.08, 0.35, 0.75), t * 3.0);
+    if (t < 0.66) return mix(vec3(0.08, 0.35, 0.75), vec3(0.12, 0.82, 0.75), (t - 0.33) * 3.0);
+    return mix(vec3(0.12, 0.82, 0.75), vec3(0.98, 0.95, 0.45), (t - 0.66) * 3.0);
+  }
+
+  vec3 colormapTurbo(float t) {
+    vec4 kVec = vec4(t, t * t, t * t * t, t * t * t * t);
+    float r = 0.1357 + dot(kVec, vec4(4.5974, -42.3277, 130.5887, -150.5614)) + 58.1375 * kVec.w * t;
+    float g = 0.0914 + dot(kVec, vec4(2.1856, 4.8052, -14.0195, 4.2109)) + 2.7747 * kVec.w * t;
+    float b = 0.1067 + dot(kVec, vec4(12.5732, -83.5881, 236.8145, -288.7800)) + 120.4814 * kVec.w * t;
+    return clamp(vec3(r, g, b), 0.0, 1.0);
+  }
+
+  vec3 colormapViridis(float t) {
+    if (t < 0.25) return mix(vec3(0.267, 0.004, 0.329), vec3(0.190, 0.407, 0.556), t * 4.0);
+    if (t < 0.50) return mix(vec3(0.190, 0.407, 0.556), vec3(0.128, 0.567, 0.551), (t - 0.25) * 4.0);
+    if (t < 0.75) return mix(vec3(0.128, 0.567, 0.551), vec3(0.369, 0.788, 0.383), (t - 0.50) * 4.0);
+    return mix(vec3(0.369, 0.788, 0.383), vec3(0.993, 0.906, 0.144), (t - 0.75) * 4.0);
+  }
+
+  vec3 colormapChlorophyll(float t) {
+    if (t < 0.3) return mix(vec3(0.04, 0.12, 0.35), vec3(0.0, 0.65, 0.75), t / 0.3);
+    if (t < 0.7) return mix(vec3(0.0, 0.65, 0.75), vec3(0.05, 0.85, 0.35), (t - 0.3) / 0.4);
+    return mix(vec3(0.05, 0.85, 0.35), vec3(0.75, 1.0, 0.2), (t - 0.7) / 0.3);
+  }
+
+  void main() {
+    float val = texture2D(uScalarTexture, vUv).r;
+    val = clamp(val, 0.0, 1.0);
+
+    vec3 col;
+    if (uColormap == 0) col = colormapThermal(val);
+    else if (uColormap == 1) col = colormapHaline(val);
+    else if (uColormap == 2) col = colormapTurbo(val);
+    else if (uColormap == 3) col = colormapViridis(val);
+    else col = colormapChlorophyll(val);
+
+    // High-precision isoline rings at 0.1 normalized intervals
+    float iso = abs(fract(val * 10.0 - 0.5) - 0.5) / max(1e-4, fwidth(val * 10.0));
+    float isoLine = 1.0 - clamp(iso, 0.0, 1.0);
+    col = mix(col, vec3(1.0, 1.0, 1.0), isoLine * 0.40);
+
+    // Smooth edge fade
+    float edge = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y));
+    float edgeAlpha = smoothstep(0.0, 0.04, edge);
+
+    gl_FragColor = vec4(col, uOpacity * edgeAlpha);
+  }
+`;
+
+// Helper: map colormap name to integer ID
+function getColormapId(name) {
+  switch (name?.toLowerCase()) {
+    case "haline": return 1;
+    case "turbo": return 2;
+    case "viridis": return 3;
+    case "chlorophyll": return 4;
+    case "thermal":
+    default: return 0;
+  }
+}
+
+// Generate DataTexture from NetCDF parser slice
+function createScalarDataTexture(slice) {
+  const N = slice.gridResolution;
+  const data = new Uint8Array(N * N * 4);
+  for (let i = 0; i < N * N; i++) {
+    const val = Math.round(slice.normalizedValues[i] * 255);
+    data[i * 4] = val;     // R
+    data[i * 4 + 1] = val; // G
+    data[i * 4 + 2] = val; // B
+    data[i * 4 + 3] = 255; // A
+  }
+  const texture = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  return texture;
+}
+
+// Initial slice calculation
+let activeSliceData = netCDFParserService.generateSlice({
+  variable: OCEAN_STATE.variable,
+  depthMeters: OCEAN_STATE.depthMeters,
+  timeOffsetHours: OCEAN_STATE.timeOffsetHours,
+});
+let scalarDataTexture = createScalarDataTexture(activeSliceData);
+
+// 1. Horizontal Volumetric Depth-Slice Mesh
+const sliceGeo = new THREE.PlaneGeometry(64, 64, 32, 32);
+sliceGeo.rotateX(-Math.PI / 2);
+
+const sliceMat = new THREE.ShaderMaterial({
+  vertexShader: sliceVertexShader,
+  fragmentShader: sliceFragmentShader,
+  uniforms: {
+    uScalarTexture: { value: scalarDataTexture },
+    uColormap: { value: getColormapId(OCEAN_STATE.colormap) },
+    uOpacity: { value: OCEAN_STATE.sliceOpacity },
+    uTime: { value: 0.0 },
+  },
+  transparent: true,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+
+const volumetricSliceMesh = new THREE.Mesh(sliceGeo, sliceMat);
+volumetricSliceMesh.name = "volumetric_depth_slice";
+volumetricSliceMesh.position.set(ARGO_FLOAT_CONFIG.x, -2.8, ARGO_FLOAT_CONFIG.z);
+volumetricSliceMesh.visible = false;
+scene.add(volumetricSliceMesh);
+
+// Glowing boundary frame around the slice
+const sliceFrameGeo = new THREE.EdgesGeometry(sliceGeo);
+const sliceFrameMat = new THREE.LineBasicMaterial({
+  color: 0x00f0ff,
+  transparent: true,
+  opacity: 0.75,
+});
+const sliceFrameMesh = new THREE.LineSegments(sliceFrameGeo, sliceFrameMat);
+volumetricSliceMesh.add(sliceFrameMesh);
+
+// 2. Vertical Transect Curtain Mesh
+const transectGeo = new THREE.PlaneGeometry(64, 95, 32, 32);
+const transectMat = new THREE.ShaderMaterial({
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform int uColormap;
+    uniform float uOpacity;
+
+    ${sliceFragmentShader.slice(sliceFragmentShader.indexOf("vec3 colormapThermal"), sliceFragmentShader.indexOf("void main()"))}
+
+    void main() {
+      // Stratified vertical depth: surface is 1.0 (warm), depth is 0.0 (abyss)
+      float depthFactor = 1.0 - vUv.y;
+      // Thermocline curve
+      float t = exp(-depthFactor * 3.5);
+      t = clamp(t, 0.0, 1.0);
+
+      vec3 col;
+      if (uColormap == 0) col = colormapThermal(t);
+      else if (uColormap == 1) col = colormapHaline(t);
+      else if (uColormap == 2) col = colormapTurbo(t);
+      else if (uColormap == 3) col = colormapViridis(t);
+      else col = colormapChlorophyll(t);
+
+      gl_FragColor = vec4(col, uOpacity * 0.85);
+    }
+  `,
+  uniforms: {
+    uColormap: { value: getColormapId(OCEAN_STATE.colormap) },
+    uOpacity: { value: 0.75 },
+  },
+  transparent: true,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+});
+
+const transectMesh = new THREE.Mesh(transectGeo, transectMat);
+transectMesh.position.set(ARGO_FLOAT_CONFIG.x, -47.5, ARGO_FLOAT_CONFIG.z - 16);
+transectMesh.visible = OCEAN_STATE.transectVisible;
+scene.add(transectMesh);
+
+// 3. 20°C Isotherm (D20) Isosurface Contoured Mesh
+function createIsothermIsosurface(targetTemp = 20.0) {
+  const d20Data = netCDFParserService.compute20DegIsothermMatrix(OCEAN_STATE.timeOffsetHours, targetTemp);
+  const N = d20Data.resolution;
+  const isoGeo = new THREE.PlaneGeometry(64, 64, N - 1, N - 1);
+  isoGeo.rotateX(-Math.PI / 2);
+
+  const posAttr = isoGeo.attributes.position;
+  const maxDepthWorld = 95.0 * OCEAN_STATE.verticalExaggeration;
+
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const idx = j * N + i;
+      const depthM = d20Data.depthMatrix[idx];
+      const yWorld = -(depthM / 4000.0) * maxDepthWorld;
+      posAttr.setY(idx, yWorld);
+    }
+  }
+  isoGeo.computeVertexNormals();
+
+  const isoMat = new THREE.MeshStandardMaterial({
+    color: 0x00f0ff,
+    roughness: 0.25,
+    metalness: 0.35,
+    transparent: true,
+    opacity: 0.58,
+    side: THREE.DoubleSide,
+    wireframe: false,
+  });
+
+  const isoMesh = new THREE.Mesh(isoGeo, isoMat);
+  isoMesh.name = "d20_isotherm_isosurface";
+  isoMesh.position.set(ARGO_FLOAT_CONFIG.x, 0, ARGO_FLOAT_CONFIG.z);
+
+  // Overlay wireframe contour isolines on top of the isosurface
+  const isoWireGeo = isoGeo.clone();
+  const isoWireMat = new THREE.MeshBasicMaterial({
+    color: 0xffe042,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.32,
+  });
+  const isoWireMesh = new THREE.Mesh(isoWireGeo, isoWireMat);
+  isoMesh.add(isoWireMesh);
+
+  isoMesh.userData = {
+    targetTemp,
+    updateDepthPositions: function(vExagg = 1.0, timeOffset = 0) {
+      const updated = netCDFParserService.compute20DegIsothermMatrix(timeOffset, isoMesh.userData.targetTemp);
+      const pos = isoGeo.attributes.position;
+      const wirePos = isoWireGeo.attributes.position;
+      const mDepthWorld = 95.0 * vExagg;
+
+      for (let k = 0; k < N * N; k++) {
+        const dM = updated.depthMatrix[k];
+        const yW = -(dM / 4000.0) * mDepthWorld;
+        pos.setY(k, yW);
+        wirePos.setY(k, yW);
+      }
+      isoGeo.computeVertexNormals();
+      isoGeo.attributes.position.needsUpdate = true;
+      isoWireGeo.attributes.position.needsUpdate = true;
+    }
+  };
+
+  return isoMesh;
+}
+
+const isothermMesh = createIsothermIsosurface(OCEAN_STATE.isothermTemp);
+isothermMesh.visible = OCEAN_STATE.isothermActive;
+scene.add(isothermMesh);
+
+// Function to refresh volumetric scalar fields
+function refreshVolumetricFields() {
+  activeSliceData = netCDFParserService.generateSlice({
+    variable: OCEAN_STATE.variable,
+    depthMeters: OCEAN_STATE.depthMeters,
+    timeOffsetHours: OCEAN_STATE.timeOffsetHours,
+  });
+
+  const N = activeSliceData.gridResolution;
+  const texData = scalarDataTexture.image.data;
+  for (let i = 0; i < N * N; i++) {
+    const val = Math.round(activeSliceData.normalizedValues[i] * 255);
+    texData[i * 4] = val;
+    texData[i * 4 + 1] = val;
+    texData[i * 4 + 2] = val;
+    texData[i * 4 + 3] = 255;
+  }
+  scalarDataTexture.needsUpdate = true;
+
+  sliceMat.uniforms.uColormap.value = getColormapId(OCEAN_STATE.colormap);
+  sliceMat.uniforms.uOpacity.value = OCEAN_STATE.sliceOpacity;
+  transectMat.uniforms.uColormap.value = getColormapId(OCEAN_STATE.colormap);
+
+  if (isothermMesh && isothermMesh.userData.updateDepthPositions) {
+    isothermMesh.userData.updateDepthPositions(OCEAN_STATE.verticalExaggeration, OCEAN_STATE.timeOffsetHours);
+  }
+
+  // Dispatch custom event for UI updates
+  window.dispatchEvent(new CustomEvent("ocean-field-updated", {
+    detail: {
+      variable: OCEAN_STATE.variable,
+      cfMetadata: CF_CONVENTIONS[OCEAN_STATE.variable],
+      depthMeters: OCEAN_STATE.depthMeters,
+      timeOffsetHours: OCEAN_STATE.timeOffsetHours,
+      colormap: OCEAN_STATE.colormap,
+      verticalExaggeration: OCEAN_STATE.verticalExaggeration,
+      isothermActive: OCEAN_STATE.isothermActive,
+      isothermTemp: OCEAN_STATE.isothermTemp,
+    }
+  }));
+}
+
+// ============================================================================
+// 🎛️ PUBLIC WINDOW API CONTROLS (For HTML HUD & React Components)
+// ============================================================================
+window.setVolumetricVariable = function(varName) {
+  if (CF_CONVENTIONS[varName]) {
+    OCEAN_STATE.variable = varName;
+    OCEAN_STATE.colormap = CF_CONVENTIONS[varName].colormap;
+    refreshVolumetricFields();
+    console.log(`[Volumetric] Variable switched to ${varName} (${CF_CONVENTIONS[varName].standard_name})`);
+  }
+};
+
+window.setVolumetricColormap = function(cmapName) {
+  OCEAN_STATE.colormap = cmapName;
+  refreshVolumetricFields();
+};
+
+window.setVolumetricOpacity = function(opacity) {
+  OCEAN_STATE.sliceOpacity = Math.max(0.1, Math.min(1.0, opacity));
+  sliceMat.uniforms.uOpacity.value = OCEAN_STATE.sliceOpacity;
+};
+
+window.toggleVolumetricSlice = function(visible) {
+  OCEAN_STATE.sliceVisible = visible !== undefined ? visible : !volumetricSliceMesh.visible;
+  volumetricSliceMesh.visible = OCEAN_STATE.sliceVisible;
+};
+
+window.setIsothermActive = function(active) {
+  OCEAN_STATE.isothermActive = active;
+  isothermMesh.visible = active;
+};
+
+window.setIsothermThreshold = function(tempC) {
+  OCEAN_STATE.isothermTemp = parseFloat(tempC);
+  isothermMesh.userData.targetTemp = OCEAN_STATE.isothermTemp;
+  refreshVolumetricFields();
+};
+
+window.setVerticalExaggeration = function(mult) {
+  const clamped = Math.max(1.0, Math.min(8.0, parseFloat(mult) || 1.0));
+  OCEAN_STATE.verticalExaggeration = clamped;
+
+  // Re-trigger depth positioning with new exaggeration factor
+  if (window.setOceanDepth) {
+    window.setOceanDepth(OCEAN_STATE.depthRatio);
+  }
+  refreshVolumetricFields();
+  console.log(`[Core] Vertical Exaggeration set to ${clamped.toFixed(1)}x`);
+};
+
+window.setSimulationTimeOffset = function(hours) {
+  OCEAN_STATE.timeOffsetHours = Math.max(-72, Math.min(72, parseFloat(hours) || 0));
+  refreshVolumetricFields();
+};
+
+window.toggleSimulationPlay = function() {
+  OCEAN_STATE.isPlaying = !OCEAN_STATE.isPlaying;
+  return OCEAN_STATE.isPlaying;
+};
+
+window.setSimulationSpeed = function(speed) {
+  OCEAN_STATE.playbackSpeed = parseFloat(speed) || 1.0;
+};
+
+window.setRoleMode = function(mode) {
+  OCEAN_STATE.roleMode = mode === "public" ? "public" : "forecaster";
+  document.body.setAttribute("data-role-mode", OCEAN_STATE.roleMode);
+
+  window.dispatchEvent(new CustomEvent("role-mode-changed", {
+    detail: { mode: OCEAN_STATE.roleMode }
+  }));
+  console.log(`[Role] Mode switched to: ${OCEAN_STATE.roleMode.toUpperCase()}`);
+};
+
+window.copyShareableLink = function() {
+  const url = ShareableStateService.serializeToUrl({
+    depth: OCEAN_STATE.depthMeters,
+    variable: OCEAN_STATE.variable,
+    timeOffset: OCEAN_STATE.timeOffsetHours,
+    isothermActive: OCEAN_STATE.isothermActive,
+    isothermTemp: OCEAN_STATE.isothermTemp,
+    verticalExaggeration: OCEAN_STATE.verticalExaggeration,
+    roleMode: OCEAN_STATE.roleMode,
+    colormap: OCEAN_STATE.colormap,
+  });
+
+  navigator.clipboard.writeText(url).then(() => {
+    const toast = document.createElement("div");
+    toast.className = "share-toast-notification";
+    toast.textContent = "🔗 Sharable Ocean View URL copied to clipboard!";
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3200);
+  }).catch((err) => {
+    prompt("Copy shareable URL:", url);
+  });
+};
+
+window.captureHighResScreenshot = function() {
+  renderer.render(scene, camera);
+  const dataUrl = renderer.domElement.toDataURL("image/png");
+  const link = document.createElement("a");
+  const dateStr = new Date().toISOString().replace(/[:.]/g, "-");
+  link.download = `INCOIS_3D_Ocean_${OCEAN_STATE.variable.toUpperCase()}_${OCEAN_STATE.depthMeters}m_${dateStr}.png`;
+  link.href = dataUrl;
+  link.click();
+};
+
+window.exportOceanReport = function() {
+  const report = {
+    institution: "INCOIS - Indian National Centre for Ocean Information Services",
+    project: "Web-Based 3D Ocean Data Visualization System",
+    problemId: "26067",
+    timestamp: new Date().toISOString(),
+    viewState: {
+      depthMeters: OCEAN_STATE.depthMeters,
+      activeVariable: OCEAN_STATE.variable,
+      cfMetadata: CF_CONVENTIONS[OCEAN_STATE.variable],
+      colormap: OCEAN_STATE.colormap,
+      verticalExaggeration: `${OCEAN_STATE.verticalExaggeration.toFixed(1)}x`,
+      temporalOffsetHours: OCEAN_STATE.timeOffsetHours,
+      d20IsothermTemp: `${OCEAN_STATE.isothermTemp}°C`,
+      roleMode: OCEAN_STATE.roleMode,
+    },
+    marineHeatwave: MarineHeatwaveService.evaluateMHW(28.5 + (OCEAN_STATE.timeOffsetHours / 72)),
+    telemetry: DEMO_INSTRUMENTS,
+  };
+
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.download = `INCOIS_Oceanographic_Summary_${Date.now()}.json`;
+  link.href = url;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+// Ingest ASCII/CSV telemetry data directly from user file or paste
+window.ingestAsciiBuoyData = function(text) {
+  try {
+    const result = AsciiBuoyParser.parse(text);
+    console.log(`✅ [ASCII Ingest] Successfully parsed ${result.rowCount} records:`, result.headers);
+    alert(`✅ Successfully ingested ${result.rowCount} records from ASCII buoy telemetry!`);
+    return result;
+  } catch (err) {
+    alert(`❌ Ingestion failed: ${err.message}`);
+    return null;
+  }
+};
+
+// Initial state restore from URL if deep-link parameters exist
+try {
+  const deepState = ShareableStateService.parseFromUrl();
+  if (deepState.variable) OCEAN_STATE.variable = deepState.variable;
+  if (deepState.colormap) OCEAN_STATE.colormap = deepState.colormap;
+  if (deepState.timeOffset !== undefined) OCEAN_STATE.timeOffsetHours = deepState.timeOffset;
+  if (deepState.isothermActive !== undefined) OCEAN_STATE.isothermActive = deepState.isothermActive;
+  if (deepState.isothermTemp !== undefined) OCEAN_STATE.isothermTemp = deepState.isothermTemp;
+  if (deepState.verticalExaggeration !== undefined) OCEAN_STATE.verticalExaggeration = deepState.verticalExaggeration;
+  if (deepState.roleMode) OCEAN_STATE.roleMode = deepState.roleMode;
+} catch (e) {
+  console.warn("Could not parse deep link params", e);
+}
+
+
 
 // Update the right-side glassmorphism telemetry panel with active instrument
 function updateTelemetryPanelWithInstrument(inst) {
@@ -2028,15 +2854,30 @@ window.setOceanDepth = function (ratio) {
   // ratio: 0.0 (0m, Top level) -> 1.0 (4000m, Extreme Hadal Abyss)
   const depthMeters = Math.round(ratio * 4000);
 
-  // 1. STRAIGHT VERTICAL DIVE:
-  // Deep camera travel: plunges straight down from y = 3.2 to y = -90.0
-  const startCamY = 3.2;
-  const maxUnderwaterDepth = 95.0;
-  const targetCamY = startCamY - ratio * maxUnderwaterDepth;
+  // 1. DIVE DYNAMICS FOR ARGO FLOAT & CAMERA:
+  // The Argo float submerges beneath the surface (y = 0) and travels into the deep ocean
+  const baseDepth = 95.0;
+  const maxUnderwaterDepth = baseDepth * (OCEAN_STATE.verticalExaggeration || 1.0);
+  argoDiveRatio = ratio;
+  argoDiveY = -ratio * maxUnderwaterDepth;
+  argoFloat.visible = true;
+
+  // Camera follows the float down into the ocean water column, positioned above and behind the float
+  // so the user can look up and see the real water surface (y = 0) high above,
+  // and see the float completely submerged in open 3D ocean water!
+  let targetCamY;
+  let targetLookY;
+  if (ratio <= 0.002) {
+    targetCamY = 3.2;
+    targetLookY = 1.8;
+  } else {
+    targetCamY = argoDiveY + 3.0;
+    targetLookY = argoDiveY + 0.6;
+  }
   camera.position.y = targetCamY;
 
-  // Keep orbit control target centered around the diving Argo float
-  controls.target.y = targetCamY - 1.2;
+  // Keep orbit controls centered on the diving float
+  controls.target.y = targetLookY;
   controls.target.x = ARGO_FLOAT_CONFIG.x;
   controls.target.z = ARGO_FLOAT_CONFIG.z;
 
@@ -2070,9 +2911,9 @@ window.setOceanDepth = function (ratio) {
   sunGlowMesh.material.opacity = sunFade * 0.7;
   sunGroup.visible = sunFade > 0.01;
 
-  // Keep surface water visible from below with luminous blueish transparency
-  // (Prevents the water mesh from vanishing into pitch black!)
-  const surfaceFade = Math.max(0.40, 1.0 - ratio * 0.65);
+  // Keep surface water visible from below with luminous optical transmission
+  // (In deep abyss > 250m, shader automatically dissolves surface via depth absorption)
+  const surfaceFade = Math.max(0.20, 1.0 - ratio * 0.75);
   waterMaterial.opacity = surfaceFade;
   water.visible = true;
 
@@ -2083,49 +2924,51 @@ window.setOceanDepth = function (ratio) {
   waterMaterial.uniforms.uSunPosition.value.y = newSunY;
   skyMat.uniforms.uSunPosition.value.y = newSunY;
 
-  // 3. PROGRESSIVE RICH OCEANIC BLUE LIGHTING & SHADING (0m -> 4000m):
-  // When camera/device dives deep underground/underwater, keep water rich blueish dark instead of whole black!
+  // 3. PROGRESSIVE PHYSICAL BEER-LAMBERT OPTICAL ABSORPTION (0m -> 4000m):
   skyMat.uniforms.uUnderwaterRatio.value = ratio;
+  skyMat.uniforms.uCameraDepth.value = depthMeters;
+  waterMaterial.uniforms.uUnderwaterRatio.value = ratio;
 
-  // Luminous deep oceanic blue palette for deep abyss (Noticeably blueish, darker, NOT whole black!)
-  // Calibrated for ACES Filmic Tone Mapping so colors stay rich and vibrant:
-  const deepAbyssZenith = new THREE.Color(0x185890);   // Glowing azure surface-filtered blue
-  const deepAbyssHorizon = new THREE.Color(0x0f4270);  // Rich oceanic deep marine blue
-  const deepAbyssBottom = new THREE.Color(0x0a2f54);   // Deep abyssal navy blue (Rich dark blueish, NEVER black!)
-
-  const surfaceSkyTop = new THREE.Color(0x2a75b3);
-  skyMat.uniforms.uTopColor.value.lerpColors(
-    surfaceSkyTop,
-    deepAbyssZenith,
-    Math.min(1.0, ratio * 1.4),
-  );
-
-  const surfaceHorizon = new THREE.Color(0xffe6a3);
-  skyMat.uniforms.uHorizonColor.value.lerpColors(
-    surfaceHorizon,
-    deepAbyssHorizon,
-    Math.min(1.0, ratio * 1.5),
-  );
-
-  skyMat.uniforms.uBottomColor.value.copy(deepAbyssBottom);
-
-  // Atmospheric Underwater Oceanic Blue Fog:
-  // Envelops the underwater environment in a luminous deep blue marine mist
+  // Dynamic Multi-Spectral Oceanic Fog:
+  // Models the physical wavelength absorption of seawater (red -> green -> blue -> abyss)
   if (ratio > 0.015) {
-    const fogRatio = Math.min(1.0, (ratio - 0.015) / 0.985);
-    const shallowBlueFog = new THREE.Color(0x0284c7); // 0-100m tropical azure ocean
-    const deepBlueFog = new THREE.Color(0x0c3a66);    // 1000m+ rich dark blue (NOT black!)
-    const currentFogColor = new THREE.Color().lerpColors(
-      shallowBlueFog,
-      deepBlueFog,
-      fogRatio,
-    );
+    let currentFogColor;
+    let currentFogDensity;
+
+    if (ratio < 0.04) {
+      // Epipelagic Photic Zone (0m - 160m): Tropical Azure to Photic Sapphire
+      const t = ratio / 0.04;
+      currentFogColor = new THREE.Color().lerpColors(
+        new THREE.Color(0x0284c7),
+        new THREE.Color(0x034f8a),
+        t
+      );
+      currentFogDensity = 0.010 + t * 0.003;
+    } else if (ratio < 0.18) {
+      // Mesopelagic Twilight Zone (160m - 720m): Sapphire to Oceanic Indigo
+      const t = (ratio - 0.04) / 0.14;
+      currentFogColor = new THREE.Color().lerpColors(
+        new THREE.Color(0x034f8a),
+        new THREE.Color(0x041f48),
+        t
+      );
+      currentFogDensity = 0.013 + t * 0.004;
+    } else {
+      // Bathypelagic & Hadal Abyss (>720m to 4000m): Deep Velvety Oceanic Midnight (NOT raw flat grey)
+      const t = Math.min(1.0, (ratio - 0.18) / 0.82);
+      currentFogColor = new THREE.Color().lerpColors(
+        new THREE.Color(0x041f48),
+        new THREE.Color(0x010816),
+        t
+      );
+      currentFogDensity = 0.017 + t * 0.005;
+    }
 
     if (!scene.fog) {
-      scene.fog = new THREE.FogExp2(currentFogColor, 0.011);
+      scene.fog = new THREE.FogExp2(currentFogColor, currentFogDensity);
     } else {
       scene.fog.color.copy(currentFogColor);
-      scene.fog.density = 0.009 + fogRatio * 0.005;
+      scene.fog.density = currentFogDensity;
     }
     renderer.setClearColor(currentFogColor, 1.0);
   } else {
@@ -2135,7 +2978,7 @@ window.setOceanDepth = function (ratio) {
 
   // 4. WATER SHADER COLOR & SPECULAR (Rich Blueish Tone):
   const surfaceWater = new THREE.Color(0x0284c7);
-  const deepOceanBlue = new THREE.Color(0x12528a); // Rich oceanic blue (clearly blue, not black)
+  const deepOceanBlue = new THREE.Color(0x0a3b68);
   waterMaterial.uniforms.uSurfaceColor.value.lerpColors(
     surfaceWater,
     deepOceanBlue,
@@ -2143,55 +2986,74 @@ window.setOceanDepth = function (ratio) {
   );
 
   const surfaceDepthColor = new THREE.Color(0x073b6a);
-  const deepWaterBase = new THREE.Color(0x0e3b66);  // Deep marine navy blue (instead of black)
+  const deepWaterBase = new THREE.Color(0x062242);
   waterMaterial.uniforms.uDepthColor.value.lerpColors(
     surfaceDepthColor,
     deepWaterBase,
     Math.min(1.0, ratio * 1.6),
   );
 
-  // Keep sky horizon reflection synchronized with deep water
+  // Synchronize sky horizon reflection with deep water
   waterMaterial.uniforms.uSkyHorizonColor.value.copy(skyMat.uniforms.uHorizonColor.value);
 
   // 5. AMBIENT & SUN LIGHTING IN DEEP WATER COLUMN:
+  // Sunlight attenuates exponentially following Beer-Lambert law
   const lightFactor = Math.max(
-    0.05,
-    Math.pow(1.0 - Math.min(1.0, ratio * 1.2), 2.0),
+    0.0,
+    Math.pow(1.0 - Math.min(1.0, ratio * 1.4), 2.5),
   );
   sunLight.intensity = 2.5 * lightFactor;
 
-  // Ambient light transitions to rich deep blue and remains luminous
+  // Ambient light provides soft oceanic fill
   const surfaceAmbientColor = new THREE.Color(0xffffff);
-  const deepOceanAmbientColor = new THREE.Color(0x22669e); // Vibrant deep blue ambient illumination
+  const deepOceanAmbientColor = new THREE.Color(0x164673);
   ambientLight.color.lerpColors(
     surfaceAmbientColor,
     deepOceanAmbientColor,
-    Math.min(1.0, ratio * 1.4),
+    Math.min(1.0, ratio * 1.3),
   );
-  ambientLight.intensity = Math.max(0.70, 1.15 * (1.0 - ratio * 0.35)); // Keeps instruments and water clearly visible!
+  ambientLight.intensity = Math.max(0.45, 1.15 * (1.0 - ratio * 0.55));
+
+  // 5.5 VOLUMETRIC GOD RAYS (SUNLIGHT SHAFTS):
+  // Active only in photic layer (0m - 200m)
+  const inPhoticZone = ratio > 0.005 && ratio < 0.055;
+  godRaysGroup.visible = inPhoticZone;
+  if (inPhoticZone) {
+    godRayMat.uniforms.uDepthFade.value = Math.max(0.0, 1.0 - (ratio - 0.005) * 22.0);
+  }
 
   // 6. APEX ARGO FLOAT DIVE SYNCHRONIZATION:
-  argoDiveRatio = ratio;
-  argoDiveY = -ratio * maxUnderwaterDepth;
-  argoFloat.visible = true;
+  // Synchronize Volumetric Slicing Mesh with depth descent (positioned below float's sensor pod)
+  if (volumetricSliceMesh) {
+    volumetricSliceMesh.position.y = argoDiveY - 2.8;
+    volumetricSliceMesh.visible = OCEAN_STATE.sliceVisible;
+  }
+  OCEAN_STATE.depthRatio = ratio;
+  OCEAN_STATE.depthMeters = depthMeters;
+  if (typeof refreshVolumetricFields === "function") {
+    refreshVolumetricFields();
+  }
 
-  // Submersible inspection light that illuminates the float and surrounding water
+  // Focused Submersible Inspection Spotlight aimed at the APEX Float
   argoDiveLight.position.set(
-    ARGO_FLOAT_CONFIG.x,
-    targetCamY + 2.5,
-    ARGO_FLOAT_CONFIG.z + 4.0,
+    ARGO_FLOAT_CONFIG.x - 2.8,
+    argoDiveY + 5.5,
+    ARGO_FLOAT_CONFIG.z + 5.6,
   );
-  argoDiveLight.color.setHex(0x38bdf8); // Cyan-blue exploration spotlight
-  argoDiveLight.distance = 55;
+  argoDiveLight.target.position.set(
+    ARGO_FLOAT_CONFIG.x,
+    argoDiveY,
+    ARGO_FLOAT_CONFIG.z,
+  );
+  argoDiveLight.target.updateMatrixWorld();
+  argoDiveLight.color.setHex(0xe0f7fa);
+  argoDiveLight.distance = 65;
   argoDiveLight.intensity =
-    ratio > 0.015 ? Math.min(3.2, 1.2 + ratio * 2.0) : 0.0;
+    ratio > 0.015 ? Math.min(4.8, 1.5 + ratio * 3.3) : 0.0;
 
-  // 7. PROCEDURAL RISING BUBBLES:
-  bubblesMesh.visible = ratio > 0.015;
-  const bubbleBright = new THREE.Color(0xdbf7ff);
-  const bubbleDeep = new THREE.Color(0x38bdf8);
-  bubbleMat.color.lerpColors(bubbleBright, bubbleDeep, ratio);
-  bubbleMat.opacity = Math.max(0.35, 0.85 - ratio * 0.25);
+  // 7. ULTRA-REALISTIC MARINE SNOW PARTICLES:
+  marineSnowPoints.visible = ratio > 0.008;
+  marineSnowMat.uniforms.uUnderwaterRatio.value = ratio;
 };
 
 // ============================================================================
@@ -2207,8 +3069,23 @@ function animate() {
 
   const elapsedTime = clock.getElapsedTime();
 
-  // 1. Update Water Shader Time Uniform
+  // 1. Update Water Shader & Volumetric Slice Time Uniforms
   waterMaterial.uniforms.uTime.value = elapsedTime;
+  if (typeof sliceMat !== "undefined" && sliceMat.uniforms) {
+    sliceMat.uniforms.uTime.value = elapsedTime;
+  }
+
+  // 1.5 4D Simulation Temporal Advance
+  if (OCEAN_STATE.isPlaying) {
+    OCEAN_STATE.timeOffsetHours += 0.08 * OCEAN_STATE.playbackSpeed;
+    if (OCEAN_STATE.timeOffsetHours > 72) {
+      OCEAN_STATE.timeOffsetHours = -72;
+    }
+    if (typeof refreshVolumetricFields === "function") {
+      refreshVolumetricFields();
+    }
+  }
+
 
   // 2. Realistic Floating, Diving & Bobbing Effect for APEX Argo Float
   if (argoFloat.visible) {
@@ -2255,28 +3132,12 @@ function animate() {
   // 4. Subtle Sun Glow pulsation
   sunGlowMesh.scale.setScalar(1.0 + 0.04 * Math.sin(elapsedTime * 1.5));
 
-  // 5. Animate Rising Bubbles (when diving underwater)
-  if (bubblesMesh.visible) {
-    const camY = camera.position.y;
-    for (let i = 0; i < BUBBLE_COUNT; i++) {
-      const b = bubbleData[i];
-      b.y += b.speed;
-      b.x += Math.sin(elapsedTime * 2.5 + b.phase) * 0.015;
-      b.z += Math.cos(elapsedTime * 2.0 + b.phase) * 0.015;
-
-      // When bubble reaches the water surface, reset beneath camera
-      if (b.y >= -0.1) {
-        b.y = Math.min(-1.0, camY - 8.0 - Math.random() * 12.0);
-        b.x = camera.position.x + (Math.random() - 0.5) * 35;
-        b.z = camera.position.z + (Math.random() - 0.5) * 35;
-      }
-
-      dummy.position.set(b.x, b.y, b.z);
-      dummy.scale.set(b.scale, b.scale, b.scale);
-      dummy.updateMatrix();
-      bubblesMesh.setMatrixAt(i, dummy.matrix);
-    }
-    bubblesMesh.instanceMatrix.needsUpdate = true;
+  // 5. Animate Volumetric God Rays & Deep-Sea Marine Snow
+  if (godRaysGroup && godRaysGroup.visible) {
+    godRayMat.uniforms.uTime.value = elapsedTime;
+  }
+  if (marineSnowPoints && marineSnowPoints.visible) {
+    marineSnowMat.uniforms.uTime.value = elapsedTime;
   }
 
   // 6. Animate Ocean Instruments Fleet (Gliders sawtooth flight, CTD swaying, beacons pulsing)

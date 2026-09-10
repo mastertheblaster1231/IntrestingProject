@@ -901,22 +901,217 @@
         color: #020713;
       }
 
-      /* Seamless Transition Overlay */
-      .transition-overlay {
+      /* ======================================================================
+         📐 MARKER SIZING & ZOOM OPTIONS MODAL
+         ====================================================================== */
+      .marker-settings-modal {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: #020713;
-        z-index: 9999;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+        left: 80px;
+        bottom: 24px;
+        width: 320px;
+        max-width: calc(100vw - 100px);
+        background: rgba(6, 16, 36, 0.95);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1.5px solid rgba(0, 229, 255, 0.4);
+        border-radius: 18px;
+        padding: 18px 20px;
+        z-index: 100;
+        display: none;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.22);
+        animation: fadeInModal 0.22s cubic-bezier(0.16, 1, 0.3, 1);
       }
-      .transition-overlay.active {
-        opacity: 1;
-        pointer-events: auto;
+      .marker-settings-modal.visible {
+        display: flex;
+      }
+      @keyframes fadeInModal {
+        from { opacity: 0; transform: translateY(8px) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1.0); }
+      }
+      .marker-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 10px;
+      }
+      .marker-modal-title {
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #00e5ff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .marker-modal-close {
+        background: rgba(255, 255, 255, 0.08);
+        border: none;
+        color: #94a3b8;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+      }
+      .marker-modal-close:hover {
+        background: rgba(255, 59, 48, 0.35);
+        color: #ffffff;
+      }
+      .marker-modal-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .setting-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .field-label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .field-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #d1e2f3;
+      }
+      .field-value {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #00e5ff;
+      }
+      .field-hint {
+        font-size: 0.67rem;
+        color: #64748b;
+        line-height: 1.25;
+      }
+      .preset-pill-group {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .preset-pill-btn {
+        background: rgba(14, 30, 56, 0.8);
+        border: 1px solid rgba(0, 229, 255, 0.2);
+        color: #94a3b8;
+        padding: 6px 4px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+      }
+      .preset-pill-btn:hover {
+        color: #ffffff;
+        border-color: #00e5ff;
+        background: rgba(0, 229, 255, 0.15);
+      }
+      .preset-pill-btn.active {
+        background: rgba(0, 229, 255, 0.25);
+        border-color: #00f0ff;
+        color: #ffffff;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+      }
+      .hud-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        background: rgba(15, 34, 64, 0.9);
+        border-radius: 4px;
+        outline: none;
+        border: 1px solid rgba(0, 229, 255, 0.25);
+        cursor: pointer;
+      }
+      .hud-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #00e5ff;
+        box-shadow: 0 0 8px #00e5ff;
+        cursor: pointer;
+        transition: transform 0.15s;
+      }
+      .hud-slider::-webkit-slider-thumb:hover {
+        transform: scale(1.25);
+      }
+      .setting-toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .hud-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+      }
+      .hud-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .hud-switch-track {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background-color: rgba(15, 34, 64, 0.9);
+        border: 1px solid rgba(0, 229, 255, 0.25);
+        border-radius: 20px;
+        transition: 0.25s;
+      }
+      .hud-switch-track:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: #94a3b8;
+        border-radius: 50%;
+        transition: 0.25s;
+      }
+      .hud-switch input:checked + .hud-switch-track {
+        background-color: rgba(0, 229, 255, 0.35);
+        border-color: #00e5ff;
+      }
+      .hud-switch input:checked + .hud-switch-track:before {
+        transform: translateX(18px);
+        background-color: #00e5ff;
+        box-shadow: 0 0 8px #00e5ff;
+      }
+      .modal-footer-actions {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 4px;
+      }
+      .btn-secondary-hud {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #cbd5e1;
+        padding: 5px 12px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-secondary-hud:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
       }
     </style>
   </head>
@@ -930,8 +1125,9 @@
         <div class="hud-title">
           <span>⚓ INCOIS Ocean Observation Buoys</span>
           <span class="badge">OON / ARGO</span>
+          <span class="badge" style="background: linear-gradient(135deg, #10b981, #059669);">SIH ID: 26067</span>
         </div>
-        <div class="hud-subtitle">3D Globe & APEX Profiling Floats Network</div>
+        <div class="hud-subtitle">3D Globe & APEX Profiling Floats Network · ERDDAP & NetCDF Integrated</div>
       </div>
     </div>
 
@@ -1120,6 +1316,85 @@
           <circle cx="12" cy="12" r="2" fill="currentColor"/>
         </svg>
       </button>
+
+      <!-- Marker Size & Zoom Options Toggle -->
+      <button class="nav-ctrl-btn nav-marker-btn" id="btnMarkerSettings" onclick="toggleMarkerSettingsModal()" title="Marker Size & Zoom Options">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- ======================================================================
+         📐 MARKER SIZE & ZOOM OPTIONS MODAL
+         ====================================================================== -->
+    <div id="markerSettingsModal" class="marker-settings-modal glass-panel">
+      <div class="marker-modal-header">
+        <div class="marker-modal-title">
+          <span>📐 Marker Size & Zoom Options</span>
+        </div>
+        <button class="marker-modal-close" onclick="toggleMarkerSettingsModal()" title="Close options">✕</button>
+      </div>
+
+      <div class="marker-modal-body">
+        <!-- Quick Presets -->
+        <div class="setting-field">
+          <label class="field-label">Quick Presets</label>
+          <div class="preset-pill-group">
+            <button class="preset-pill-btn" id="presetCompactBtn" onclick="applyMarkerPreset('compact')">🎯 Compact</button>
+            <button class="preset-pill-btn active" id="presetBalancedBtn" onclick="applyMarkerPreset('balanced')">⚖️ Balanced</button>
+            <button class="preset-pill-btn" id="presetProminentBtn" onclick="applyMarkerPreset('prominent')">🔍 Large</button>
+          </div>
+        </div>
+
+        <!-- Master Size Slider -->
+        <div class="setting-field">
+          <div class="field-label-row">
+            <span class="field-label">Master Icon Size</span>
+            <span class="field-value" id="valMasterScale">0.70x</span>
+          </div>
+          <input type="range" class="hud-slider" id="sliderMasterScale" min="0.25" max="2.00" step="0.05" value="0.70" oninput="onMarkerSliderInput()">
+          <span class="field-hint">Overall scaling factor for all markers</span>
+        </div>
+
+        <!-- Zoom In Min Scale -->
+        <div class="setting-field">
+          <div class="field-label-row">
+            <span class="field-label">Zoomed-In Size (Min Scale)</span>
+            <span class="field-value" id="valMinScale">0.055</span>
+          </div>
+          <input type="range" class="hud-slider" id="sliderMinScale" min="0.02" max="0.25" step="0.005" value="0.055" oninput="onMarkerSliderInput()">
+          <span class="field-hint">Controls size when zoomed in (prevents cluster overlap)</span>
+        </div>
+
+        <!-- Zoom Out Max Scale -->
+        <div class="setting-field">
+          <div class="field-label-row">
+            <span class="field-label">Zoomed-Out Size (Max Scale)</span>
+            <span class="field-value" id="valMaxScale">0.42</span>
+          </div>
+          <input type="range" class="hud-slider" id="sliderMaxScale" min="0.15" max="1.20" step="0.03" value="0.42" oninput="onMarkerSliderInput()">
+          <span class="field-hint">Controls size when viewing entire Earth from space</span>
+        </div>
+
+        <!-- Dynamic Zoom Toggle -->
+        <div class="setting-toggle-row">
+          <div>
+            <div class="field-label">Dynamic Zoom Auto-Scaling</div>
+            <div class="field-hint">Automatically resize icons as camera zooms in & out</div>
+          </div>
+          <label class="hud-switch">
+            <input type="checkbox" id="checkDynamicZoom" checked onchange="onMarkerSliderInput()">
+            <span class="hud-switch-track"></span>
+          </label>
+        </div>
+
+        <!-- Reset Button -->
+        <div class="modal-footer-actions">
+          <button class="btn-secondary-hud" onclick="resetMarkerSettings()">↺ Reset to Defaults</button>
+        </div>
+      </div>
     </div>
 
     <!-- ======================================================================
@@ -1382,6 +1657,100 @@
           toggleText.textContent = 'Observation Points';
         }
       }
+
+      // Marker Size & Scaling Options Controller
+      function toggleMarkerSettingsModal() {
+        const modal = document.getElementById('markerSettingsModal');
+        if (modal) {
+          modal.classList.toggle('visible');
+        }
+      }
+
+      function applyMarkerPreset(presetName) {
+        document.querySelectorAll('.preset-pill-btn').forEach(b => b.classList.remove('active'));
+        const activeBtn = document.getElementById(
+          presetName === 'compact' ? 'presetCompactBtn' :
+          presetName === 'prominent' ? 'presetProminentBtn' : 'presetBalancedBtn'
+        );
+        if (activeBtn) activeBtn.classList.add('active');
+
+        let cfg = { masterScale: 0.70, minScale: 0.055, maxScale: 0.42, dynamicZoom: true };
+        if (presetName === 'compact') {
+          cfg = { masterScale: 0.50, minScale: 0.035, maxScale: 0.28, dynamicZoom: true };
+        } else if (presetName === 'prominent') {
+          cfg = { masterScale: 1.10, minScale: 0.090, maxScale: 0.65, dynamicZoom: true };
+        }
+
+        // Update inputs
+        const slMaster = document.getElementById('sliderMasterScale');
+        const slMin = document.getElementById('sliderMinScale');
+        const slMax = document.getElementById('sliderMaxScale');
+        const chkDyn = document.getElementById('checkDynamicZoom');
+
+        if (slMaster) slMaster.value = cfg.masterScale;
+        if (slMin) slMin.value = cfg.minScale;
+        if (slMax) slMax.value = cfg.maxScale;
+        if (chkDyn) chkDyn.checked = cfg.dynamicZoom;
+
+        updateSliderDisplayValues(cfg);
+        if (window.updateMarkerSizing) {
+          window.updateMarkerSizing(cfg);
+        }
+      }
+
+      function updateSliderDisplayValues(cfg) {
+        const valMaster = document.getElementById('valMasterScale');
+        const valMin = document.getElementById('valMinScale');
+        const valMax = document.getElementById('valMaxScale');
+
+        if (valMaster) valMaster.textContent = `${parseFloat(cfg.masterScale).toFixed(2)}x`;
+        if (valMin) valMin.textContent = parseFloat(cfg.minScale).toFixed(3);
+        if (valMax) valMax.textContent = parseFloat(cfg.maxScale).toFixed(2);
+      }
+
+      function onMarkerSliderInput() {
+        const slMaster = document.getElementById('sliderMasterScale');
+        const slMin = document.getElementById('sliderMinScale');
+        const slMax = document.getElementById('sliderMaxScale');
+        const chkDyn = document.getElementById('checkDynamicZoom');
+
+        const cfg = {
+          masterScale: parseFloat(slMaster ? slMaster.value : 0.70),
+          minScale: parseFloat(slMin ? slMin.value : 0.055),
+          maxScale: parseFloat(slMax ? slMax.value : 0.42),
+          dynamicZoom: chkDyn ? chkDyn.checked : true,
+        };
+
+        // De-select presets when custom sliders are moved
+        document.querySelectorAll('.preset-pill-btn').forEach(b => b.classList.remove('active'));
+
+        updateSliderDisplayValues(cfg);
+        if (window.updateMarkerSizing) {
+          window.updateMarkerSizing(cfg);
+        }
+      }
+
+      function resetMarkerSettings() {
+        applyMarkerPreset('balanced');
+      }
+
+      // Initialize UI values from current ANCHOR_SIZE_CONFIG on page load
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          const cfg = window.ANCHOR_SIZE_CONFIG || { masterScale: 0.70, minScale: 0.055, maxScale: 0.42, dynamicZoom: true };
+          const slMaster = document.getElementById('sliderMasterScale');
+          const slMin = document.getElementById('sliderMinScale');
+          const slMax = document.getElementById('sliderMaxScale');
+          const chkDyn = document.getElementById('checkDynamicZoom');
+
+          if (slMaster) slMaster.value = cfg.masterScale;
+          if (slMin) slMin.value = cfg.minScale;
+          if (slMax) slMax.value = cfg.maxScale;
+          if (chkDyn) chkDyn.checked = cfg.dynamicZoom !== false;
+
+          updateSliderDisplayValues(cfg);
+        }, 150);
+      });
     </script>
 
     <script type="module" src="/3d pages/World.js"></script>

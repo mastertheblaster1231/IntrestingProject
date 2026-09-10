@@ -668,7 +668,7 @@ export function createGliderSawtoothTrail(options = {}) {
   const cycles = options.cycles || 4;
   const wavelength = options.wavelength || 6.5;
   const diveAmplitude = options.diveAmplitude || 2.4;
-  const ribbonWidth = options.ribbonWidth || 0.28;
+  const ribbonWidth = options.ribbonWidth || 0.18;
   const segments = options.segments || 64;
   const heading = options.heading || [1, 0]; // Normalized x, z direction
   
@@ -749,7 +749,7 @@ export function createGliderSawtoothTrail(options = {}) {
   const ribbonMat = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.72,
+    opacity: 0.48,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -804,7 +804,7 @@ export function createGliderSawtoothTrail(options = {}) {
         trailGroup.position.copy(parentPosition);
       }
       // Subtle glowing pulsation along ribbon
-      ribbonMat.opacity = 0.58 + Math.sin(time * 3.0) * 0.16;
+      ribbonMat.opacity = 0.38 + Math.sin(time * 2.5) * 0.12;
     }
   };
 
