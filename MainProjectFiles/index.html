@@ -952,26 +952,28 @@
         <div class="sidebar-title">
           <span>⚓ Stations Network</span>
         </div>
-        <span class="sidebar-count">8 BUOYS</span>
+        <span class="sidebar-count">10 STATIONS</span>
       </div>
 
       <div class="stations-list">
-        <div class="station-card" data-id="A1" onclick="focusOnPoint('A1')">
+        <!-- 1. AD07 (Yellow Buoy - Arabian Sea West of Goa) -->
+        <div class="station-card" data-id="AD07" data-alt-id="A1" onclick="focusOnPoint('AD07')">
           <div class="card-top">
-            <span class="card-id">⚓ A1</span>
-            <span class="card-code">AD07</span>
+            <span class="card-id" style="color:#ffea00;">🟡 AD07</span>
+            <span class="card-code">OMNI BUOY</span>
           </div>
-          <div class="card-sea">Indian Ocean (Equatorial Basin)</div>
+          <div class="card-sea">Arabian Sea (West of Goa)</div>
           <div class="card-coords">
-            <span>12.35°S</span>
-            <span>78.62°E</span>
+            <span>15.00°N</span>
+            <span>69.00°E</span>
           </div>
         </div>
 
-        <div class="station-card" data-id="A2" onclick="focusOnPoint('A2')">
+        <!-- 2. AD08 (Yellow Buoy - Arabian Sea Central Basin) -->
+        <div class="station-card" data-id="AD08" data-alt-id="A2" onclick="focusOnPoint('AD08')">
           <div class="card-top">
-            <span class="card-id">⚓ A2</span>
-            <span class="card-code">AD08</span>
+            <span class="card-id" style="color:#ffea00;">🟡 AD08</span>
+            <span class="card-code">OMNI BUOY</span>
           </div>
           <div class="card-sea">Arabian Sea (Central Basin)</div>
           <div class="card-coords">
@@ -980,46 +982,76 @@
           </div>
         </div>
 
-        <div class="station-card" data-id="A3" onclick="focusOnPoint('A3')">
+        <!-- 3. CB02 (Red Pin - Lakshadweep North / Agatti / Bangaram) -->
+        <div class="station-card" data-id="CB02" data-alt-id="A3" onclick="focusOnPoint('CB02')">
           <div class="card-top">
-            <span class="card-id">⚓ A3</span>
-            <span class="card-code">CB02 / AD10</span>
+            <span class="card-id" style="color:#ff453a;">📍 CB02</span>
+            <span class="card-code" style="color:#ff8a80; border-color:rgba(255,69,58,0.35);">REEF BUOY</span>
           </div>
-          <div class="card-sea">Lakshadweep (Agatti/Kavaratti)</div>
+          <div class="card-sea">Lakshadweep (Agatti / Bangaram)</div>
           <div class="card-coords">
-            <span>10.30°N</span>
-            <span>72.50°E</span>
+            <span>10.88°N</span>
+            <span>72.20°E</span>
           </div>
         </div>
 
-        <div class="station-card" data-id="A4" onclick="focusOnPoint('A4')">
+        <!-- 4. CALVAL (Red Pin - Lakshadweep Kavaratti Cal/Val Site) -->
+        <div class="station-card" data-id="CALVAL" data-alt-id="CALVAL" onclick="focusOnPoint('CALVAL')">
           <div class="card-top">
-            <span class="card-id">⚓ A4</span>
-            <span class="card-code">AD09</span>
+            <span class="card-id" style="color:#ff453a;">📍 CALVAL</span>
+            <span class="card-code" style="color:#ff8a80; border-color:rgba(255,69,58,0.35);">CAL/VAL</span>
           </div>
-          <div class="card-sea">Minicoy Channel / Maldives</div>
+          <div class="card-sea">Lakshadweep (Kavaratti Cal/Val)</div>
           <div class="card-coords">
-            <span>8.20°N</span>
-            <span>73.30°E</span>
+            <span>10.35°N</span>
+            <span>72.28°E</span>
           </div>
         </div>
 
-        <div class="station-card" data-id="A5" onclick="focusOnPoint('A5')">
+        <!-- 5. AD10 (Yellow Buoy - Lakshadweep South / Suheli / Kalpeni) -->
+        <div class="station-card" data-id="AD10" data-alt-id="AD10" onclick="focusOnPoint('AD10')">
           <div class="card-top">
-            <span class="card-id">⚓ A5</span>
-            <span class="card-code">CB06</span>
+            <span class="card-id" style="color:#ffea00;">🟡 AD10</span>
+            <span class="card-code">OMNI BUOY</span>
           </div>
-          <div class="card-sea">Bay of Bengal (Off Chennai)</div>
+          <div class="card-sea">Lakshadweep (Off Suheli / Kalpeni)</div>
+          <div class="card-coords">
+            <span>9.80°N</span>
+            <span>72.75°E</span>
+          </div>
+        </div>
+
+        <!-- 6. AD09 (Yellow Buoy - Minicoy Channel / Eight Degree Channel) -->
+        <div class="station-card" data-id="AD09" data-alt-id="A4" onclick="focusOnPoint('AD09')">
+          <div class="card-top">
+            <span class="card-id" style="color:#ffea00;">🟡 AD09</span>
+            <span class="card-code">OMNI BUOY</span>
+          </div>
+          <div class="card-sea">Eight Degree Channel / Minicoy</div>
+          <div class="card-coords">
+            <span>8.25°N</span>
+            <span>73.25°E</span>
+          </div>
+        </div>
+
+        <!-- 7. CB06 (Grey Pin - Bay of Bengal Chennai Offshore) -->
+        <div class="station-card" data-id="CB06" data-alt-id="A5" onclick="focusOnPoint('CB06')">
+          <div class="card-top">
+            <span class="card-id" style="color:#cfd8dc;">🔘 CB06</span>
+            <span class="card-code" style="color:#cfd8dc; border-color:rgba(207,216,220,0.35);">COASTAL</span>
+          </div>
+          <div class="card-sea">Bay of Bengal (Chennai Coast)</div>
           <div class="card-coords">
             <span>13.10°N</span>
             <span>80.30°E</span>
           </div>
         </div>
 
-        <div class="station-card" data-id="A6" onclick="focusOnPoint('A6')">
+        <!-- 8. BD13 (Yellow Buoy - Central Bay of Bengal) -->
+        <div class="station-card" data-id="BD13" data-alt-id="A6" onclick="focusOnPoint('BD13')">
           <div class="card-top">
-            <span class="card-id">⚓ A6</span>
-            <span class="card-code">BD13</span>
+            <span class="card-id" style="color:#ffea00;">🟡 BD13</span>
+            <span class="card-code">OMNI BUOY</span>
           </div>
           <div class="card-sea">Bay of Bengal (Central Basin)</div>
           <div class="card-coords">
@@ -1028,24 +1060,26 @@
           </div>
         </div>
 
-        <div class="station-card" data-id="A7" onclick="focusOnPoint('A7')">
+        <!-- 9. CB01 (Red Pin - Andaman Sea / Port Blair) -->
+        <div class="station-card" data-id="CB01" data-alt-id="A7" onclick="focusOnPoint('CB01')">
           <div class="card-top">
-            <span class="card-id">⚓ A7</span>
-            <span class="card-code">CB01</span>
+            <span class="card-id" style="color:#ff453a;">📍 CB01</span>
+            <span class="card-code" style="color:#ff8a80; border-color:rgba(255,69,58,0.35);">COASTAL</span>
           </div>
-          <div class="card-sea">Andaman Sea (Port Blair)</div>
+          <div class="card-sea">Andaman Sea (Port Blair Coast)</div>
           <div class="card-coords">
             <span>11.60°N</span>
             <span>92.50°E</span>
           </div>
         </div>
 
-        <div class="station-card" data-id="A8" onclick="focusOnPoint('A8')">
+        <!-- 10. BD12 (Yellow Buoy - South Andaman Sea / Nicobar) -->
+        <div class="station-card" data-id="BD12" data-alt-id="A8" onclick="focusOnPoint('BD12')">
           <div class="card-top">
-            <span class="card-id">⚓ A8</span>
-            <span class="card-code">BD12</span>
+            <span class="card-id" style="color:#ffea00;">🟡 BD12</span>
+            <span class="card-code">OMNI BUOY</span>
           </div>
-          <div class="card-sea">South Andaman Sea</div>
+          <div class="card-sea">South Andaman Sea (Nicobar)</div>
           <div class="card-coords">
             <span>10.50°N</span>
             <span>94.00°E</span>
@@ -1222,7 +1256,7 @@
           </div>
 
           <!-- Direct Link to 3D Ocean Simulation for this float -->
-          <button class="dive-ocean-btn" onclick="transitionToOcean(window.selectedStationId || 'A1')" title="Open 3D Ocean Simulation & Float Surface Model">
+          <button class="dive-ocean-btn" onclick="transitionToOcean(window.selectedStationId || 'AD07')" title="Open 3D Ocean Simulation & Float Surface Model">
             <span>🌊 Open 3D Ocean Simulation & Float</span>
             <span>→</span>
           </button>

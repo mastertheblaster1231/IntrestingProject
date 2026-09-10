@@ -487,80 +487,137 @@ atmosphere.renderOrder = 4;
 atmosphere.raycast = () => {}; // Never block raycasting
 scene.add(atmosphere);
 
-// 8. Argo / OON Observation Points Data
+// 8. Argo / OON Observation Points Data (10 Stations matching Map & Convenient Naming)
 export const argoPoints = [
   {
-    id: "A1",
-    wmoId: 2902345, // Exact reference ID from user screenshot
+    id: "AD07",
     code: "AD07",
-    lat: 12.35,
-    lon: 78.62,
-    sea: "Indian Ocean (Equatorial Basin)",
-    type: "APEX Profiling Float",
+    altId: "A1",
+    name: "AD07 - Arabian Sea Deep",
+    wmoId: 2300007,
+    lat: 15.00,
+    lon: 69.00,
+    sea: "Arabian Sea (West of Goa)",
+    type: "OMNI Deep Sea Meteorological Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
   },
   {
-    id: "A2",
-    wmoId: 2902346,
+    id: "AD08",
     code: "AD08",
-    lat: 12.0,
-    lon: 68.5,
-    sea: "Arabian Sea (Central Basin)",
-    type: "Omni Meteorological Buoy",
+    altId: "A2",
+    name: "AD08 - Central Arabian Sea",
+    wmoId: 2300008,
+    lat: 12.00,
+    lon: 68.50,
+    sea: "Arabian Sea (Central Deep Basin)",
+    type: "OMNI Meteorological Moored Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
   },
   {
-    id: "A3",
-    wmoId: 2902347,
+    id: "CB02",
     code: "CB02",
-    altCode: "CALVAL / AD10",
-    lat: 10.3,
-    lon: 72.5,
-    sea: "Lakshadweep (Agatti / Kavaratti)",
-    type: "Coastal & CalVal Buoy",
+    altId: "A3",
+    name: "CB02 - Lakshadweep North",
+    wmoId: 2300022,
+    lat: 10.88,
+    lon: 72.20,
+    sea: "Lakshadweep (Agatti / Bangaram)",
+    type: "Coastal Observation & Coral Reef Buoy",
+    markerType: "pin-red",
+    beaconColor: 0xff3b30,
   },
   {
-    id: "A4",
-    wmoId: 2902348,
+    id: "CALVAL",
+    code: "CALVAL",
+    altId: "CALVAL",
+    name: "CALVAL - Kavaratti Site",
+    wmoId: 2300023,
+    lat: 10.35,
+    lon: 72.28,
+    sea: "Lakshadweep (Kavaratti Cal/Val)",
+    type: "Satellite Radiometry Cal/Val Site",
+    markerType: "pin-red",
+    beaconColor: 0xff3b30,
+  },
+  {
+    id: "AD10",
+    code: "AD10",
+    altId: "AD10",
+    name: "AD10 - South Lakshadweep",
+    wmoId: 2300010,
+    lat: 9.80,
+    lon: 72.75,
+    sea: "Lakshadweep (Off Suheli / Kalpeni)",
+    type: "OMNI Deep Sea Moored Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
+  },
+  {
+    id: "AD09",
     code: "AD09",
-    lat: 8.2,
-    lon: 73.3,
-    sea: "South Lakshadweep / Minicoy Channel",
-    type: "Deep Ocean Buoy",
+    altId: "A4",
+    name: "AD09 - Minicoy Channel",
+    wmoId: 2300009,
+    lat: 8.25,
+    lon: 73.25,
+    sea: "Eight Degree Channel / Minicoy",
+    type: "Deep Ocean Meteorological Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
   },
   {
-    id: "A5",
-    wmoId: 2902349,
+    id: "CB06",
     code: "CB06",
-    lat: 13.1,
-    lon: 80.3,
-    sea: "Bay of Bengal (Chennai Offshore)",
-    type: "Coastal Moored Buoy",
+    altId: "A5",
+    name: "CB06 - Chennai Offshore",
+    wmoId: 2300026,
+    lat: 13.10,
+    lon: 80.30,
+    sea: "Bay of Bengal (Chennai Coast)",
+    type: "Coastal Moored Observation Station",
+    markerType: "pin-grey",
+    beaconColor: 0xb0bec5,
   },
   {
-    id: "A6",
-    wmoId: 2902350,
+    id: "BD13",
     code: "BD13",
-    lat: 14.0,
-    lon: 87.0,
+    altId: "A6",
+    name: "BD13 - Central Bay of Bengal",
+    wmoId: 2300013,
+    lat: 14.00,
+    lon: 87.00,
     sea: "Bay of Bengal (Central Basin)",
-    type: "Deep Sea Meteorological Buoy",
+    type: "OMNI Deep Sea Meteorological Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
   },
   {
-    id: "A7",
-    wmoId: 2902351,
+    id: "CB01",
     code: "CB01",
-    lat: 11.6,
-    lon: 92.5,
-    sea: "Andaman Sea (Port Blair)",
-    type: "Coastal Observation Buoy",
+    altId: "A7",
+    name: "CB01 - Port Blair / Andaman",
+    wmoId: 2300021,
+    lat: 11.60,
+    lon: 92.50,
+    sea: "Andaman Sea (Port Blair Coast)",
+    type: "Coastal Observation & Tsunami Buoy",
+    markerType: "pin-red",
+    beaconColor: 0xff3b30,
   },
   {
-    id: "A8",
-    wmoId: 2902352,
+    id: "BD12",
     code: "BD12",
-    lat: 10.5,
-    lon: 94.0,
-    sea: "South Andaman Sea",
-    type: "Deep Sea Moored Buoy",
+    altId: "A8",
+    name: "BD12 - South Andaman Sea",
+    wmoId: 2300012,
+    lat: 10.50,
+    lon: 94.00,
+    sea: "South Andaman Sea (Nicobar Channel)",
+    type: "Deep Sea Moored Meteorological Buoy",
+    markerType: "buoy-yellow",
+    beaconColor: 0xffea00,
   },
 ];
 
@@ -586,8 +643,8 @@ export function vector3ToLatLon(vec, radius = GLOBE_RADIUS) {
   return { lat, lon };
 }
 
-// Function to generate billboard Sprite with ⚓ emoji and A1, A2... badge
-function createAnchorSprite(id, code) {
+// Function to generate billboard Sprite matching buoy / pin styles in user screenshots
+function createAnchorSprite(point) {
   const canvas = document.createElement("canvas");
   canvas.width = 256;
   canvas.height = 256;
@@ -595,41 +652,230 @@ function createAnchorSprite(id, code) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 1. Anchor ⚓ Emoji
-  ctx.font = '76px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowColor = "rgba(0, 240, 255, 0.85)";
-  ctx.shadowBlur = 14;
-  ctx.fillText("⚓", 128, 76);
+  const markerType = point.markerType || "buoy-yellow";
+  const code = point.code || point.id;
+  const cx = 128;
 
-  // 2. Compact Name badge under the anchor
-  ctx.shadowBlur = 6;
-  ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
-  ctx.fillStyle = "rgba(6, 18, 38, 0.92)";
-  const badgeWidth = 116;
-  const badgeHeight = 44;
-  const badgeX = 128 - badgeWidth / 2;
+  if (markerType === "buoy-yellow") {
+    // ==========================================
+    // 🟡 MARITIME OBSERVATION BUOY (Yellow Buoy)
+    // ==========================================
+    ctx.save();
+
+    // 1. Top Flashing Beacon Light Glow
+    ctx.shadowColor = "rgba(255, 234, 0, 0.95)";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "#fff59d";
+    ctx.beginPath();
+    ctx.arc(cx, 32, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner bright core
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(cx, 32, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Antenna Mast
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx, 40);
+    ctx.lineTo(cx, 68);
+    ctx.stroke();
+
+    // 3. Superstructure Tower Struts
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#ffe082";
+    ctx.beginPath();
+    ctx.moveTo(cx - 16, 72);
+    ctx.lineTo(cx, 46);
+    ctx.lineTo(cx + 16, 72);
+    ctx.stroke();
+
+    // Cross strut
+    ctx.beginPath();
+    ctx.moveTo(cx - 10, 60);
+    ctx.lineTo(cx + 10, 60);
+    ctx.stroke();
+
+    // 4. Buoy Float Hull (conical maritime buoy float)
+    const buoyGrad = ctx.createLinearGradient(cx - 40, 72, cx + 40, 122);
+    buoyGrad.addColorStop(0, "#fff59d");
+    buoyGrad.addColorStop(0.25, "#ffd600");
+    buoyGrad.addColorStop(0.75, "#ffb300");
+    buoyGrad.addColorStop(1, "#f57f17");
+
+    ctx.shadowColor = "rgba(255, 214, 0, 0.6)";
+    ctx.shadowBlur = 12;
+
+    ctx.beginPath();
+    ctx.moveTo(cx - 22, 72);
+    ctx.lineTo(cx + 22, 72);
+    ctx.lineTo(cx + 38, 102);
+    ctx.quadraticCurveTo(cx + 36, 122, cx, 124);
+    ctx.quadraticCurveTo(cx - 36, 122, cx - 38, 102);
+    ctx.closePath();
+
+    ctx.fillStyle = buoyGrad;
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Waterline band
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(10, 30, 60, 0.8)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cx - 35, 98);
+    ctx.lineTo(cx + 35, 98);
+    ctx.stroke();
+
+    ctx.restore();
+  } else if (markerType === "pin-red") {
+    // ==========================================
+    // 📍 RED LOCATION PIN (CB02, CALVAL, CB01)
+    // ==========================================
+    ctx.save();
+    const cy = 64;
+    const r = 34;
+    const tipY = 124;
+
+    ctx.shadowColor = "rgba(255, 59, 48, 0.85)";
+    ctx.shadowBlur = 18;
+
+    const redGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, tipY);
+    redGrad.addColorStop(0, "#ff5252");
+    redGrad.addColorStop(0.5, "#e53935");
+    redGrad.addColorStop(1, "#b71c1c");
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI * 0.85, Math.PI * 0.15, false);
+    ctx.lineTo(cx, tipY);
+    ctx.closePath();
+
+    ctx.fillStyle = redGrad;
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Center circular dot
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#d32f2f";
+    ctx.fill();
+
+    ctx.restore();
+  } else {
+    // ==========================================
+    // 🔘 GREY / PLATINUM PIN (CB06)
+    // ==========================================
+    ctx.save();
+    const cy = 64;
+    const r = 34;
+    const tipY = 124;
+
+    ctx.shadowColor = "rgba(176, 190, 197, 0.85)";
+    ctx.shadowBlur = 16;
+
+    const greyGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, tipY);
+    greyGrad.addColorStop(0, "#eceff1");
+    greyGrad.addColorStop(0.5, "#b0bec5");
+    greyGrad.addColorStop(1, "#546e7a");
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, Math.PI * 0.85, Math.PI * 0.15, false);
+    ctx.lineTo(cx, tipY);
+    ctx.closePath();
+
+    ctx.fillStyle = greyGrad;
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Center circular dot
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#37474f";
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // ==========================================
+  // 🏷️ CONVENIENT NAME BADGE UNDER MARKER
+  // ==========================================
+  ctx.save();
   const badgeY = 138;
+  const badgeHeight = 44;
+
+  // Measure text width for perfect badge sizing
+  ctx.font = 'bold 22px "Segoe UI", Inter, -apple-system, sans-serif';
+  const textWidth = ctx.measureText(code).width;
+  const badgeWidth = Math.max(120, textWidth + 34);
+  const badgeX = cx - badgeWidth / 2;
+
+  // Badge glow & background
+  const strokeColor =
+    markerType === "pin-red"
+      ? "#ff3b30"
+      : markerType === "pin-grey"
+      ? "#cfd8dc"
+      : "#ffea00";
+
+  ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = "rgba(6, 18, 38, 0.94)";
 
   ctx.beginPath();
   ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 10);
   ctx.fill();
 
-  ctx.strokeStyle = "#00e5ff";
+  // Border with station accent color
+  ctx.strokeStyle = strokeColor;
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // Primary Name: A1, A2...
+  // Station Code (Large & crisp)
   ctx.shadowBlur = 0;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   ctx.fillStyle = "#ffffff";
-  ctx.font = 'bold 22px "Segoe UI", Inter, sans-serif';
-  ctx.fillText(id, 128, badgeY + 17);
+  ctx.font = 'bold 21px "Segoe UI", Inter, -apple-system, sans-serif';
+  ctx.fillText(code, cx, badgeY + 17);
 
-  // Secondary buoy code: AD07, BD13...
-  ctx.fillStyle = "#64d2ff";
-  ctx.font = 'bold 12px "Segoe UI", Inter, sans-serif';
-  ctx.fillText(code, 128, badgeY + 33);
+  // Subtitle (Coordinates)
+  const subtitleColor =
+    markerType === "pin-red"
+      ? "#ff8a80"
+      : markerType === "pin-grey"
+      ? "#b0bec5"
+      : "#ffd54f";
+  ctx.fillStyle = subtitleColor;
+  ctx.font = 'bold 11px "Space Mono", monospace';
+  ctx.fillText(`${point.lat.toFixed(1)}°N, ${point.lon.toFixed(1)}°E`, cx, badgeY + 33);
+
+  ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
@@ -658,32 +904,32 @@ argoPoints.forEach((point) => {
   const surfacePos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS);
   const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.14);
 
-  // 1. Surface beacon dot
-  const defaultColor = point.id === "A3" ? 0xff7b00 : 0x00f0ff;
+  // 1. Surface beacon dot matching markerType
+  const defaultColor = point.beaconColor || 0x00f0ff;
   const beaconGeo = new THREE.SphereGeometry(0.022, 16, 16);
   const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor });
   const beacon = new THREE.Mesh(beaconGeo, beaconMat);
   beacon.position.copy(surfacePos);
-  beacon.userData = { id: point.id, defaultColor: defaultColor };
+  beacon.userData = { id: point.id, defaultColor: defaultColor, point: point };
   markersGroup.add(beacon);
   beaconMeshes.push(beacon);
 
-  // 2. Connecting stem line
+  // 2. Connecting stem line matching beacon color
   const lineGeo = new THREE.BufferGeometry().setFromPoints([
     surfacePos,
     markerPos,
   ]);
   const lineMat = new THREE.LineBasicMaterial({
-    color: 0x00f0ff,
+    color: defaultColor,
     transparent: true,
-    opacity: 0.75,
+    opacity: 0.82,
     linewidth: 2,
   });
   const stem = new THREE.Line(lineGeo, lineMat);
   markersGroup.add(stem);
 
   // 3. Floating billboard anchor sprite
-  const sprite = createAnchorSprite(point.id, point.code);
+  const sprite = createAnchorSprite(point);
   sprite.position.copy(markerPos);
   sprite.userData = point;
   markersGroup.add(sprite);
@@ -897,12 +1143,22 @@ function updateArgoFloatUI(data) {
 
 // Selection function: Turns clicked station's dot to GREEN (#00ff66) & fetches data
 export async function selectStation(id) {
-  selectedStationId = id;
-  window.selectedStationId = id;
+  const cleanId = String(id || "AD07").trim().toUpperCase();
+  const point = argoPoints.find(
+    (p) =>
+      p.id.toUpperCase() === cleanId ||
+      p.code.toUpperCase() === cleanId ||
+      (p.altId && p.altId.toUpperCase() === cleanId) ||
+      String(p.wmoId) === cleanId
+  ) || argoPoints[0];
+
+  const targetId = point.id;
+  selectedStationId = targetId;
+  window.selectedStationId = targetId;
 
   // Turn selected station's dot GREEN, reset others to default
   beaconMeshes.forEach((b) => {
-    if (b.userData.id === id) {
+    if (b.userData.id === targetId) {
       b.material.color.setHex(0x00ff66);
     } else {
       b.material.color.setHex(b.userData.defaultColor);
@@ -911,7 +1167,15 @@ export async function selectStation(id) {
 
   // Highlight active card in sidebar
   document.querySelectorAll(".station-card").forEach((card) => {
-    if (card.getAttribute("data-id") === id) {
+    const cardId = card.getAttribute("data-id");
+    const cardAltId = card.getAttribute("data-alt-id");
+    if (
+      cardId === targetId ||
+      cardAltId === targetId ||
+      cardId === cleanId ||
+      cardAltId === cleanId ||
+      (point.altId && cardId === point.altId)
+    ) {
       card.classList.add("active");
       card.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } else {
@@ -920,7 +1184,6 @@ export async function selectStation(id) {
   });
 
   // Fetch procedural (or API) data asynchronously
-  const point = argoPoints.find((p) => p.id === id) || { id };
   const floatData = await oceanDataService.getFloatDetails(point);
   updateArgoFloatUI(floatData);
 }
@@ -944,7 +1207,15 @@ window.orbitalDiveController = orbitalDiveController;
  */
 export function startOrbitalDiveTransition(target) {
   const data = (target && target.userData) ? target.userData : (target || {});
-  const floatId = data.id || selectedStationId || "A1";
+  const rawId = data.id || data.code || selectedStationId || "AD07";
+  const point = argoPoints.find(
+    (p) =>
+      p.id === rawId ||
+      p.code === rawId ||
+      p.altId === rawId ||
+      String(p.wmoId) === String(rawId)
+  ) || argoPoints[0];
+  const floatId = point.id;
 
   // Select and highlight station in HUD
   selectStation(floatId);
@@ -962,14 +1233,13 @@ export function startOrbitalDiveTransition(target) {
   // Resolve target object/sprite
   let diveTarget = target;
   if (!target || !target.isObject3D) {
-    const sprite = clickableSprites.find((s) => s.userData?.id === floatId);
+    const sprite = clickableSprites.find(
+      (s) => s.userData?.id === floatId || s.userData?.code === floatId
+    );
     if (sprite) {
       diveTarget = sprite;
     } else {
-      const pt = argoPoints.find((p) => p.id === floatId);
-      if (pt) {
-        diveTarget = latLonToVector3(pt.lat, pt.lon, GLOBE_RADIUS + 0.08);
-      }
+      diveTarget = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.08);
     }
   }
 
@@ -981,7 +1251,7 @@ export function startOrbitalDiveTransition(target) {
     plungeDistance: 0.04,
     distanceThreshold: 0.42,
     onPhase1Complete: ({ floatId: fId }) => {
-      console.log(`[OrbitalDive] Phase 1 Sweep & Center complete for Float ${fId}. Plunging through atmosphere...`);
+      console.log(`[OrbitalDive] Phase 1 Sweep & Center complete for Station ${fId}. Plunging through atmosphere...`);
     },
     onThresholdCrossed: ({ distance, floatId: fId }) => {
       console.log(`[OrbitalDive] Distance threshold crossed at ${distance.toFixed(3)}. Fading globe & activating water column grid...`);
@@ -1029,8 +1299,10 @@ export function startOrbitalDiveTransition(target) {
 window.startOrbitalDiveTransition = startOrbitalDiveTransition;
 
 window.triggerOrbitalDiveForSelected = function () {
-  const id = selectedStationId || "A1";
-  const sprite = clickableSprites.find((s) => s.userData?.id === id);
+  const id = selectedStationId || "AD07";
+  const sprite = clickableSprites.find(
+    (s) => s.userData?.id === id || s.userData?.code === id
+  );
   startOrbitalDiveTransition(sprite || { id });
 };
 
@@ -1058,16 +1330,18 @@ function onPointerMove(event) {
     const data = target.userData;
 
     if (tooltip) {
+      const icon = data.markerType === 'pin-red' ? '📍' : (data.markerType === 'pin-grey' ? '🔘' : '🟡');
       tooltip.style.display = "block";
       tooltip.style.left = `${event.clientX + 16}px`;
       tooltip.style.top = `${event.clientY - 24}px`;
       tooltip.innerHTML = `
-        <div class="tooltip-header">⚓ ${data.id} - ${data.code}</div>
+        <div class="tooltip-header">${icon} ${data.code} • ${data.name ? (data.name.split(" - ")[1] || data.name) : data.sea}</div>
         <div class="tooltip-body">
+          <div><strong>Station:</strong> <span style="color:#00f0ff; font-weight:700;">${data.code}</span> (WMO: ${data.wmoId})</div>
           <div><strong>Basin:</strong> ${data.sea}</div>
-          <div><strong>Lat/Lon:</strong> ${data.lat.toFixed(2)}°N, ${data.lon.toFixed(2)}°E</div>
-          <div><strong>Type:</strong> ${data.type}</div>
-          <div style="margin-top:4px; color:#00e5ff;">✦ Click to inspect float profile</div>
+          <div><strong>Coordinates:</strong> ${data.lat.toFixed(2)}°N, ${data.lon.toFixed(2)}°E</div>
+          <div><strong>Platform:</strong> ${data.type}</div>
+          <div style="margin-top:5px; color:#00e5ff;">✦ Click to inspect station ocean data</div>
           <div style="margin-top:2px; color:#00ff66; font-weight:700;">🚀 Double-click for Cinematic Orbital Dive</div>
         </div>
       `;
@@ -1181,7 +1455,14 @@ window.addEventListener("dblclick", onPointerDoubleClick);
 window.focusOnPoint = function (id) {
   selectStation(id);
 
-  const pt = argoPoints.find((p) => p.id === id);
+  const cleanId = String(id || "AD07").trim().toUpperCase();
+  const pt = argoPoints.find(
+    (p) =>
+      p.id.toUpperCase() === cleanId ||
+      p.code.toUpperCase() === cleanId ||
+      (p.altId && p.altId.toUpperCase() === cleanId) ||
+      String(p.wmoId) === cleanId
+  );
   if (!pt) return;
 
   // Preserve the user's current zoom distance - NEVER zoom the Earth out!
@@ -1362,7 +1643,7 @@ function animate() {
 
 animate();
 
-// Initialize with Station A1 selected by default after a brief load delay
+// Initialize with Station AD07 selected by default after a brief load delay
 setTimeout(() => {
-  selectStation("A1");
+  selectStation("AD07");
 }, 400);
