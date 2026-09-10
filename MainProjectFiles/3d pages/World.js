@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { gsap } from "gsap";
 import earth8kMapUrl from "../Images/8k_earth_daymap.jpg";
+import earth8kCloudsUrl from "../Images/8k_earth_clouds.jpg";
 import { oceanDataService } from "./oceanDataService.js";
+import { createOrbitalDiveController } from "./orbitalDive.js";
 
 // ============================================================================
 // ⚙️ ANCHOR & BADGE SIZE CONFIGURATION
@@ -79,17 +82,34 @@ const globeMaterial = new THREE.MeshStandardMaterial({
   map: worldTexture,
   roughness: 0.65,
   metalness: 0.05,
+  transparent: true,
+  opacity: 1.0,
 });
 export const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
+globeMesh.renderOrder = 0;
 scene.add(globeMesh);
 
 // ----------------------------------------------------------------------------
-// 7a. Dynamic Procedural Volumetric Fog & Clouds Shell
+// 7a. Photorealistic 8K Earth Clouds Layer with Volumetric Shadow Projection
 // ----------------------------------------------------------------------------
-const fogVertexShader = `
+// Load 8K Earth satellite cloud density map
+const cloudsTexture = textureLoader.load(earth8kCloudsUrl, (tex) => {
+  tex.needsUpdate = true;
+});
+cloudsTexture.colorSpace = THREE.LinearSRGBColorSpace;
+cloudsTexture.wrapS = THREE.RepeatWrapping;
+cloudsTexture.wrapT = THREE.ClampToEdgeWrapping;
+cloudsTexture.minFilter = THREE.LinearMipmapLinearFilter;
+cloudsTexture.magFilter = THREE.LinearFilter;
+cloudsTexture.generateMipmaps = true;
+cloudsTexture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 16);
+
+// 1. Soft Cloud Shadow Projection Layer
+// Renders just 0.0035 above the Earth surface to cast true physical shadows onto oceans and continents
+const cloudShadowVertexShader = `
+  varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
-  varying vec2 vUv;
 
   void main() {
     vUv = uv;
@@ -100,147 +120,302 @@ const fogVertexShader = `
   }
 `;
 
-const fogFragmentShader = `
-  uniform float uTime;
+const cloudShadowFragmentShader = `
+  uniform sampler2D uCloudsMap;
   uniform vec3 uSunDirection;
-  uniform float uFogDensity;
-  uniform vec3 uFogColor;
-  uniform vec3 uSunColor;
+  uniform float uShadowOpacity;
 
+  varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
-  varying vec2 vUv;
-
-  // Optimized GPU 3D Simplex noise
-  vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
-  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
-
-  float snoise(vec3 v) {
-    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
-    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
-
-    vec3 i = floor(v + dot(v, C.yyy));
-    vec3 x0 = v - i + dot(i, C.xxx);
-
-    vec3 g = step(x0.yzx, x0.xyz);
-    vec3 l = 1.0 - g;
-    vec3 i1 = min(g.xyz, l.zxy);
-    vec3 i2 = max(g.xyz, l.zxy);
-
-    vec3 x1 = x0 - i1 + 1.0 * C.xxx;
-    vec3 x2 = x0 - i2 + 2.0 * C.xxx;
-    vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
-
-    i = mod(i, 289.0);
-    vec4 p = permute(permute(permute(
-              i.z + vec4(0.0, i1.z, i2.z, 1.0))
-            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
-            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
-
-    float n_ = 0.142857142857;
-    vec3 ns = n_ * D.wyz - D.xzx;
-
-    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
-
-    vec4 x_ = floor(j * ns.z);
-    vec4 y_ = floor(j - 7.0 * x_);
-
-    vec4 x = x_ * ns.x + ns.yyyy;
-    vec4 y = y_ * ns.x + ns.yyyy;
-    vec4 h = 1.0 - abs(x) - abs(y);
-
-    vec4 b0 = vec4(x.xy, y.xy);
-    vec4 b1 = vec4(x.zw, y.zw);
-
-    vec4 s0 = floor(b0) * 2.0 + 1.0;
-    vec4 s1 = floor(b1) * 2.0 + 1.0;
-    vec4 sh = -step(h, vec4(0.0));
-
-    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
-    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
-
-    vec3 p0 = vec3(a0.xy, h.x);
-    vec3 p1 = vec3(a0.zw, h.y);
-    vec3 p2 = vec3(a1.xy, h.z);
-    vec3 p3 = vec3(a1.zw, h.w);
-
-    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
-    p0 *= norm.x;
-    p1 *= norm.y;
-    p2 *= norm.z;
-    p3 *= norm.w;
-
-    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
-    m = m * m;
-    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
-  }
-
-  float fbm(vec3 p) {
-    float v = 0.0;
-    float a = 0.52;
-    vec3 shift = vec3(100.0);
-    for (int i = 0; i < 4; ++i) {
-      v += a * snoise(p);
-      p = p * 2.05 + shift;
-      a *= 0.48;
-    }
-    return v;
-  }
 
   void main() {
     vec3 norm = normalize(vNormal);
-    vec3 worldNorm = normalize(vWorldPosition);
+    vec3 sunDir = normalize(uSunDirection);
+    float sunDot = dot(norm, sunDir);
 
-    // Coordinate for planetary fog & clouds
-    vec3 coord = worldNorm * 2.7;
+    // Shadows only exist where sun penetrates and illuminates the cloud tops
+    if (sunDot <= 0.0) {
+      discard;
+    }
 
-    // Atmospheric circulation drift vectors
-    vec3 drift1 = vec3(uTime * 0.011, uTime * 0.005, uTime * 0.008);
-    vec3 drift2 = vec3(-uTime * 0.007, uTime * 0.012, -uTime * 0.006);
+    // Offset shadow UV along the anti-sun tangent vector to simulate true physical altitude projection
+    vec2 shadowOffset = vec2(-sunDir.x, -sunDir.y) * 0.0022;
+    vec2 sampleUv = vUv + shadowOffset;
 
-    float n1 = fbm(coord + drift1);
-    float n2 = fbm(coord * 2.15 + drift2);
+    float cloudSample = texture2D(uCloudsMap, sampleUv).r;
+    if (cloudSample < 0.04) {
+      discard;
+    }
 
-    float compositeNoise = n1 * 0.65 + n2 * 0.35;
-    // Smooth threshold creates realistic ocean mist and swirling cloud formations
-    float density = smoothstep(0.06, 0.54, compositeNoise + 0.12);
+    // Smooth shadow density profile
+    float shadowDensity = smoothstep(0.08, 0.75, cloudSample);
 
-    // Sun directional diffuse lighting
-    float sunDot = dot(norm, normalize(uSunDirection));
-    float sunDiffuse = clamp(sunDot * 0.75 + 0.25, 0.0, 1.0);
+    // Soft, gentle ambient shadow: 22% max darkening so oceans & terrain remain luminous
+    float shadowAlpha = shadowDensity * 0.22 * smoothstep(0.0, 0.28, sunDot) * uShadowOpacity;
 
-    // Cloud color: soft luminous white illuminated by sun, with cool cyan-azure ambient tint
-    vec3 finalColor = mix(uFogColor, uSunColor, sunDiffuse * 0.88);
-
-    // Soft feathered alpha: leaves the underlying 8K Earth terrain razor-sharp while providing realistic fog
-    float finalAlpha = clamp(density * uFogDensity * (0.35 + 0.65 * sunDiffuse), 0.0, 0.48);
-
-    gl_FragColor = vec4(finalColor, finalAlpha);
+    // Atmospheric shadow tint (deep charcoal navy)
+    gl_FragColor = vec4(vec3(0.015, 0.02, 0.035), shadowAlpha);
   }
 `;
 
-const dynamicFogMaterial = new THREE.ShaderMaterial({
-  vertexShader: fogVertexShader,
-  fragmentShader: fogFragmentShader,
+export const cloudShadowMaterial = new THREE.ShaderMaterial({
+  vertexShader: cloudShadowVertexShader,
+  fragmentShader: cloudShadowFragmentShader,
   uniforms: {
-    uTime: { value: 0.0 },
+    uCloudsMap: { value: cloudsTexture },
     uSunDirection: { value: sunLight.position.clone().normalize() },
-    uFogDensity: { value: 0.42 },
-    uFogColor: { value: new THREE.Color(0xa0e6ff) },
-    uSunColor: { value: new THREE.Color(0xffffff) },
+    uShadowOpacity: { value: 1.0 },
   },
   transparent: true,
   depthWrite: false,
   blending: THREE.NormalBlending,
 });
 
-const dynamicFogGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.008, 96, 64);
-export const dynamicFogMesh = new THREE.Mesh(dynamicFogGeometry, dynamicFogMaterial);
-dynamicFogMesh.raycast = () => {}; // Never block raycasting or buoy selection
-scene.add(dynamicFogMesh);
+const cloudShadowGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.0024, 128, 96);
+export const cloudShadowMesh = new THREE.Mesh(cloudShadowGeometry, cloudShadowMaterial);
+cloudShadowMesh.renderOrder = 1;
+cloudShadowMesh.raycast = () => {}; // Never block raycasting or buoy selection
+scene.add(cloudShadowMesh);
+
+// 2. Realistic Pure White 8K NASA Cloud Layer
+const cloudsVertexShader = `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+  varying vec3 vViewPosition;
+
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPos.xyz;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPosition = -mvPos.xyz;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const cloudsFragmentShader = `
+  uniform sampler2D uCloudsMap;
+  uniform vec3 uSunDirection;
+  uniform float uCloudOpacity;
+  uniform float uFogDensity; // For backward compatibility
+  uniform float uTime;
+
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+  varying vec3 vViewPosition;
+
+  void main() {
+    // High-resolution NASA satellite cloud density sample
+    float cloudRaw = texture2D(uCloudsMap, vUv).r;
+
+    // Razor-sharp clear sky: keep ocean waters and landmasses crystal clear
+    if (cloudRaw < 0.02) {
+      discard;
+    }
+
+    vec3 norm = normalize(vNormal);
+    vec3 sunDir = normalize(uSunDirection);
+    vec3 viewDir = normalize(vViewPosition);
+
+    float sunDot = dot(norm, sunDir);
+
+    // Organic cloud density profile: delicate wispy fog to dense storm fronts
+    float density = smoothstep(0.03, 0.74, cloudRaw);
+    float core = smoothstep(0.30, 0.88, cloudRaw);
+
+    // Volumetric water droplet Mie scattering: clouds remain pure luminous white everywhere!
+    // Lit side: brilliant crisp white. Shaded side: soft glowing white-marine fog mist.
+    float directDiffuse = clamp(sunDot * 0.55 + 0.45, 0.0, 1.0);
+    vec3 sunlitWhite = vec3(1.0, 1.0, 1.0) * (0.88 + 0.12 * directDiffuse);
+    vec3 ambientWhite = vec3(0.85, 0.90, 0.98) * 0.72; // Soft marine ambient
+    vec3 cloudColor = mix(ambientWhite, sunlitWhite, clamp(sunDot * 0.8 + 0.4, 0.0, 1.0));
+
+    // Core convective storm albedo boost: brilliant white storm centers
+    cloudColor += vec3(0.12, 0.12, 0.12) * core * directDiffuse;
+
+    // Inverted Fresnel limb glow: luminous white cloud fog seen at the planetary horizon
+    float limbFresnel = 1.0 - max(0.0, dot(norm, viewDir));
+    float limbGlow = pow(limbFresnel, 2.2) * 0.38;
+    cloudColor += vec3(0.92, 0.96, 1.0) * limbGlow;
+
+    // Silver lining specular highlight when facing towards the sun
+    vec3 halfVec = normalize(sunDir + viewDir);
+    float silverLining = pow(max(0.0, dot(norm, halfVec)), 8.0) * 0.26 * directDiffuse;
+    cloudColor += vec3(1.0, 1.0, 1.0) * silverLining;
+
+    // Realistic fog alpha: translucent cirrus mist, solid opaque cumulus clouds
+    float alpha = (density * 0.76 + core * 0.24) * uCloudOpacity;
+    alpha = clamp(alpha, 0.0, 0.94);
+
+    gl_FragColor = vec4(cloudColor, alpha);
+  }
+`;
+
+export const cloudsMaterial = new THREE.ShaderMaterial({
+  vertexShader: cloudsVertexShader,
+  fragmentShader: cloudsFragmentShader,
+  uniforms: {
+    uCloudsMap: { value: cloudsTexture },
+    uSunDirection: { value: sunLight.position.clone().normalize() },
+    uCloudOpacity: { value: 1.0 },
+    uFogDensity: { value: 1.0 },
+    uTime: { value: 0.0 },
+  },
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.NormalBlending,
+});
+
+// Pristine tessellation matching 8K texture resolution
+export const cloudsMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(GLOBE_RADIUS * 1.008, 128, 96),
+  cloudsMaterial
+);
+cloudsMesh.renderOrder = 2;
+cloudsMesh.raycast = () => {}; // Never block raycasting or buoy selection
+scene.add(cloudsMesh);
+
+// 3. High-Altitude Swirling White Cloud Fog Layer
+const cloudFogVertexShader = `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+  varying vec3 vViewPosition;
+
+  void main() {
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPos.xyz;
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    vViewPosition = -mvPos.xyz;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const cloudFogFragmentShader = `
+  uniform float uTime;
+  uniform vec3 uSunDirection;
+  uniform float uFogOpacity;
+
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition;
+  varying vec3 vViewPosition;
+
+  // Fast GPU Simplex Noise
+  vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
+  vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+  float snoise(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+    vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+    vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+    i = mod(i, 289.0);
+    vec4 p = permute(permute(permute(
+              i.z + vec4(0.0, i1.z, i2.z, 1.0))
+            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+  }
+
+  void main() {
+    vec3 norm = normalize(vNormal);
+    vec3 viewDir = normalize(vViewPosition);
+    vec3 sunDir = normalize(uSunDirection);
+
+    // Organic planetary cloud fog coordinates
+    vec3 p = normalize(vWorldPosition) * 3.4;
+    vec3 drift1 = vec3(uTime * 0.009, uTime * 0.005, uTime * 0.007);
+    vec3 drift2 = vec3(-uTime * 0.006, uTime * 0.008, -uTime * 0.005);
+    float n = snoise(p + drift1) * 0.65 + snoise(p * 2.1 + drift2) * 0.35;
+
+    // Smooth wisps of white fog
+    float fogPattern = smoothstep(0.12, 0.62, n + 0.16);
+    if (fogPattern < 0.02) {
+      discard;
+    }
+
+    float sunDot = dot(norm, sunDir);
+    float directLight = clamp(sunDot * 0.5 + 0.5, 0.35, 1.0);
+
+    // Pure ethereal white cloud fog
+    vec3 whiteFogColor = vec3(0.96, 0.98, 1.0) * (0.88 + 0.12 * directLight);
+
+    // Grazing edge cloud fog illumination
+    float limb = pow(1.0 - max(0.0, dot(norm, viewDir)), 2.4);
+    whiteFogColor += vec3(0.18, 0.20, 0.24) * limb;
+
+    // Translucent airy fog mist
+    float alpha = fogPattern * (0.18 + 0.14 * directLight) * uFogOpacity;
+    alpha = clamp(alpha, 0.0, 0.32);
+
+    gl_FragColor = vec4(whiteFogColor, alpha);
+  }
+`;
+
+export const cloudFogMaterial = new THREE.ShaderMaterial({
+  vertexShader: cloudFogVertexShader,
+  fragmentShader: cloudFogFragmentShader,
+  uniforms: {
+    uTime: { value: 0.0 },
+    uSunDirection: { value: sunLight.position.clone().normalize() },
+    uFogOpacity: { value: 1.0 },
+  },
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.NormalBlending,
+});
+
+export const cloudFogMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(GLOBE_RADIUS * 1.014, 96, 64),
+  cloudFogMaterial
+);
+cloudFogMesh.renderOrder = 3;
+cloudFogMesh.raycast = () => {}; // Never block raycasting or buoy selection
+scene.add(cloudFogMesh);
+
+// Backwards-compatibility aliases
+export const dynamicFogMesh = cloudsMesh;
+export const dynamicFogMaterial = cloudsMaterial;
 
 // ----------------------------------------------------------------------------
-// 7b. Realistic Atmospheric Rayleigh Rim Glow Layer (Orbital Halo)
+// 7b. Realistic Atmospheric White Cloud Fog Horizon Rim & Azure Halo
 // ----------------------------------------------------------------------------
 const atmosphereVertexShader = `
   varying vec3 vNormal;
@@ -259,10 +434,6 @@ const atmosphereVertexShader = `
 
 const atmosphereFragmentShader = `
   uniform vec3 uSunDirection;
-  uniform vec3 uDayAtmosphereColor;
-  uniform vec3 uTwilightColor;
-  uniform float uAtmospherePower;
-  uniform float uAtmosphereIntensity;
   uniform float uTime;
 
   varying vec3 vNormal;
@@ -272,25 +443,29 @@ const atmosphereFragmentShader = `
   void main() {
     vec3 viewDir = normalize(vViewPosition);
     vec3 norm = normalize(vNormal);
-
-    // Inverted Fresnel: highest at the grazing edge of the globe
-    float rim = 1.0 - max(0.0, dot(viewDir, norm));
-    float halo = pow(rim, uAtmospherePower) * uAtmosphereIntensity;
-
-    // Sun directional alignment
     vec3 worldNorm = normalize(vWorldPosition);
+
+    // Inverted Fresnel: highest along the grazing edge of the planet
+    float rim = 1.0 - max(0.0, dot(viewDir, norm));
+
+    // Two-tier atmospheric horizon:
+    // 1. Lower troposphere: Soft luminous milky-white cloud fog mist right along the horizon
+    // 2. Upper stratosphere: Gentle azure blue blending gracefully into deep space
+    vec3 whiteCloudFog = vec3(0.96, 0.98, 1.0);
+    vec3 azureSky = vec3(0.20, 0.65, 1.0);
+
+    // Low grazing angles catch dense white mist; outer grazing fades to azure
+    vec3 rimColor = mix(whiteCloudFog, azureSky, pow(rim, 1.5));
+
+    // Sunlit hemisphere illumination
     float sunDot = dot(worldNorm, normalize(uSunDirection));
-    float sunFactor = smoothstep(-0.25, 0.45, sunDot);
+    float sunFactor = clamp(sunDot * 0.5 + 0.5, 0.25, 1.0);
 
-    // Color transition from warm twilight amber at dusk line to brilliant azure in sunlight
-    vec3 haloColor = mix(uTwilightColor, uDayAtmosphereColor, smoothstep(-0.1, 0.3, sunDot));
+    // Atmospheric halo intensity
+    float halo = pow(rim, 2.6) * 1.65;
+    float alpha = clamp(halo * sunFactor, 0.0, 0.92);
 
-    // Subtle atmospheric shimmer
-    float shimmer = 1.0 + 0.03 * sin(uTime * 1.8 + vWorldPosition.y * 3.5);
-
-    float alpha = clamp(halo * (sunFactor * 0.85 + 0.15) * shimmer, 0.0, 0.92);
-
-    gl_FragColor = vec4(haloColor, alpha);
+    gl_FragColor = vec4(rimColor, alpha);
   }
 `;
 
@@ -300,18 +475,15 @@ const atmosphereMaterial = new THREE.ShaderMaterial({
   uniforms: {
     uTime: { value: 0.0 },
     uSunDirection: { value: sunLight.position.clone().normalize() },
-    uDayAtmosphereColor: { value: new THREE.Color(0x0099ff) },
-    uTwilightColor: { value: new THREE.Color(0xff6b35) },
-    uAtmospherePower: { value: 3.2 },
-    uAtmosphereIntensity: { value: 1.85 },
   },
   transparent: true,
   depthWrite: false,
   blending: THREE.AdditiveBlending,
 });
 
-const atmosphereGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.022, 96, 64);
+const atmosphereGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.025, 96, 64);
 const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+atmosphere.renderOrder = 4;
 atmosphere.raycast = () => {}; // Never block raycasting
 scene.add(atmosphere);
 
@@ -753,13 +925,118 @@ export async function selectStation(id) {
   updateArgoFloatUI(floatData);
 }
 
-// Transition from 3D Earth Globe to 3D Ocean view for a selected float
+// ============================================================================
+// 8b. CINEMATIC ORBITAL DIVE CONTROLLER (GSAP)
+// ============================================================================
+export const orbitalDiveController = createOrbitalDiveController({
+  camera,
+  controls,
+  globeRadius: GLOBE_RADIUS,
+  scene,
+});
+window.orbitalDiveController = orbitalDiveController;
+
+/**
+ * Triggers the cinematic two-phase Orbital Dive:
+ * Phase 1: Sweeps OrbitControls.target to the float, swings camera directly above it.
+ * Phase 2: Plunges in close with strong power3.inOut easing.
+ * Threshold: Fades out globe & clouds, activates local water column grid.
+ */
+export function startOrbitalDiveTransition(target) {
+  const data = (target && target.userData) ? target.userData : (target || {});
+  const floatId = data.id || selectedStationId || "A1";
+
+  // Select and highlight station in HUD
+  selectStation(floatId);
+
+  // Close HUD panels for full cinematic visual immersion
+  if (tooltip) tooltip.style.display = "none";
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) sidebar.classList.remove("open");
+  const panel = document.getElementById("argoFloatPanel");
+  if (panel) panel.classList.remove("visible");
+
+  // Cancel any manual lerp transition
+  cameraTransition = null;
+
+  // Resolve target object/sprite
+  let diveTarget = target;
+  if (!target || !target.isObject3D) {
+    const sprite = clickableSprites.find((s) => s.userData?.id === floatId);
+    if (sprite) {
+      diveTarget = sprite;
+    } else {
+      const pt = argoPoints.find((p) => p.id === floatId);
+      if (pt) {
+        diveTarget = latLonToVector3(pt.lat, pt.lon, GLOBE_RADIUS + 0.08);
+      }
+    }
+  }
+
+  // Execute Orbital Dive
+  orbitalDiveController.triggerDive(diveTarget, {
+    durationPhase1: 1.35, // Sweep & Center
+    durationPhase2: 1.85, // The Plunge (power3.inOut)
+    orbitalElevation: 1.15,
+    plungeDistance: 0.04,
+    distanceThreshold: 0.42,
+    onPhase1Complete: ({ floatId: fId }) => {
+      console.log(`[OrbitalDive] Phase 1 Sweep & Center complete for Float ${fId}. Plunging through atmosphere...`);
+    },
+    onThresholdCrossed: ({ distance, floatId: fId }) => {
+      console.log(`[OrbitalDive] Distance threshold crossed at ${distance.toFixed(3)}. Fading globe & activating water column grid...`);
+
+      // 1. Fade out globe sphere
+      if (globeMaterial) {
+        globeMaterial.transparent = true;
+        gsap.to(globeMaterial, { opacity: 0.0, duration: 0.65, ease: "power2.out" });
+      }
+
+      // 2. Fade out 8K atmospheric clouds, shadows & white fog mist
+      if (cloudsMaterial && cloudsMaterial.uniforms) {
+        gsap.to(cloudsMaterial.uniforms.uCloudOpacity, { value: 0.0, duration: 0.65, ease: "power2.out" });
+        if (cloudsMaterial.uniforms.uFogDensity) {
+          gsap.to(cloudsMaterial.uniforms.uFogDensity, { value: 0.0, duration: 0.65, ease: "power2.out" });
+        }
+      }
+      if (cloudShadowMaterial && cloudShadowMaterial.uniforms) {
+        gsap.to(cloudShadowMaterial.uniforms.uShadowOpacity, { value: 0.0, duration: 0.65, ease: "power2.out" });
+      }
+      if (cloudFogMaterial && cloudFogMaterial.uniforms) {
+        gsap.to(cloudFogMaterial.uniforms.uFogOpacity, { value: 0.0, duration: 0.65, ease: "power2.out" });
+      }
+
+      // 3. Fade out beacons and stems
+      markersGroup.children.forEach((child) => {
+        if (child.material) {
+          child.material.transparent = true;
+          gsap.to(child.material, { opacity: 0.0, duration: 0.5, ease: "power2.out" });
+        }
+      });
+
+      // 4. Activate high-res water column transition overlay & plunge grid
+      const overlay = document.getElementById("transitionOverlay");
+      if (overlay) overlay.classList.add("active");
+      const plungeGrid = document.getElementById("waterColumnPlungeGrid");
+      if (plungeGrid) plungeGrid.classList.add("active");
+    },
+    onComplete: ({ floatId: fId }) => {
+      console.log(`[OrbitalDive] Plunge complete. Transitioning to Ocean view...`);
+      window.location.href = `/ocean.html?id=${encodeURIComponent(fId)}`;
+    },
+  });
+}
+window.startOrbitalDiveTransition = startOrbitalDiveTransition;
+
+window.triggerOrbitalDiveForSelected = function () {
+  const id = selectedStationId || "A1";
+  const sprite = clickableSprites.find((s) => s.userData?.id === id);
+  startOrbitalDiveTransition(sprite || { id });
+};
+
+// Transition fallback alias
 export function transitionToOcean(id) {
-  const overlay = document.getElementById("transitionOverlay");
-  if (overlay) overlay.classList.add("active");
-  setTimeout(() => {
-    window.location.href = `/ocean.html?id=${encodeURIComponent(id || selectedStationId || 'A1')}`;
-  }, 380);
+  startOrbitalDiveTransition({ id });
 }
 window.transitionToOcean = transitionToOcean;
 
@@ -790,7 +1067,8 @@ function onPointerMove(event) {
           <div><strong>Basin:</strong> ${data.sea}</div>
           <div><strong>Lat/Lon:</strong> ${data.lat.toFixed(2)}°N, ${data.lon.toFixed(2)}°E</div>
           <div><strong>Type:</strong> ${data.type}</div>
-          <div style="margin-top:4px; color:#00ff66;">✦ Click to inspect Argo Float vertical profile</div>
+          <div style="margin-top:4px; color:#00e5ff;">✦ Click to inspect float profile</div>
+          <div style="margin-top:2px; color:#00ff66; font-weight:700;">🚀 Double-click for Cinematic Orbital Dive</div>
         </div>
       `;
     }
@@ -800,11 +1078,16 @@ function onPointerMove(event) {
   }
 }
 
+// Track double-click timing on anchor sprites
+let lastClickTime = 0;
+let lastClickSprite = null;
+const DOUBLE_CLICK_THRESHOLD_MS = 340;
+
 function onPointerClick(event) {
   // Ignore clicks on HUD UI panels and buttons
   if (
     event.target.closest &&
-    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls")
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
   ) {
     return;
   }
@@ -813,15 +1096,25 @@ function onPointerClick(event) {
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  
+
   // 1. Check if user clicked an anchor sprite
   const intersects = raycaster.intersectObjects(clickableSprites);
   if (intersects.length > 0) {
-    const target = intersects[0].object;
-    const data = target.userData;
-    selectStation(data.id);
-    // Transition to 3D Ocean view for this Argo float
-    transitionToOcean(data.id);
+    const sprite = intersects[0].object;
+    const data = sprite.userData;
+
+    const now = performance.now();
+    const isDbl = (now - lastClickTime < DOUBLE_CLICK_THRESHOLD_MS) && (lastClickSprite === sprite);
+    lastClickTime = now;
+    lastClickSprite = sprite;
+
+    if (isDbl) {
+      // DOUBLE-CLICK: Initiate cinematic Orbital Dive!
+      startOrbitalDiveTransition(sprite);
+    } else {
+      // SINGLE-CLICK: Select station & inspect data panel
+      selectStation(data.id);
+    }
     return;
   }
 
@@ -860,8 +1153,29 @@ function onPointerClick(event) {
   }
 }
 
+// Native double-click event listener for anchor points
+function onPointerDoubleClick(event) {
+  if (
+    event.target.closest &&
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
+  ) {
+    return;
+  }
+
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(clickableSprites);
+  if (intersects.length > 0) {
+    const sprite = intersects[0].object;
+    startOrbitalDiveTransition(sprite);
+  }
+}
+
 window.addEventListener("pointermove", onPointerMove);
 window.addEventListener("click", onPointerClick);
+window.addEventListener("dblclick", onPointerDoubleClick);
 
 // Focus function when clicking a point in the list
 window.focusOnPoint = function (id) {
@@ -969,8 +1283,8 @@ function animate() {
 
   const elapsedTime = clock.getElapsedTime();
 
-  // Handle smooth camera lerping if transition is active
-  if (cameraTransition) {
+  // Handle smooth camera lerping if transition is active and orbital dive is not running
+  if (cameraTransition && (!orbitalDiveController || !orbitalDiveController.isDiving())) {
     const elapsedMs = performance.now() - cameraTransition.startTime;
     const progress = Math.min(1.0, elapsedMs / cameraTransition.duration);
     // Smooth easeInOutCubic
@@ -1017,19 +1331,32 @@ function animate() {
     b.scale.set(s, s, s);
   });
 
-  // Dynamic atmospheric fog & limb glow updates
-  if (dynamicFogMaterial && dynamicFogMaterial.uniforms) {
-    dynamicFogMaterial.uniforms.uTime.value = elapsedTime;
+  // Dynamic atmospheric clouds, shadows, white fog & limb glow updates
+  if (cloudsMaterial && cloudsMaterial.uniforms) {
+    cloudsMaterial.uniforms.uTime.value = elapsedTime;
+  }
+  if (cloudFogMaterial && cloudFogMaterial.uniforms) {
+    cloudFogMaterial.uniforms.uTime.value = elapsedTime;
   }
   if (atmosphereMaterial && atmosphereMaterial.uniforms) {
     atmosphereMaterial.uniforms.uTime.value = elapsedTime;
   }
-  if (dynamicFogMesh) {
-    // Subtle differential planetary atmospheric drift
-    dynamicFogMesh.rotation.y += 0.0001;
+  if (cloudsMesh) {
+    // Realistic eastward atmospheric jet-stream circulation
+    cloudsMesh.rotation.y += 0.00014;
+  }
+  if (cloudShadowMesh) {
+    // Soft shadows rotate in exact lockstep with clouds
+    cloudShadowMesh.rotation.y += 0.00014;
+  }
+  if (cloudFogMesh) {
+    // High-altitude cirrus fog drifts smoothly around the globe
+    cloudFogMesh.rotation.y += 0.00018;
   }
 
-  controls.update();
+  if (!orbitalDiveController || !orbitalDiveController.isDiving()) {
+    controls.update();
+  }
   renderer.render(scene, camera);
 }
 

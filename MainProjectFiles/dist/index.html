@@ -420,6 +420,70 @@
         box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
       }
 
+      /* Orbital Dive Launch Button */
+      .orbital-dive-hud-btn {
+        margin: 2px 20px 12px 20px;
+        background: linear-gradient(135deg, #0284c7, #06b6d4);
+        color: #ffffff;
+        border: 1px solid rgba(0, 240, 255, 0.65);
+        padding: 9px 16px;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 0.82rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 4px 18px rgba(0, 229, 255, 0.35);
+      }
+      .orbital-dive-hud-btn:hover {
+        background: linear-gradient(135deg, #0ea5e9, #00f0ff);
+        color: #020713;
+        box-shadow: 0 6px 25px rgba(0, 229, 255, 0.65), 0 0 20px rgba(0, 229, 255, 0.5);
+        transform: translateY(-2px);
+      }
+
+      /* High-Res Water Column Plunge Grid Overlay */
+      .water-column-plunge-grid {
+        position: fixed;
+        inset: 0;
+        z-index: 99990;
+        background-image: 
+          radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.3) 0%, rgba(2, 20, 48, 0.8) 60%, #020713 100%),
+          linear-gradient(rgba(0, 229, 255, 0.18) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 229, 255, 0.18) 1px, transparent 1px);
+        background-size: 100% 100%, 48px 48px, 48px 48px;
+        opacity: 0;
+        transform: scale(1.4);
+        transition: opacity 0.55s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+      }
+      .water-column-plunge-grid.active {
+        opacity: 1;
+        transform: scale(1.0);
+      }
+
+      /* Seamless Transition Overlay */
+      .transition-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: radial-gradient(circle at center, rgba(0, 229, 255, 0.25) 0%, rgba(2, 7, 19, 0.95) 75%, #020713 100%);
+        z-index: 99999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .transition-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
       /* Tab Navigation */
       .argo-tabs-nav {
         display: flex;
@@ -855,8 +919,8 @@
         pointer-events: auto;
       }
     </style>
-    <script type="module" crossorigin src="/assets/main-CFz3XlYr.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/oceanDataService-CLVl5NGP.js">
+    <script type="module" crossorigin src="/assets/main-DMng1sbp.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/oceanDataService-BQKW18kW.js">
   </head>
   <body>
     <!-- Transition Overlay -->
@@ -1047,6 +1111,11 @@
         </div>
         <div class="argo-status-badge" id="argoStatusPill">Active</div>
       </div>
+
+      <!-- Cinematic Orbital Dive Button -->
+      <button class="orbital-dive-hud-btn" id="btnOrbitalDiveLaunch" onclick="triggerOrbitalDiveForSelected()" title="Double-click float marker or click here for Cinematic Orbital Dive">
+        <span>🚀 Cinematic Orbital Dive</span>
+      </button>
 
       <!-- Tab Navigation -->
       <div class="argo-tabs-nav">
@@ -1254,12 +1323,17 @@
     <!-- Mouse Controls Hint -->
     <div class="hud-controls glass-panel">
       <span>🖱️ <strong>Left Click:</strong> Rotate / Select Buoy</span>
+      <span>🚀 <strong>Double Click Marker:</strong> Cinematic Orbital Dive</span>
       <span>🔍 <strong>Scroll:</strong> Zoom</span>
       <span>✋ <strong>Right Click:</strong> Pan</span>
     </div>
 
     <!-- Hover Tooltip -->
     <div id="tooltip"></div>
+
+    <!-- High-Res Water Column Plunge Grid & Atmosphere Transition Overlay -->
+    <div id="waterColumnPlungeGrid" class="water-column-plunge-grid"></div>
+    <div id="transitionOverlay" class="transition-overlay"></div>
 
     <script>
       function toggleSidebar() {
