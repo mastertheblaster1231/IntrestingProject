@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { WorkspaceManager } from "./WorkspaceManager.jsx";
+import "./workspace.css";
 import { oceanDataService, getStationById } from "./oceanDataService.js";
 import {
   createInstrumentObject,
@@ -1880,6 +1884,11 @@ window.focusInstrument = function (instrumentId) {
   document.querySelectorAll(".fleet-chip-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.instId === inst.id);
   });
+
+  // 6. Open or focus in React WorkspaceManager
+  if (window.workspaceManager && window.workspaceManager.openInstrument) {
+    window.workspaceManager.openInstrument(inst.id);
+  }
 };
 
 // Initialize Sector Fleet Chips in bottom bar
@@ -1940,7 +1949,7 @@ function getHoveredInstrument(clientX, clientY) {
 window.addEventListener("pointermove", (e) => {
   if (
     e.target.closest(
-      ".glass-panel, .argo-subtab-card, .depth-bar-container, .cycle-sun-btn"
+      ".glass-panel, .argo-subtab-card, .depth-bar-container, .cycle-sun-btn, .workspace-interactive, .workspace-window, .fleet-bar-wrapper, .picker-popover-backdrop"
     )
   ) {
     if (hoverCard) hoverCard.classList.remove("active");
@@ -1990,7 +1999,7 @@ window.addEventListener("pointermove", (e) => {
 window.addEventListener("click", (e) => {
   if (
     e.target.closest(
-      ".glass-panel, .argo-subtab-card, .depth-bar-container, .cycle-sun-btn"
+      ".glass-panel, .argo-subtab-card, .depth-bar-container, .cycle-sun-btn, .workspace-interactive, .workspace-window, .fleet-bar-wrapper, .picker-popover-backdrop"
     )
   ) {
     return;
@@ -2335,3 +2344,32 @@ function animate() {
 }
 
 animate();
+
+// ============================================================================
+// 9. REACT MULTI-WINDOW WORKSPACE & FLEET BAR MOUNT
+// ============================================================================
+function initReactWorkspace() {
+  let rootEl = document.getElementById("ocean-react-root");
+  if (!rootEl) {
+    rootEl = document.createElement("div");
+    rootEl.id = "ocean-react-root";
+    document.body.appendChild(rootEl);
+  }
+
+  try {
+    const reactRoot = ReactDOM.createRoot(rootEl);
+    reactRoot.render(
+      React.createElement(
+        React.StrictMode,
+        null,
+        React.createElement(WorkspaceManager, { instruments: DEMO_INSTRUMENTS })
+      )
+    );
+    console.log("✅ [Ocean.js] React WorkspaceManager & FleetBar mounted successfully.");
+  } catch (err) {
+    console.error("❌ [Ocean.js] Failed to mount React WorkspaceManager:", err);
+  }
+}
+
+// Mount workspace
+initReactWorkspace();
