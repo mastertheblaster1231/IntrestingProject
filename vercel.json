@@ -1,0 +1,9 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd MainProjectFiles && npm run build",
+  "outputDirectory": "MainProjectFiles/dist",
+  "cleanUrls": false,
+  "rewrites": [
+    { "source": "/ocean", "destination": "/ocean.html" }
+  ]
+}
