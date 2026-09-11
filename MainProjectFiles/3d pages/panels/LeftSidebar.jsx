@@ -24,10 +24,8 @@ export function LeftSidebar() {
 
   // Visualization toggles
   const [depthSlice, setDepthSlice] = useState(false);
-  const [isosurface, setIsosurface] = useState(false);
   const [currentVectorsViz, setCurrentVectorsViz] = useState(false);
   const [verticalExagg, setVerticalExagg] = useState(1.0);
-  const [isothermThreshold, setIsothermThreshold] = useState(20.0);
 
   // Sync with OCEAN_STATE
   useEffect(() => {
@@ -94,28 +92,6 @@ export function LeftSidebar() {
       }
       return newVal;
     });
-  }, []);
-
-  const handleIsosurfaceToggle = useCallback(() => {
-    setIsosurface(prev => {
-      const newVal = !prev;
-      const checkEl = document.getElementById('checkIsotherm');
-      if (checkEl) {
-        checkEl.checked = newVal;
-        checkEl.dispatchEvent(new Event('change'));
-      }
-      return newVal;
-    });
-  }, []);
-
-  const handleIsothermThreshold = useCallback((e) => {
-    const val = parseFloat(e.target.value);
-    setIsothermThreshold(val);
-    const sliderEl = document.getElementById('sliderIsothermThreshold');
-    if (sliderEl) {
-      sliderEl.value = val.toString();
-      sliderEl.dispatchEvent(new Event('input'));
-    }
   }, []);
 
   const cycleColormap = useCallback(() => {
@@ -261,29 +237,6 @@ export function LeftSidebar() {
             <input type="checkbox" checked={depthSlice} onChange={handleDepthSliceToggle} />
             Depth Slice
           </label>
-
-          <label className="layer-check">
-            <input type="checkbox" checked={isosurface} onChange={handleIsosurfaceToggle} />
-            Isosurface
-          </label>
-
-          {isosurface && (
-            <div className="slider-row" style={{ paddingLeft: 24 }}>
-              <div className="slider-row__header">
-                <span>Isotherm Threshold</span>
-                <span className="slider-row__value">{isothermThreshold}°C</span>
-              </div>
-              <input
-                type="range"
-                className="panel-slider"
-                min="15"
-                max="26"
-                step="0.5"
-                value={isothermThreshold}
-                onChange={handleIsothermThreshold}
-              />
-            </div>
-          )}
 
           <label className="layer-check">
             <input type="checkbox" checked={currentVectorsViz} onChange={() => setCurrentVectorsViz(p => !p)} />

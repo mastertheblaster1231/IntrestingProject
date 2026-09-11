@@ -634,7 +634,7 @@ const waterFragmentShader = `
     float fog = smoothstep(60.0, 240.0, dist);
     finalColor = mix(finalColor, uSkyHorizonColor, fog * 0.9);
 
-    gl_FragColor = vec4(finalColor, 0.92);
+    gl_FragColor = vec4(finalColor, 0.75);
   }
 `;
 
@@ -668,6 +668,7 @@ const waterMaterial = new THREE.ShaderMaterial({
   },
   side: THREE.DoubleSide,
   transparent: true,
+  depthWrite: false, // Prevents water surface from blocking underwater objects
   wireframe: false,
 });
 
@@ -2341,7 +2342,34 @@ const isothermMesh = createIsothermIsosurface(OCEAN_STATE.isothermTemp);
 isothermMesh.visible = OCEAN_STATE.isothermActive;
 scene.add(isothermMesh);
 
-// Function to refresh volumetric scalar fields
+// ─── HIGH-VISIBILITY NEON BEACON WIREFRAME ISOSURFACE DOME ───────────────────
+// Anchored directly around active Argo float, renders on TOP of water (depthTest: false)
+const neonBeaconGeo = new THREE.SphereGeometry(1, 16, 16);
+const neonBeaconMat = new THREE.MeshBasicMaterial({
+  color: OCEAN_STATE.isothermTemp >= 26.5 ? 0xff2200 : 0x00ffcc,
+  wireframe: true,
+  depthTest: false, // Forces it to render on TOP of water so it cannot be hidden
+  depthWrite: false,
+  transparent: true,
+  opacity: 0.88,
+});
+const neonBeaconMesh = new THREE.Mesh(neonBeaconGeo, neonBeaconMat);
+neonBeaconMesh.name = "neon_beacon_isosurface";
+neonBeaconMesh.renderOrder = 999;
+neonBeaconMesh.position.set(ARGO_FLOAT_CONFIG.x, 0, ARGO_FLOAT_CONFIG.z);
+neonBeaconMesh.visible = OCEAN_STATE.isothermActive;
+scene.add(neonBeaconMesh);
+
+function updateNeonBeacon() {
+  if (neonBeaconMesh) {
+    const threshold = OCEAN_STATE.isothermTemp ?? 25;
+    const s = ((32 - threshold) / 5) * 8 + 5;
+    neonBeaconMesh.scale.set(s, s * 0.5, s);
+    neonBeaconMat.color.set(threshold >= 26.5 ? 0xff2200 : 0x00ffcc);
+    neonBeaconMesh.visible = Boolean(OCEAN_STATE.isothermActive);
+  }
+}
+updateNeonBeacon();
 function refreshVolumetricFields() {
   activeSliceData = netCDFParserService.generateSlice({
     variable: OCEAN_STATE.variable,
@@ -2413,11 +2441,17 @@ window.toggleVolumetricSlice = function(visible) {
 window.setIsothermActive = function(active) {
   OCEAN_STATE.isothermActive = active;
   isothermMesh.visible = active;
+  if (typeof neonBeaconMesh !== 'undefined' && neonBeaconMesh) {
+    neonBeaconMesh.visible = Boolean(active);
+  }
 };
 
 window.setIsothermThreshold = function(tempC) {
   OCEAN_STATE.isothermTemp = parseFloat(tempC);
   isothermMesh.userData.targetTemp = OCEAN_STATE.isothermTemp;
+  if (typeof updateNeonBeacon === 'function') {
+    updateNeonBeacon();
+  }
   refreshVolumetricFields();
 };
 
@@ -2683,46 +2717,67 @@ function updateTelemetryPanelWithInstrument(inst) {
 
 // Focuses and dives camera to an instrument
 let selectedInstrumentId = "argo-2902351";
+const cameraTargetLookAt = new THREE.Vector3(0, -0.2, 1.5);
+const cameraTargetPosition = new THREE.Vector3(3.8, 2.2, 5.2);
+let isCameraLerping = false;
+
 window.focusInstrument = function (instrumentId) {
-  const inst = DEMO_INSTRUMENTS.find((i) => i.id === instrumentId);
-  if (!inst) return;
+  if (window.__focusingInstrumentInternal) return;
+  window.__focusingInstrumentInternal = true;
+  try {
+    const inst = DEMO_INSTRUMENTS.find((i) => i.id === instrumentId);
+    if (!inst) return;
 
-  selectedInstrumentId = inst.id;
+    selectedInstrumentId = inst.id;
 
-  // 1. Plunge 3D camera to this instrument's depth
-  if (window.jumpToDepth) {
-    window.jumpToDepth(inst.depthMeters);
-  }
+    // 1. Smoothly glide camera orbit target and camera position to the new instrument (60-frame Lerp)
+    cameraTargetLookAt.set(inst.position[0], inst.position[1], inst.position[2]);
+    cameraTargetPosition.set(inst.position[0] + 3.8, inst.position[1] + 2.2, inst.position[2] + 5.2);
+    isCameraLerping = true;
 
-  // 2. Adjust camera orbit target around this instrument
-  controls.target.set(inst.position[0], inst.position[1], inst.position[2]);
+    // 2. Update depth input and left-side vertical scrollbar UI to match selected instrument depth
+    const instDepth = inst.depthMeters || inst.depth || 15;
+    if (window.updateDepthUI) {
+      window.updateDepthUI(instDepth / 4000, false);
+    } else {
+      const depthInput = document.getElementById('depthInput');
+      if (depthInput) {
+        depthInput.value = instDepth;
+      }
+    }
 
-  // 3. Position selection ring
-  if (selectionRing) {
-    selectionRing.visible = true;
-    selectionRing.position.set(
-      inst.position[0],
-      inst.position[1] - 0.25,
-      inst.position[2]
-    );
-  }
+    // 3. Position selection ring
+    if (selectionRing) {
+      selectionRing.visible = true;
+      selectionRing.position.set(
+        inst.position[0],
+        inst.position[1] - 0.25,
+        inst.position[2]
+      );
+    }
 
-  // 4. Update UI telemetry panel
-  updateTelemetryPanelWithInstrument(inst);
+    // 4. Update UI telemetry panel
+    updateTelemetryPanelWithInstrument(inst);
 
-  // 5. Update active chip in fleet selector bar
-  document.querySelectorAll(".fleet-chip-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.instId === inst.id);
-  });
+    // 5. Update active chip in fleet selector bar
+    document.querySelectorAll(".fleet-chip-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.instId === inst.id);
+    });
 
-  // 6. Open or focus in React WorkspaceManager
-  if (window.workspaceManager && window.workspaceManager.openInstrument) {
-    window.workspaceManager.openInstrument(inst.id);
-  }
+    // 6. Update Zustand global oceanStore (instant synchronous state)
+    if (window.oceanStore?.getState) {
+      const store = window.oceanStore.getState();
+      if (store.activeInstrument?.id !== inst.id) {
+        store.selectInstrument(inst.id);
+      }
+    }
 
-  // 7. Update Zustand global oceanStore
-  if (window.oceanStore) {
-    window.oceanStore.getState().fetchAndSetInstrument(inst.id);
+    // 7. Open or focus in React WorkspaceManager
+    if (window.workspaceManager && window.workspaceManager.openInstrument) {
+      window.workspaceManager.openInstrument(inst.id);
+    }
+  } finally {
+    window.__focusingInstrumentInternal = false;
   }
 };
 
@@ -2867,32 +2922,80 @@ window.setOceanDepth = function (ratio) {
   // ratio: 0.0 (0m, Top level) -> 1.0 (4000m, Extreme Hadal Abyss)
   const depthMeters = Math.round(ratio * 4000);
 
-  // 1. DIVE DYNAMICS FOR ARGO FLOAT & CAMERA:
-  // The Argo float submerges beneath the surface (y = 0) and travels into the deep ocean
+  if (window.OCEAN_STATE) {
+    window.OCEAN_STATE.currentDepth = depthMeters;
+    window.OCEAN_STATE.depthRatio = ratio;
+  }
+  if (window.oceanStore?.getState) {
+    const store = window.oceanStore.getState();
+    store.setModelControl('currentDepth', depthMeters);
+    store.setActiveInstrumentDepth(depthMeters);
+  }
+
+  // 1. DIVE DYNAMICS FOR ACTIVE INSTRUMENT & CAMERA:
+  // Move whichever instrument is currently selected (Slocum Glider, CTD Rosette, or Argo Float)
   const baseDepth = 95.0;
   const maxUnderwaterDepth = baseDepth * (OCEAN_STATE.verticalExaggeration || 1.0);
-  argoDiveRatio = ratio;
-  argoDiveY = -ratio * maxUnderwaterDepth;
-  argoFloat.visible = true;
+  const currentDiveY = -ratio * maxUnderwaterDepth;
 
-  // Camera follows the float down into the ocean water column, positioned above and behind the float
-  // so the user can look up and see the real water surface (y = 0) high above,
-  // and see the float completely submerged in open 3D ocean water!
+  const isSlocum = selectedInstrumentId === "glider-slocum-04";
+  const isCtd = selectedInstrumentId === "ctd-rosette-01";
+  const isArgo = !isSlocum && !isCtd;
+
+  let activeTargetX = ARGO_FLOAT_CONFIG.x;
+  let activeTargetZ = ARGO_FLOAT_CONFIG.z;
+  let activeTargetY = currentDiveY;
+
+  if (isSlocum) {
+    const gliderSlocum = interactiveInstrumentsMap.get("glider-slocum-04");
+    if (gliderSlocum) {
+      gliderSlocum.position.y = currentDiveY;
+      activeTargetX = gliderSlocum.position.x;
+      activeTargetZ = gliderSlocum.position.z;
+      activeTargetY = currentDiveY;
+      if (slocumTrail && slocumTrail.userData?.update) {
+        slocumTrail.userData.update(clock ? clock.getElapsedTime() : 0, gliderSlocum.position);
+      }
+    }
+  } else if (isCtd) {
+    const ctdRosette = interactiveInstrumentsMap.get("ctd-rosette-01");
+    if (ctdRosette) {
+      ctdRosette.position.y = currentDiveY;
+      activeTargetX = ctdRosette.position.x;
+      activeTargetZ = ctdRosette.position.z;
+      activeTargetY = currentDiveY;
+    }
+  } else {
+    // Argo Float
+    argoDiveRatio = ratio;
+    argoDiveY = currentDiveY;
+    argoFloat.position.y = currentDiveY;
+    argoFloat.visible = true;
+    activeTargetX = argoFloat.position.x;
+    activeTargetZ = argoFloat.position.z;
+    activeTargetY = currentDiveY;
+  }
+
+  // Camera follows the active device down into the water column
   let targetCamY;
   let targetLookY;
   if (ratio <= 0.002) {
-    targetCamY = 3.2;
-    targetLookY = 1.8;
+    targetCamY = activeTargetY + 3.2;
+    targetLookY = activeTargetY + 1.8;
   } else {
-    targetCamY = argoDiveY + 3.0;
-    targetLookY = argoDiveY + 0.6;
+    targetCamY = activeTargetY + 3.0;
+    targetLookY = activeTargetY + 0.6;
   }
-  camera.position.y = targetCamY;
+  if (!isCameraLerping) {
+    camera.position.y = targetCamY;
+    controls.target.y = targetLookY;
+    controls.target.x = activeTargetX;
+    controls.target.z = activeTargetZ;
+  }
 
-  // Keep orbit controls centered on the diving float
-  controls.target.y = targetLookY;
-  controls.target.x = ARGO_FLOAT_CONFIG.x;
-  controls.target.z = ARGO_FLOAT_CONFIG.z;
+  if (selectionRing && selectionRing.visible) {
+    selectionRing.position.set(activeTargetX, activeTargetY - 0.25, activeTargetZ);
+  }
 
   // Orbit controls constraints
   if (ratio > 0.02) {
@@ -3101,7 +3204,14 @@ function animate() {
 
 
   // 2. Realistic Floating, Diving & Bobbing Effect for APEX Argo Float
+  // Strictly reads ONLY its own depth from store.instruments['argo-2902351']
   if (argoFloat.visible) {
+    const store = window.oceanStore?.getState ? window.oceanStore.getState() : null;
+    const argoDepth = store?.instruments?.['argo-2902351']?.depth ?? 15;
+    const argoRatio = argoDepth / 4000.0;
+    const maxArgoDepth = 95.0 * (OCEAN_STATE.verticalExaggeration || 1.0);
+    const isolatedArgoDiveY = -argoRatio * maxArgoDepth;
+
     const fx = argoFloat.position.x;
     const fz = argoFloat.position.z;
     // Calculate water wave height at float's position
@@ -3111,8 +3221,7 @@ function animate() {
       0.38;
 
     // Smooth transition from surface wave bobbing to underwater smooth descent
-    // At surface (ratio=0), waveInfluence is 1.0. Underwater (ratio > 0.04), it fades to 0.0
-    const surfaceInfluence = Math.max(0.0, 1.0 - argoDiveRatio * 20.0);
+    const surfaceInfluence = Math.max(0.0, 1.0 - argoRatio * 20.0);
 
     // Surface wave bobbing vs underwater gentle hydrodynamic motion
     const surfaceBobbing =
@@ -3120,9 +3229,9 @@ function animate() {
     const underwaterMotion =
       Math.sin(elapsedTime * 1.2) * 0.05 * (1.0 - surfaceInfluence);
 
-    // Dynamic vertical position: base Y + scroller dive Y + waves/underwater current
+    // Dynamic vertical position: strictly isolated Argo depth + waves/underwater current
     argoFloat.position.y =
-      ARGO_FLOAT_CONFIG.y + argoDiveY + surfaceBobbing + underwaterMotion;
+      ARGO_FLOAT_CONFIG.y + isolatedArgoDiveY + surfaceBobbing + underwaterMotion;
 
     // Organic wave tilting at surface, stabilized underwater descent orientation
     argoFloat.rotation.z =
@@ -3156,15 +3265,60 @@ function animate() {
   // 6. Animate Ocean Instruments Fleet (Gliders sawtooth flight, CTD swaying, beacons pulsing)
   const gliderSlocum = interactiveInstrumentsMap.get("glider-slocum-04");
   if (gliderSlocum) {
-    // Slocum glider sawtooth flight kinematics: undulates up and down with realistic pitch angle
-    const slocumBaseY = -4.5;
-    const slocumDive = Math.sin(elapsedTime * 0.4) * 1.5; // up/down dive
-    const slocumPitch = Math.cos(elapsedTime * 0.4) * 0.16; // nose pitch aligns with climb/dive
-    gliderSlocum.position.x = 7.2 + Math.sin(elapsedTime * 0.25) * 1.8;
-    gliderSlocum.position.y = slocumBaseY + slocumDive;
-    gliderSlocum.position.z = -3.0 + Math.cos(elapsedTime * 0.25) * 1.8;
-    gliderSlocum.rotation.x = slocumPitch;
-    gliderSlocum.rotation.z = Math.sin(elapsedTime * 0.5) * 0.08;
+    const isSlocumActive = selectedInstrumentId === "glider-slocum-04";
+    const store = window.oceanStore?.getState ? window.oceanStore.getState() : null;
+
+    if (isSlocumActive && store) {
+      // 1. Target Depth (Y): from isolated instruments['glider-slocum-04'].depth
+      const gliderData = store.instruments?.['glider-slocum-04'] || {};
+      const currentDepthVal = gliderData.depth ?? store.activeInstrumentDepth ?? 190;
+      const targetY = -Math.min(95, (currentDepthVal / 4000.0) * 90.0 * (OCEAN_STATE.verticalExaggeration || 1.0));
+
+      // 2. Target Horizontal Position: from isolated instruments['glider-slocum-04'].transectDistance
+      const horizontalKm = gliderData.transectDistance ?? store.activeInstrumentHorizontal ?? 25;
+      const targetX = 7.2 + (horizontalKm - 25) * 0.75;
+      const targetZ = -3.0 + (horizontalKm - 25) * 0.35;
+
+      // 3. Move Slocum Glider immediately with high responsiveness
+      gliderSlocum.position.y = THREE.MathUtils.lerp(gliderSlocum.position.y, targetY, 0.22);
+      gliderSlocum.position.x = THREE.MathUtils.lerp(gliderSlocum.position.x, targetX, 0.22);
+      gliderSlocum.position.z = THREE.MathUtils.lerp(gliderSlocum.position.z, targetZ, 0.22);
+
+      // 4. Hydrodynamic Pitch & Roll Kinematics (-15° dive / +15° climb)
+      const verticalDelta = targetY - gliderSlocum.position.y;
+      const targetPitch = verticalDelta < -0.04 ? 0.2618 : (verticalDelta > 0.04 ? -0.2618 : 0);
+      gliderSlocum.rotation.x = THREE.MathUtils.lerp(gliderSlocum.rotation.x, targetPitch, 0.12);
+      gliderSlocum.rotation.z = Math.sin(elapsedTime * 0.8) * 0.03;
+
+      // 5. Smooth Character Possession Chase Camera
+      // Allows user to visibly see the glider model translate across the screen and dive,
+      // while the camera smoothly follows and preserves the user's orbital view!
+      if (!isCameraLerping) {
+        const targetLookAt = new THREE.Vector3(
+          gliderSlocum.position.x,
+          gliderSlocum.position.y + 0.6,
+          gliderSlocum.position.z
+        );
+        controls.target.lerp(targetLookAt, 0.08);
+
+        const currentCamOffset = camera.position.clone().sub(controls.target);
+        if (currentCamOffset.length() < 3.5 || currentCamOffset.length() > 22.0) {
+          currentCamOffset.set(3.8, 2.4, 5.2);
+        }
+        const desiredCamPos = controls.target.clone().add(currentCamOffset);
+        camera.position.lerp(desiredCamPos, 0.08);
+      }
+    } else {
+      // Idle Slocum glider sawtooth kinematics: undulates with realistic pitch angle
+      const slocumBaseY = -4.5;
+      const slocumDive = Math.sin(elapsedTime * 0.4) * 1.5;
+      const slocumPitch = Math.cos(elapsedTime * 0.4) * 0.16;
+      gliderSlocum.position.x = 7.2 + Math.sin(elapsedTime * 0.25) * 1.8;
+      gliderSlocum.position.y = slocumBaseY + slocumDive;
+      gliderSlocum.position.z = -3.0 + Math.cos(elapsedTime * 0.25) * 1.8;
+      gliderSlocum.rotation.x = slocumPitch;
+      gliderSlocum.rotation.z = Math.sin(elapsedTime * 0.5) * 0.08;
+    }
 
     // Update glowing sawtooth trajectory ribbon tracking behind Slocum
     if (slocumTrail && slocumTrail.userData?.update) {
@@ -3208,10 +3362,23 @@ function animate() {
   }
 
   if (selectionRing && selectionRing.visible) {
+    const activeMesh = interactiveInstrumentsMap.get(selectedInstrumentId);
+    if (activeMesh) {
+      selectionRing.position.set(activeMesh.position.x, activeMesh.position.y - 0.25, activeMesh.position.z);
+    }
     selectionRing.scale.setScalar(1.0 + Math.sin(elapsedTime * 4.0) * 0.06);
   }
 
-  // 7. Update camera controls
+  // 7. Update camera controls & smooth lerping to prevent instant teleportation
+  if (isCameraLerping) {
+    controls.target.lerp(cameraTargetLookAt, 0.05);
+    camera.position.lerp(cameraTargetPosition, 0.05);
+    if (controls.target.distanceTo(cameraTargetLookAt) < 0.01 && camera.position.distanceTo(cameraTargetPosition) < 0.02) {
+      controls.target.copy(cameraTargetLookAt);
+      camera.position.copy(cameraTargetPosition);
+      isCameraLerping = false;
+    }
+  }
   controls.update();
 
   renderer.render(scene, camera);

@@ -10,7 +10,16 @@ export function LeftPanel() {
   // Granular selectors — component only re-renders when relevant state slices change
   const dataLayers = useOceanStore((state) => state.dataLayers);
   const modelControls = useOceanStore((state) => state.modelControls);
-  const visualization = useOceanStore((state) => state.visualization);
+  const visualization = useOceanStore((state) => state.visualization);  // Instrument subscriptions with isolated coordinates
+  const activeInstrument = useOceanStore((state) => state.activeInstrument);
+  const activeInstrumentId = activeInstrument?.id || 'argo-2902351';
+  const depth = useOceanStore((state) => state.instruments[activeInstrumentId]?.depth ?? state.activeInstrumentDepth ?? 0);
+  const transectDistance = useOceanStore(
+    (state) => state.instruments['glider-slocum-04']?.transectDistance ?? state.activeInstrumentHorizontal ?? 25
+  );
+  const setActiveInstrumentDepth = useOceanStore((state) => state.setActiveInstrumentDepth);
+  const setActiveInstrumentTransect = useOceanStore((state) => state.setActiveInstrumentTransect);
+  const setActiveInstrumentHorizontal = useOceanStore((state) => state.setActiveInstrumentHorizontal);
 
   // Setters from Zustand store
   const setDataLayer = useOceanStore((state) => state.setDataLayer);
@@ -19,20 +28,19 @@ export function LeftPanel() {
   const setOpacity = useOceanStore((state) => state.setOpacity);
   const setColorbar = useOceanStore((state) => state.setColorbar);
   const setShowDepthSlice = useOceanStore((state) => state.setShowDepthSlice);
-  const setShowIsosurface = useOceanStore((state) => state.setShowIsosurface);
   const setVerticalExaggeration = useOceanStore((state) => state.setVerticalExaggeration);
 
   const { showModel, showCurrents, showArgo, showGliders } = dataLayers;
   const { activeVariable, currentDepth, opacity, colorbar } = modelControls;
-  const { showDepthSlice, showIsosurface, verticalExaggeration } = visualization;
+  const { showDepthSlice, verticalExaggeration } = visualization;
 
   const handleVariableChange = useCallback((e) => {
     setActiveVariable(e.target.value);
   }, [setActiveVariable]);
 
   const handleDepthChange = useCallback((e) => {
-    setCurrentDepth(parseFloat(e.target.value) || 0);
-  }, [setCurrentDepth]);
+    setActiveInstrumentDepth(Number(e.target.value) || 0);
+  }, [setActiveInstrumentDepth]);
 
   const handleOpacityChange = useCallback((e) => {
     setOpacity(parseFloat(e.target.value) / 100.0);
@@ -51,16 +59,8 @@ export function LeftPanel() {
   }, [setColorbar]);
 
   return (
-    <div className="sidebar-panel">
-      {/* Header */}
-      <div className="sidebar-header">
-        <div className="sidebar-header__title">
-          <span>🌊</span>
-          <span>Command Parameters</span>
-        </div>
-      </div>
-
-      <div className="sidebar-scroll">
+    <div className="left-panel">
+      <div className="left-panel__content">
         {/* ────────────────────────────────────────────────────────
             1. DATA LAYERS
             ──────────────────────────────────────────────────────── */}
@@ -69,8 +69,8 @@ export function LeftPanel() {
             <div className="sidebar-section__label">Data Layers</div>
             <InfoCircle
               title="1. Data Layers"
-              whatItDoes="Checkboxes that mount or unmount entire 3D data sets from the React tree."
-              futureApiUse="Toggling 'Argo Floats' triggers a lightweight API call to the INCOIS ERDDAP server (e.g., https://erddap.incois.gov.in/erddap/info/index.json) to pull just the Lat/Lon coordinates of active floats, rendering them as 3D pins."
+              whatItDoes="Toggles 3D volumetric ocean layers: Numerical circulation model output, 3D ocean current velocity vectors, and active in-situ observing platform pins (Argo Floats & Autonomous Gliders)."
+              futureApiUse="Query INCOIS ERDDAP gridded OGC WMS/WFS services to dynamically stream 4D NetCDF ocean forecast datasets."
               position="right"
             />
           </div>
@@ -81,8 +81,7 @@ export function LeftPanel() {
               checked={showModel}
               onChange={(e) => setDataLayer('showModel', e.target.checked)}
             />
-            <span className="layer-color-swatch" style={{ background: '#ff6b35' }} />
-            Ocean Model (Temperature)
+            Ocean Model Volume (HYCOM / INCOIS)
           </label>
 
           <label className="layer-check">
@@ -91,8 +90,7 @@ export function LeftPanel() {
               checked={showCurrents}
               onChange={(e) => setDataLayer('showCurrents', e.target.checked)}
             />
-            <span className="layer-color-swatch" style={{ background: '#38bdf8' }} />
-            Current Vectors
+            Ocean Currents Velocity Field
           </label>
 
           <label className="layer-check">
@@ -101,8 +99,7 @@ export function LeftPanel() {
               checked={showArgo}
               onChange={(e) => setDataLayer('showArgo', e.target.checked)}
             />
-            <span className="layer-color-swatch" style={{ background: '#ff9436' }} />
-            Argo Floats
+            Argo Profiling Floats
           </label>
 
           <label className="layer-check">
@@ -111,8 +108,7 @@ export function LeftPanel() {
               checked={showGliders}
               onChange={(e) => setDataLayer('showGliders', e.target.checked)}
             />
-            <span className="layer-color-swatch" style={{ background: '#fbbf24' }} />
-            Gliders
+            Underwater Gliders
           </label>
         </div>
 
@@ -124,8 +120,8 @@ export function LeftPanel() {
             <div className="sidebar-section__label">Model Controls</div>
             <InfoCircle
               title="2. Model Controls"
-              whatItDoes="Variable Dropdown: Swaps active texture map on the 3D depth slice. Depth Slider: Changes currentDepth; the 3D plane physically moves down into the dark water and Bottom Dock charts instantly update for that specific depth. Opacity: Adjusts alpha to see seabed bathymetry underneath. Colorbar Min/Max: Recalibrates heatmap (set Min to 26°C to highlight cyclone danger zones)."
-              futureApiUse="Stream multi-dimensional NetCDF arrays asynchronously through OPeNDAP or THREDDS data services directly into Three.js textures."
+              whatItDoes="Selects the physical parameter being visualized (Temperature, Salinity, Currents, Chlorophyll). Also controls the depth level, slice opacity, and dynamic colormap temperature boundaries."
+              futureApiUse="Call backend /api/model-slice to dynamically extract and slice NetCDF hyperslabs across depth coordinates."
               position="right"
             />
           </div>
@@ -136,22 +132,22 @@ export function LeftPanel() {
               <span>Variable</span>
             </div>
             <select
-              className="panel-select"
+              className="modal-select"
               value={activeVariable}
               onChange={handleVariableChange}
             >
-              <option value="temperature">🌡️ Temperature (°C)</option>
+              <option value="temperature">🌡️ Potential Temperature (°C)</option>
               <option value="salinity">💧 Salinity (PSU)</option>
               <option value="current">🌊 Current Velocity (m/s)</option>
               <option value="chlorophyll">🌿 Chlorophyll-a (mg/m³)</option>
             </select>
           </div>
 
-          {/* Depth Slider */}
+          {/* Depth Scroll Slider — visible for all devices, bound to isolated instrument depth */}
           <div className="slider-row">
             <div className="slider-row__header">
-              <span>Depth</span>
-              <span className="slider-row__value">{Math.round(currentDepth)} m</span>
+              <span>Depth Scroll</span>
+              <span className="slider-row__value">{Math.round(depth)} m</span>
             </div>
             <input
               type="range"
@@ -159,7 +155,7 @@ export function LeftPanel() {
               min="0"
               max="4000"
               step="25"
-              value={currentDepth}
+              value={depth}
               onChange={handleDepthChange}
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: '#64748b', marginTop: 1 }}>
@@ -169,6 +165,37 @@ export function LeftPanel() {
               <span>4000m (Abyss)</span>
             </div>
           </div>
+
+          {/* Conditional Render: Horizontal Distance Slider strictly for Autonomous Gliders */}
+          {activeInstrument?.type === 'glider' && (
+            <div className="slider-row" style={{ marginTop: 10, padding: '10px 0 4px 0', borderTop: '1px dashed rgba(251, 191, 36, 0.35)' }}>
+              <div className="slider-row__header">
+                <span style={{ color: '#fbbf24', fontWeight: 600 }}>✈️ Horizontal Distance</span>
+                <span className="slider-row__value" style={{ color: '#fbbf24', fontFamily: 'Space Mono, monospace', fontWeight: 700 }}>
+                  {Number(transectDistance).toFixed(1)} km
+                </span>
+              </div>
+              <input
+                type="range"
+                className="panel-slider"
+                min="0"
+                max="50"
+                step="0.5"
+                value={transectDistance}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  if (setActiveInstrumentTransect) setActiveInstrumentTransect(val);
+                  else if (setActiveInstrumentHorizontal) setActiveInstrumentHorizontal(val);
+                }}
+                style={{ accentColor: '#fbbf24' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.58rem', color: '#fbbf24', opacity: 0.8, marginTop: 1 }}>
+                <span>0 km (Start)</span>
+                <span>25 km</span>
+                <span>50 km (Transect)</span>
+              </div>
+            </div>
+          )}
 
           {/* Opacity Slider */}
           <div className="slider-row">
@@ -232,7 +259,7 @@ export function LeftPanel() {
             <div className="sidebar-section__label">Visualization</div>
             <InfoCircle
               title="3. Visualization"
-              whatItDoes="Depth Slice: Toggles a horizontal 2D plane cutting through the 3D ocean at your chosen depth. Isosurface: Toggles a 3D blob representing a specific value (e.g., showing a 3D volume of all water exactly at 20°C). Vertical Exaggeration: Scales the Y-axis up to 100x so deep-water trenches and glider dive paths become visible."
+              whatItDoes="Depth Slice: Toggles a horizontal 2D plane cutting through the 3D ocean at your chosen depth. Vertical Exaggeration: Scales the Y-axis up to 100x so deep-water trenches and glider dive paths become visible."
               futureApiUse="Perform GPU compute-shader marching cubes on live volumetric oceanic datasets."
               position="right"
             />
@@ -246,16 +273,6 @@ export function LeftPanel() {
               onChange={(e) => setShowDepthSlice(e.target.checked)}
             />
             Depth Slice (2D Horizontal Cut)
-          </label>
-
-          {/* Isosurface Toggle */}
-          <label className="layer-check">
-            <input
-              type="checkbox"
-              checked={showIsosurface}
-              onChange={(e) => setShowIsosurface(e.target.checked)}
-            />
-            Isosurface (3D Thermal Envelope)
           </label>
 
           {/* Vertical Exaggeration Slider (1x to 100x) */}

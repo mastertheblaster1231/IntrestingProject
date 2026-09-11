@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { useOceanStore, selectFleet, selectActiveInstrument } from './useOceanStore.js';
+import { DEMO_INSTRUMENTS } from './instruments.js';
 
 /**
- * FleetBar Component
- * ==================
- * Bottom-docked cyber-marine navigation bar with:
- * - The prominent '+' Button to open the Instrument Picker Menu
- * - Dynamic Fleet Chips reflecting live workspace status
- * - Instant Layout Tools: Side-by-Side Snap, Grid Tiling, Minimize All
+ * FleetBar / SectorFleetBar Component
+ * ====================================
+ * Cyber-marine bottom navigation dock:
+ * - SECTOR FLEET radar badge
+ * - The '+' Add Instrument picker button
+ * - The 3 primary representative instrument pills:
+ *     1. Argo 2902351 (15m, orange tag)
+ *     2. Slocum G0-04 (190m, yellow tag)
+ *     3. CTD Rosette (1200m, blue tag)
+ * - Dynamic active-state highlighting linked directly to Zustand useOceanStore
+ * - Multi-Window Layout View Mode Toggles (Side-by-Side, Grid, Min All, Close All)
  */
 export function FleetBar({
   instruments = [],
@@ -20,6 +27,19 @@ export function FleetBar({
 }) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('all'); // 'all' | 'argo' | 'glider' | 'ctd'
+
+  // Subscriptions to Zustand store
+  const storeFleet = useOceanStore(selectFleet);
+  const activeInstrument = useOceanStore(selectActiveInstrument);
+  const selectInstrument = useOceanStore((state) => state.selectInstrument);
+
+  // Strictly prioritize 3 primary instruments from Zustand store or fallback
+  const fleetList =
+    storeFleet && storeFleet.length > 0
+      ? storeFleet
+      : instruments.length > 0
+      ? instruments
+      : DEMO_INSTRUMENTS;
 
   // Close picker on Escape key
   useEffect(() => {
@@ -36,7 +56,7 @@ export function FleetBar({
   const openInstrumentIds = new Set(openWindows.map((w) => w.instrumentId));
 
   // Filter instruments for picker popover
-  const filteredInstruments = instruments.filter((inst) => {
+  const filteredInstruments = fleetList.filter((inst) => {
     if (selectedFilter === 'all') return true;
     return inst.type?.toLowerCase() === selectedFilter;
   });
@@ -68,7 +88,7 @@ export function FleetBar({
     <>
       <div className="fleet-bar-wrapper workspace-interactive">
         <div className="fleet-bar">
-          {/* 1. Radar Dot & Brand Title */}
+          {/* 1. SECTOR FLEET Badge & Radar Dot */}
           <div className="fleet-brand">
             <span className="fleet-radar" />
             <span className="fleet-brand-text">Sector Fleet</span>
@@ -84,37 +104,63 @@ export function FleetBar({
             <span>Add Instrument</span>
           </button>
 
-          {/* 3. Fleet Chips for Quick Selection */}
+          {/* 3. The 3 Primary Instrument Pills with Dynamic Active Highlighting */}
           <div className="fleet-chips-group">
-            {instruments.map((inst) => {
+            {fleetList.map((inst) => {
               const isOpen = openInstrumentIds.has(inst.id);
+              const isActive = activeInstrument?.id === inst.id;
               const matchingWin = openWindows.find((w) => w.instrumentId === inst.id);
+              const colorTag =
+                inst.colorTag ||
+                (inst.type === 'argo' ? 'orange' : inst.type === 'glider' ? 'yellow' : 'blue');
 
               return (
                 <button
                   key={inst.id}
-                  className={`fleet-chip ${isOpen ? 'open-in-workspace' : ''}`}
+                  className={`fleet-chip ${isActive ? 'active' : ''} ${
+                    isOpen ? 'open-in-workspace' : ''
+                  } tag-${colorTag}`}
                   onClick={() => {
-                    if (isOpen && matchingWin) {
-                      onFocusWindow(matchingWin.id);
+                    // 1. Immediately switch Zustand activeInstrument & depth to update telemetry drawer & bottom analytics
+                    if (selectInstrument) {
+                      selectInstrument(inst.id);
                     } else {
+                      useOceanStore.getState().setActiveInstrument(inst);
+                      useOceanStore
+                        .getState()
+                        .setActiveInstrumentDepth(inst.depth ?? inst.depthMeters ?? 0);
+                    }
+
+                    // 2. Always dock and open in right side card
+                    if (onOpenInstrument) {
                       onOpenInstrument(inst.id);
+                    } else if (matchingWin && onFocusWindow) {
+                      onFocusWindow(matchingWin.id);
                     }
                   }}
-                  title={isOpen ? 'Focus Open Window' : 'Open in Workspace'}
+                  title={`${inst.name} (${inst.depth ?? inst.depthMeters}m) — Click to focus telemetry & camera`}
                 >
                   <span>{getInstrumentIcon(inst.type)}</span>
-                  <span>{inst.name.split(' ')[0]} {inst.id.split('-')[1] || ''}</span>
-                  <span style={{ fontFamily: 'var(--ws-font-mono)', fontSize: '0.65rem', color: '#00f0ff' }}>
-                    ({inst.depthMeters}m)
+                  <span>{inst.name}</span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--ws-font-mono)',
+                      fontSize: '0.65rem',
+                      color: '#00f0ff',
+                    }}
+                  >
+                    ({inst.depth ?? inst.depthMeters}m)
                   </span>
-                  {isOpen && <span className="fleet-chip-active-dot" title="Window Active in Workspace" />}
+                  <span
+                    className="fleet-chip-active-dot"
+                    title={isActive ? 'Active Platform' : 'Available Platform'}
+                  />
                 </button>
               );
             })}
           </div>
 
-          {/* 4. Workspace Multi-Window Management Tools */}
+          {/* 4. Workspace Multi-Window View Mode Toggles */}
           <div className="fleet-tools-group">
             <span className="window-count-badge" title="Active Floating Windows">
               {openWindows.length} Active
@@ -125,7 +171,10 @@ export function FleetBar({
               className="fleet-tool-btn highlight"
               onClick={onTileSideBySide}
               disabled={openWindows.length < 2}
-              style={{ opacity: openWindows.length < 2 ? 0.45 : 1, cursor: openWindows.length < 2 ? 'not-allowed' : 'pointer' }}
+              style={{
+                opacity: openWindows.length < 2 ? 0.45 : 1,
+                cursor: openWindows.length < 2 ? 'not-allowed' : 'pointer',
+              }}
               title="Snap Two Windows Side-by-Side for Instant Data Comparison"
             >
               <span>◫</span>
@@ -137,7 +186,10 @@ export function FleetBar({
               className="fleet-tool-btn"
               onClick={onTileGrid}
               disabled={openWindows.length === 0}
-              style={{ opacity: openWindows.length === 0 ? 0.45 : 1, cursor: openWindows.length === 0 ? 'not-allowed' : 'pointer' }}
+              style={{
+                opacity: openWindows.length === 0 ? 0.45 : 1,
+                cursor: openWindows.length === 0 ? 'not-allowed' : 'pointer',
+              }}
               title="Tile All Open Windows into an Organized Grid"
             >
               <span>⊞</span>
@@ -172,7 +224,7 @@ export function FleetBar({
       </div>
 
       {/* ======================================================================
-          5. INSTRUMENT PICKER POPOVER MODAL
+          5. INSTRUMENT PICKER POPOVER MODAL (Filtered to 3 Primary Platforms)
           ====================================================================== */}
       {isPickerOpen && (
         <div
@@ -213,15 +265,16 @@ export function FleetBar({
             >
               {[
                 { id: 'all', label: 'All Instruments', icon: '🌐' },
-                { id: 'argo', label: 'Argo Floats', icon: '🟠' },
-                { id: 'glider', label: 'Underwater Gliders', icon: '🟡' },
-                { id: 'ctd', label: 'CTD Rosettes & Seabed', icon: '🔷' },
+                { id: 'argo', label: 'Argo Float', icon: '🟠' },
+                { id: 'glider', label: 'Underwater Glider', icon: '🟡' },
+                { id: 'ctd', label: 'CTD Rosette', icon: '🔷' },
               ].map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedFilter(cat.id)}
                   style={{
-                    background: selectedFilter === cat.id ? 'rgba(0, 229, 255, 0.22)' : 'transparent',
+                    background:
+                      selectedFilter === cat.id ? 'rgba(0, 229, 255, 0.22)' : 'transparent',
                     border: '1px solid',
                     borderColor: selectedFilter === cat.id ? '#00f0ff' : 'transparent',
                     color: selectedFilter === cat.id ? '#ffffff' : '#94a3b8',
@@ -253,10 +306,18 @@ export function FleetBar({
                     key={inst.id}
                     className={`picker-card ${isOpen ? 'already-open' : ''}`}
                     onClick={() => {
-                      if (isOpen && matchingWin) {
-                        onFocusWindow(matchingWin.id);
+                      if (selectInstrument) {
+                        selectInstrument(inst.id);
                       } else {
+                        useOceanStore.getState().setActiveInstrument(inst);
+                        useOceanStore
+                          .getState()
+                          .setActiveInstrumentDepth(inst.depth ?? inst.depthMeters ?? 0);
+                      }
+                      if (onOpenInstrument) {
                         onOpenInstrument(inst.id);
+                      } else if (matchingWin && onFocusWindow) {
+                        onFocusWindow(matchingWin.id);
                       }
                       setIsPickerOpen(false);
                     }}
@@ -270,7 +331,10 @@ export function FleetBar({
                             {inst.platform}
                           </span>
                           <span>•</span>
-                          <span>{inst.depthMeters}m Depth ({getDepthZoneLabel(inst.depthMeters)})</span>
+                          <span>
+                            {inst.depth ?? inst.depthMeters}m Depth (
+                            {getDepthZoneLabel(inst.depth ?? inst.depthMeters)})
+                          </span>
                         </div>
                         {/* Live Telemetry Summary */}
                         <div
@@ -308,15 +372,7 @@ export function FleetBar({
 
                     {/* Action Button */}
                     <button className="picker-open-btn">
-                      {isOpen ? (
-                        <>
-                          <span>✓ Focus Window</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>+ Open in Workspace</span>
-                        </>
-                      )}
+                      {isOpen ? <span>✓ Focus Window</span> : <span>+ Open in Workspace</span>}
                     </button>
                   </div>
                 );

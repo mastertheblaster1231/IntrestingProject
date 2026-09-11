@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { useOceanStore } from '../useOceanStore.js';
 import { InfoCircle } from '../components/InfoCircle.jsx';
+import { ComparisonTable } from '../components/ComparisonTable.jsx';
 
 /**
  * BottomDock.jsx — Command Center Analytics Dock.
  * Subscribes to activeInstrument, currentDepth, and activeVariable from useOceanStore.
- * Features 5 modular cards with real-time Model vs Observation Delta calculation.
+ * Features 4 modular cards with real-time Model vs Observation Delta calculation.
  */
 export function BottomDock() {
   const activeInstrument = useOceanStore((state) => state.activeInstrument);
-  const currentDepth = useOceanStore((state) => state.modelControls.currentDepth);
+  const currentDepth = useOceanStore((state) => state.activeInstrumentDepth);
   const activeVariable = useOceanStore((state) => state.modelControls.activeVariable);
   const setActiveVariable = useOceanStore((state) => state.setActiveVariable);
 
@@ -28,10 +29,10 @@ export function BottomDock() {
           activeVariable={activeVariable}
           setActiveVariable={setActiveVariable}
         />
-        <IsosurfaceCard
-          activeVariable={activeVariable}
+        <GliderProfileCard
+          activeInstrument={activeInstrument}
+          currentDepth={currentDepth}
         />
-        <GliderProfileCard />
         <DataProvenanceCard
           activeInstrument={activeInstrument}
           currentDepth={currentDepth}
@@ -83,26 +84,13 @@ function calculateObservedValue(variable, depth, activeInstrument) {
   const instId = activeInstrument.id || '';
 
   if (variable === 'salinity') {
-    if (instId.includes('2902352')) {
-      // SOLO float in Ganges plume: freshwater lens at surface
-      if (depth <= 60) return +(modelBase - 0.55 * Math.exp(-depth / 40)).toFixed(2);
-      return +(modelBase + 0.02).toFixed(2);
-    }
     if (instId.includes('glider-slocum')) {
       // Coastal glider with yo-yo transect oscillations
       const wave = 0.14 * Math.sin(depth / 32.0) * Math.exp(-depth / 600);
       return +(modelBase + 0.10 + wave).toFixed(2);
     }
-    if (instId.includes('glider-spray')) {
-      // Eddy core salinity anomaly at 200-600m
-      const eddy = 0.28 * Math.exp(-Math.pow(depth - 400, 2) / 35000);
-      return +(modelBase + eddy).toFixed(2);
-    }
     if (instId.includes('ctd-rosette-01')) {
       return +(modelBase + 0.08 * Math.exp(-depth / 700)).toFixed(2);
-    }
-    if (instId.includes('ctd-rosette-02')) {
-      return +(modelBase - 0.02).toFixed(2);
     }
     // Default Argo Float #2902351
     const sOffset = (activeInstrument.salinity || 34.3) - 34.25;
@@ -121,36 +109,16 @@ function calculateObservedValue(variable, depth, activeInstrument) {
     return +(modelBase + anomaly).toFixed(1);
   }
 
-  if (instId.includes('2902352')) {
-    // Deep SOLO Float #2902352: Cooler surface plume, near-perfect abyssal fit
-    let anomaly = -0.55 * Math.exp(-depth / 150);
-    if (depth >= 1000) {
-      anomaly = 0.04;
-    }
-    return +(modelBase + anomaly).toFixed(1);
-  }
-
   if (instId.includes('glider-slocum-04')) {
-    // Slocum Glider SG-04: High frequency internal soliton wave packets
+    // Slocum Glider G0-04: High frequency internal soliton wave packets
     const wave = 0.42 * Math.sin(depth / 28.0) * Math.exp(-depth / 450);
     return +(modelBase - 0.25 + wave).toFixed(1);
   }
 
-  if (instId.includes('glider-spray-09')) {
-    // Spray Glider #09: Mesopelagic Oxygen Minimum Zone depression
-    const omzBump = 0.35 * Math.exp(-Math.pow(depth - 550, 2) / 45000);
-    return +(modelBase + 0.15 + omzBump).toFixed(1);
-  }
-
   if (instId.includes('ctd-rosette-01')) {
-    // Research Vessel CTD Rosette #01: Gold standard precision, fine step thermocline
+    // Research Vessel CTD Rosette: Gold standard precision, fine step thermocline
     const step = depth >= 110 && depth <= 140 ? 0.18 : 0.04;
     return +(modelBase + step).toFixed(1);
-  }
-
-  if (instId.includes('ctd-rosette-02')) {
-    // Deep Seabed Moored CTD #02: Benthic cold water benchmark
-    return +(modelBase + 0.03).toFixed(1);
   }
 
   // Generic fallback
@@ -348,6 +316,8 @@ function DepthProfileCard({ activeInstrument, currentDepth, activeVariable, setA
    Card 2: Model vs Observation Comparison (Real-time Δ calculation)
    ────────────────────────────────────────────────────────────── */
 function ModelComparisonCard({ activeInstrument, currentDepth, activeVariable, setActiveVariable }) {
+  const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'cards'
+
   // Real-time calculation dynamically subtracting model from active observation at currentDepth
   const modelValue = useMemo(() => {
     return calculateModelValue(activeVariable, currentDepth, activeInstrument);
@@ -369,7 +339,15 @@ function ModelComparisonCard({ activeInstrument, currentDepth, activeVariable, s
   const instrumentName = activeInstrument?.name || 'In-Situ Device';
 
   return (
-    <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.05s' }}>
+    <div
+      className="analytics-card panel-animate-in"
+      style={{
+        animationDelay: '0.05s',
+        flex: viewMode === 'matrix' ? 1.6 : 1,
+        minWidth: viewMode === 'matrix' ? 360 : 260,
+        transition: 'flex 0.2s ease, min-width 0.2s ease',
+      }}
+    >
       <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <span className="analytics-card__number">2</span>
@@ -382,231 +360,211 @@ function ModelComparisonCard({ activeInstrument, currentDepth, activeVariable, s
             {instrumentName.length > 18 ? `${instrumentName.slice(0, 16)}…` : instrumentName}
           </span>
         </div>
-        <InfoCircle
-          title="Card 2: Model vs Observation (Core SIH Requirement)"
-          whatItDoes="Subtracts the live ERDDAP sensor reading from the INCOIS/Copernicus NetCDF mathematical prediction. As you dive deep or move up with the scrollbar, the observation and delta dynamically update according to the selected instrument."
-          futureApiUse="Automates real-time anomaly detection by comparing live observations against INCOIS-ROMS 1/12° forecast models for cyclone heat potential."
-          position="top"
-        />
-      </div>
-
-      <div className="analytics-card__body">
-        <div className="analytics-card__subtitle" style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Real-time Δ at {Math.round(currentDepth)}m</span>
-          <span style={{ color: 'var(--accent-cyan-bright)', fontSize: '0.58rem' }}>
-            {activeInstrument?.type ? activeInstrument.type.toUpperCase() : 'SENSOR'} DIVE
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          {/* Left Comparison Badges */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {/* Model Value */}
-            <div style={{
-              padding: '4px 8px',
-              background: 'rgba(56, 189, 248, 0.12)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <span style={{ color: '#38bdf8', fontSize: '0.62rem' }}>NetCDF Model</span>
-              <span className="text-mono" style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.74rem' }}>
-                {modelValue} {activeVariable === 'temperature' ? '°C' : 'PSU'}
-              </span>
-            </div>
-
-            {/* Observed Value */}
-            <div style={{
-              padding: '4px 8px',
-              background: 'rgba(255, 148, 54, 0.12)',
-              border: '1px solid rgba(255, 148, 54, 0.3)',
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <span style={{ color: '#ff9436', fontSize: '0.62rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
-                {instrumentName}
-              </span>
-              <span className="text-mono" style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.74rem' }}>
-                {observedValue} {activeVariable === 'temperature' ? '°C' : 'PSU'}
-              </span>
-            </div>
-
-            {/* Real-time Delta Badge */}
-            <div style={{
-              padding: '4px 8px',
-              background: isHotAnomaly
-                ? 'rgba(244, 63, 94, 0.16)'
-                : isColdAnomaly
-                ? 'rgba(56, 189, 248, 0.16)'
-                : 'rgba(16, 185, 129, 0.16)',
-              border: `1px solid ${isHotAnomaly ? 'rgba(244, 63, 94, 0.4)' : isColdAnomaly ? 'rgba(56, 189, 248, 0.4)' : 'rgba(16, 185, 129, 0.4)'}`,
-              borderRadius: 6,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <span style={{ fontSize: '0.62rem', color: isHotAnomaly ? 'var(--accent-rose)' : isColdAnomaly ? 'var(--accent-cyan-dim)' : 'var(--accent-emerald)', fontWeight: 600 }}>
-                Real-Time Δ (Diff)
-              </span>
-              <span className="text-mono" style={{
-                fontSize: '0.78rem',
-                fontWeight: 800,
-                color: isHotAnomaly ? '#fb7185' : isColdAnomaly ? '#38bdf8' : '#34d399',
-              }}>
-                {delta > 0 ? `+${delta}` : delta} {activeVariable === 'temperature' ? '°C' : 'PSU'}
-              </span>
-            </div>
-          </div>
-
-          {/* Anomaly Evaluation Pill */}
-          <div style={{
-            width: 90,
-            background: 'rgba(4, 14, 32, 0.7)',
-            borderRadius: 6,
-            border: '1px solid var(--panel-border-subtle)',
-            padding: '6px 8px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}>
-            <span style={{ fontSize: '0.54rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 2 }}>
-              Status
-            </span>
-            <span style={{
-              fontSize: '0.62rem',
-              fontWeight: 700,
-              color: isHotAnomaly ? '#fb7185' : isColdAnomaly ? '#38bdf8' : '#34d399',
-              lineHeight: 1.2,
-            }}>
-              {isHotAnomaly
-                ? '⚠️ Hot Anomaly (Model Lag)'
-                : isColdAnomaly
-                ? '❄️ Cold Anomaly (Upwelling)'
-                : '✅ Optimal Agreement'}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Card 3: Isosurface Visualization
-   ────────────────────────────────────────────────────────────── */
-function IsosurfaceCard({ activeVariable }) {
-  const showIsosurface = useOceanStore((state) => state.visualization.showIsosurface);
-  const setShowIsosurface = useOceanStore((state) => state.setShowIsosurface);
-  const [isoValue, setIsoValue] = useState(20);
-  const [isoOpacity, setIsoOpacity] = useState(60);
-
-  return (
-    <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.1s' }}>
-      <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="analytics-card__number">3</span>
-          <span className="analytics-card__title">Isosurface Visualization</span>
-        </div>
-        <InfoCircle
-          title="Card 3: Isosurface Visualization"
-          whatItDoes="Toggles a 3D volumetric envelope representing a specific value (e.g., showing a 3D boundary of all water exactly at 20°C / D20 isotherm)."
-          futureApiUse="GPU marching-cubes reconstruction from NetCDF volume data for ocean current vortexes and thermoclines."
-          position="top"
-        />
-      </div>
-
-      <div className="analytics-card__body">
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="slider-row">
-              <div className="slider-row__header">
-                <span>Threshold Value</span>
-                <span className="slider-row__value">{isoValue} °C</span>
-              </div>
-              <input
-                type="range" className="panel-slider"
-                min="15" max="28" step="1"
-                value={isoValue}
-                onChange={(e) => setIsoValue(parseInt(e.target.value))}
-              />
-            </div>
-
-            <div className="slider-row">
-              <div className="slider-row__header">
-                <span>Opacity</span>
-                <span className="slider-row__value">{isoOpacity}%</span>
-              </div>
-              <input
-                type="range" className="panel-slider"
-                min="10" max="100" step="5"
-                value={isoOpacity}
-                onChange={(e) => setIsoOpacity(parseInt(e.target.value))}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-              <span style={{ fontSize: '0.64rem', color: 'var(--text-secondary)' }}>Toggle 3D Isosurface</span>
-              <input
-                type="checkbox"
-                checked={showIsosurface}
-                onChange={(e) => setShowIsosurface(e.target.checked)}
-                style={{ accentColor: 'var(--accent-cyan)', cursor: 'pointer' }}
-              />
-            </div>
-          </div>
-
-          {/* 3D Envelope Thumbnail */}
-          <div style={{ width: 85, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{
-              width: 85,
-              height: 68,
-              borderRadius: 8,
-              border: '1px solid rgba(0, 229, 255, 0.25)',
-              background: 'radial-gradient(ellipse at center, rgba(14, 30, 60, 0.9) 0%, rgba(4, 12, 28, 0.95) 100%)',
-              position: 'relative',
-              overflow: 'hidden',
+          <button
+            type="button"
+            onClick={() => {
+              if (window.openSideBySideValidation) {
+                window.openSideBySideValidation();
+              }
+            }}
+            style={{
+              background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(0, 160, 255, 0.25))',
+              border: '1px solid #00f0ff',
+              color: '#00f0ff',
+              borderRadius: 4,
+              padding: '2px 7px',
+              fontSize: '0.56rem',
+              fontWeight: 700,
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <svg viewBox="0 0 60 45" style={{ width: '85%', height: '85%', filter: 'drop-shadow(0 0 6px rgba(255, 80, 40, 0.5))' }}>
-                <defs>
-                  <radialGradient id="isoGrad2" cx="45%" cy="40%" r="55%">
-                    <stop offset="0%" stopColor="#ff4500" stopOpacity="0.85" />
-                    <stop offset="60%" stopColor="#ff8c00" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#00e5ff" stopOpacity="0.2" />
-                  </radialGradient>
-                </defs>
-                <path d="M 12 24 C 8 16, 20 8, 32 10 C 44 12, 54 18, 50 28 C 46 38, 30 36, 22 34 C 14 32, 16 32, 12 24 Z"
-                  fill="url(#isoGrad2)" stroke="rgba(255, 120, 50, 0.8)" strokeWidth="1" />
-              </svg>
-            </div>
-          </div>
+              gap: 3,
+              boxShadow: '0 0 10px rgba(0, 240, 255, 0.2)',
+            }}
+            title="Expand to Full Side-by-Side Observation vs Model Panel on the Right Side"
+          >
+            <span>⚖️ Side-by-Side</span>
+            <span style={{ fontSize: '0.62rem' }}>↗</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode((m) => (m === 'matrix' ? 'cards' : 'matrix'))}
+            style={{
+              background: 'rgba(0, 240, 255, 0.12)',
+              border: '1px solid rgba(0, 240, 255, 0.35)',
+              color: '#00f0ff',
+              borderRadius: 4,
+              padding: '2px 6px',
+              fontSize: '0.56rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            title="Toggle between Multi-Variable Table and Summary Badges"
+          >
+            {viewMode === 'matrix' ? 'Gauge View' : 'Table View'}
+          </button>
+          <InfoCircle
+            title="Card 2: Multi-Variable Validation Engine (Core SIH Requirement)"
+            whatItDoes="Calculates the real-time Delta (Observation - Model) across 6 physical parameters at targetDepth. Strictly handles missing data and wraps angles for Current Direction."
+            futureApiUse="Automates real-time anomaly detection by comparing live observations against INCOIS-ROMS 1/12° forecast models for cyclone heat potential."
+            position="top"
+          />
         </div>
+      </div>
+
+      <div className="analytics-card__body" style={{ padding: viewMode === 'matrix' ? '6px 8px' : '8px 10px', overflowY: 'auto' }}>
+        {viewMode === 'matrix' ? (
+          <ComparisonTable compact={true} />
+        ) : (
+          <>
+            <div className="analytics-card__subtitle" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Real-time Δ at {Math.round(currentDepth)}m</span>
+              <span style={{ color: 'var(--accent-cyan-bright)', fontSize: '0.58rem' }}>
+                {activeInstrument?.type ? activeInstrument.type.toUpperCase() : 'SENSOR'} DIVE
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {/* Left Comparison Badges */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {/* Model Value */}
+                <div style={{
+                  padding: '4px 8px',
+                  background: 'rgba(56, 189, 248, 0.12)',
+                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <span style={{ color: '#38bdf8', fontSize: '0.62rem' }}>NetCDF Model</span>
+                  <span className="text-mono" style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.74rem' }}>
+                    {modelValue} {activeVariable === 'temperature' ? '°C' : 'PSU'}
+                  </span>
+                </div>
+
+                {/* Observed Value */}
+                <div style={{
+                  padding: '4px 8px',
+                  background: 'rgba(255, 148, 54, 0.12)',
+                  border: '1px solid rgba(255, 148, 54, 0.3)',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <span style={{ color: '#ff9436', fontSize: '0.62rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 100 }}>
+                    {instrumentName}
+                  </span>
+                  <span className="text-mono" style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.74rem' }}>
+                    {observedValue} {activeVariable === 'temperature' ? '°C' : 'PSU'}
+                  </span>
+                </div>
+
+                {/* Real-time Delta Badge */}
+                <div style={{
+                  padding: '4px 8px',
+                  background: isHotAnomaly
+                    ? 'rgba(244, 63, 94, 0.16)'
+                    : isColdAnomaly
+                    ? 'rgba(56, 189, 248, 0.16)'
+                    : 'rgba(16, 185, 129, 0.16)',
+                  border: `1px solid ${isHotAnomaly ? 'rgba(244, 63, 94, 0.4)' : isColdAnomaly ? 'rgba(56, 189, 248, 0.4)' : 'rgba(16, 185, 129, 0.4)'}`,
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontSize: '0.62rem', color: isHotAnomaly ? 'var(--accent-rose)' : isColdAnomaly ? 'var(--accent-cyan-dim)' : 'var(--accent-emerald)', fontWeight: 600 }}>
+                    Real-Time Δ (Diff)
+                  </span>
+                  <span className="text-mono" style={{
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    color: isHotAnomaly ? '#fb7185' : isColdAnomaly ? '#38bdf8' : '#34d399',
+                  }}>
+                    {delta > 0 ? `+${delta}` : delta} {activeVariable === 'temperature' ? '°C' : 'PSU'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Anomaly Evaluation Pill */}
+              <div style={{
+                width: 90,
+                background: 'rgba(4, 14, 32, 0.7)',
+                borderRadius: 6,
+                border: '1px solid var(--panel-border-subtle)',
+                padding: '6px 8px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                textAlign: 'center',
+              }}>
+                <span style={{ fontSize: '0.54rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 2 }}>
+                  Status
+                </span>
+                <span style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  color: isHotAnomaly ? '#fb7185' : isColdAnomaly ? '#38bdf8' : '#34d399',
+                  lineHeight: 1.2,
+                }}>
+                  {isHotAnomaly
+                    ? '⚠️ Hot Anomaly (Model Lag)'
+                    : isColdAnomaly
+                    ? '❄️ Cold Anomaly (Upwelling)'
+                    : '✅ Optimal Agreement'}
+                </span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
+
+
 /* ──────────────────────────────────────────────────────────────
-   Card 4: Glider Profile
+   Card 3: Glider Profile (Dynamic Real-Time Mission & Flight Kinematics)
    ────────────────────────────────────────────────────────────── */
-function GliderProfileCard() {
+function GliderProfileCard({ activeInstrument, currentDepth = 15 }) {
+  const [tick, setTick] = useState(0);
+  React.useEffect(() => {
+    const timer = setInterval(() => setTick((t) => (t + 1) % 10000), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isGliderActive = activeInstrument?.type === 'glider';
+  const gliderName = isGliderActive ? activeInstrument.name : "Slocum SG-04 'Nautilus'";
+  const gliderTag = isGliderActive ? (activeInstrument.id?.includes('spray') ? 'SPRAY-09' : 'SG-04') : 'SG-04';
+
+  const cyclePhase = (tick * 0.26) % (Math.PI * 2);
+  const isDiving = Math.cos(cyclePhase) >= 0;
+  const undulatingDepth = Math.round(190 + Math.sin(cyclePhase) * 115);
+  const dynamicDepth = currentDepth > 300 ? Math.round(currentDepth + Math.sin(cyclePhase) * 30) : Math.max(20, undulatingDepth);
+  const pitchDeg = isDiving ? -14.5 : +12.2;
+  const statusPill = isDiving ? 'GLIDING-DIVE' : 'BUOYANT-CLIMB';
+  const speedKnots = (0.68 + Math.sin(cyclePhase * 0.5) * 0.08).toFixed(2);
+  const forwardSpeed = +(parseFloat(speedKnots) * 0.514).toFixed(2);
+
+  // Sawtooth horizontal marker position (0 to 140 px)
+  const normCycle = (Math.sin(cyclePhase) + 1) / 2; // 0 to 1
+  const markerX = isDiving ? 20 + normCycle * 50 : 70 + (1 - normCycle) * 50;
+  const markerY = 8 + normCycle * 18;
+
   return (
     <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.15s' }}>
       <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="analytics-card__number">4</span>
+          <span className="analytics-card__number">3</span>
           <span className="analytics-card__title">Glider Profile</span>
         </div>
         <InfoCircle
-          title="Card 4: Glider Profile / Mission"
-          whatItDoes="Displays the battery life and 'sawtooth' dive trajectory of autonomous underwater drones."
+          title="Card 3: Glider Profile / Mission"
+          whatItDoes="Displays the battery life, pitch angle, and dynamic 'sawtooth' dive trajectory of autonomous underwater gliders."
           futureApiUse="Ingests real-time Slocum glider piloting telemetry from coastal glider operations centers."
           position="top"
         />
@@ -621,46 +579,74 @@ function GliderProfileCard() {
           marginTop: 2,
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, fontSize: '0.76rem', color: '#f8fafc' }}>Glider #G102</span>
-            <span className="telemetry-status-pill" style={{ fontSize: '0.56rem', padding: '2px 6px' }}>ACTIVE</span>
+            <span style={{ fontWeight: 700, fontSize: '0.74rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '62%' }} title={gliderName}>
+              {gliderName}
+            </span>
+            <span
+              className="telemetry-status-pill"
+              style={{
+                fontSize: '0.55rem',
+                padding: '2px 6px',
+                background: isDiving ? 'rgba(245, 158, 11, 0.2)' : 'rgba(0, 240, 255, 0.2)',
+                color: isDiving ? '#fbbf24' : '#00f0ff',
+                border: `1px solid ${isDiving ? 'rgba(245, 158, 11, 0.4)' : 'rgba(0, 240, 255, 0.4)'}`,
+                fontWeight: 600,
+              }}
+            >
+              {statusPill}
+            </span>
           </div>
 
-          {/* Glider Illustration */}
+          {/* Dynamic Glider Sawtooth Mini Trajectory SVG */}
           <div style={{
-            height: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(2, 7, 19, 0.5)',
+            height: 42,
+            background: 'rgba(2, 7, 19, 0.65)',
             borderRadius: 6,
-            marginBottom: 4,
-            border: '1px solid rgba(0, 229, 255, 0.1)',
+            marginBottom: 5,
+            border: '1px solid rgba(0, 229, 255, 0.15)',
+            position: 'relative',
             overflow: 'hidden',
           }}>
-            <svg viewBox="0 0 160 32" style={{ width: '90%', height: '100%' }}>
-              <path d="M 30 16 C 30 11, 45 10, 115 11 C 128 11, 138 14, 142 16 C 138 18, 128 21, 115 21 C 45 22, 30 21, 30 16 Z"
-                fill="#f59e0b" stroke="#d97706" strokeWidth="1" />
-              <polygon points="142,16 154,16 142,17" fill="#fbbf24" stroke="#d97706" strokeWidth="0.8" />
-              <polygon points="75,13 60,3 70,3 90,13" fill="#fbbf24" stroke="#b45309" strokeWidth="0.8" />
-              <polygon points="75,19 60,29 70,29 90,19" fill="#d97706" stroke="#92400e" strokeWidth="0.8" />
-              <polygon points="34,14 24,6 30,6 40,14" fill="#fbbf24" stroke="#b45309" strokeWidth="0.8" />
-              <circle cx="28" cy="8" r="1.5" fill="#00e5ff" />
-              <text x="80" y="17" fill="#1e293b" fontSize="4.5" fontFamily="var(--font-mono)" fontWeight="bold">SG-102</text>
+            <svg viewBox="0 0 150 36" style={{ width: '100%', height: '100%' }}>
+              {/* Reference Grid lines */}
+              <line x1="0" y1="8" x2="150" y2="8" stroke="rgba(255,255,255,0.06)" strokeDasharray="2 2" />
+              <line x1="0" y1="26" x2="150" y2="26" stroke="rgba(255,255,255,0.06)" strokeDasharray="2 2" />
+
+              {/* Cycle 1 (0 to 70) */}
+              <line x1="10" y1="8" x2="40" y2="26" stroke="#f59e0b" strokeWidth="1.8" />
+              <line x1="40" y1="26" x2="70" y2="8" stroke="#00f0ff" strokeWidth="1.8" />
+
+              {/* Cycle 2 (70 to 130) */}
+              <line x1="70" y1="8" x2="100" y2="26" stroke="#f59e0b" strokeWidth="1.8" />
+              <line x1="100" y1="26" x2="130" y2="8" stroke="#00f0ff" strokeWidth="1.8" />
+
+              {/* Animated Drone Marker */}
+              <circle cx={markerX} cy={markerY} r="3.2" fill={isDiving ? '#f59e0b' : '#00f0ff'} stroke="#ffffff" strokeWidth="1">
+                <animate attributeName="opacity" values="0.7;1;0.7" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+              <text x="132" y="10" fill="#64748b" fontSize="5" fontFamily="var(--font-mono)">0m</text>
+              <text x="132" y="28" fill="#64748b" fontSize="5" fontFamily="var(--font-mono)">1km</text>
             </svg>
           </div>
 
-          <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Mission:</span>
-              <span className="text-mono" style={{ color: 'var(--text-primary)' }}>Andaman Survey</span>
-            </div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>Dive Depth:</span>
-              <span className="text-mono" style={{ color: 'var(--text-primary)' }}>0 – 1000 m (Sawtooth)</span>
+              <span className="text-mono" style={{ color: 'var(--accent-cyan-bright)', fontWeight: 600 }}>
+                {dynamicDepth} m (Sawtooth)
+              </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Battery:</span>
-              <span className="text-mono text-amber">84%</span>
+              <span>Pitch & Speed:</span>
+              <span className="text-mono" style={{ color: isDiving ? '#fbbf24' : '#00f0ff' }}>
+                {pitchDeg}° | {forwardSpeed} m/s
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Battery & Buoyancy:</span>
+              <span className="text-mono text-amber">
+                78% | {isDiving ? '-240cc' : '+260cc'}
+              </span>
             </div>
           </div>
         </div>
@@ -670,18 +656,18 @@ function GliderProfileCard() {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Card 5: Data Provenance
+   Card 4: Data Provenance
    ────────────────────────────────────────────────────────────── */
 function DataProvenanceCard({ activeInstrument, currentDepth, activeVariable }) {
   return (
     <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.2s' }}>
       <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="analytics-card__number">5</span>
+          <span className="analytics-card__number">4</span>
           <span className="analytics-card__title">Data Provenance</span>
         </div>
         <InfoCircle
-          title="Card 5: Data Provenance"
+          title="Card 4: Data Provenance"
           whatItDoes="Displays standard metadata tags like 'NetCDF' and 'OGC WMS'. This proves to the judges that your platform does not use proprietary file formats and integrates perfectly with existing global oceanographic infrastructure."
           futureApiUse="Full OGC compliant WMS/WFS/WCS querying and CF-1.8 NetCDF schema ingestion directly from INCOIS."
           position="top"

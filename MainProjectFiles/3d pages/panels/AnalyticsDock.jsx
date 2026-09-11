@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from 'react';
 
 /**
- * AnalyticsDock — Bottom panel with 5 modular analytics cards.
- * Matches the reference image layout:
+ * AnalyticsDock — Bottom panel with 4 modular analytics cards.
+ * Layout:
  * 1. Depth vs Variable Profile
  * 2. Model vs Observation Comparison
- * 3. Isosurface Visualization
- * 4. Glider Profile
- * 5. Data Provenance
+ * 3. Glider Profile
+ * 4. Data Provenance
  */
 export function AnalyticsDock() {
   return (
@@ -15,7 +14,6 @@ export function AnalyticsDock() {
       <div className="analytics-cards">
         <DepthProfileCard />
         <ModelComparisonCard />
-        <IsosurfaceCard />
         <GliderProfileCard />
         <DataProvenanceCard />
       </div>
@@ -294,142 +292,17 @@ function ModelComparisonCard() {
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   Card 3: Isosurface Visualization
-   ────────────────────────────────────────────────────────────── */
-function IsosurfaceCard() {
-  const [isoVar, setIsoVar] = useState('temperature');
-  const [isoValue, setIsoValue] = useState(25);
-  const [isoOpacity, setIsoOpacity] = useState(60);
-  const [showIso, setShowIso] = useState(true);
 
-  return (
-    <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.1s' }}>
-      <div className="analytics-card__header">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span className="analytics-card__number">3</span>
-          <span className="analytics-card__title">Isosurface Visualization</span>
-        </div>
-      </div>
-      <div className="analytics-card__body">
-        <div className="analytics-card__subtitle">Show regions with specific values.</div>
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          {/* Controls Left */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="slider-row" style={{ marginTop: 2 }}>
-              <div className="slider-row__header">
-                <span>Variable</span>
-              </div>
-              <select className="panel-select" value={isoVar} onChange={(e) => setIsoVar(e.target.value)}>
-                <option value="temperature">Temperature</option>
-                <option value="salinity">Salinity</option>
-                <option value="oxygen">Oxygen</option>
-              </select>
-            </div>
-
-            <div className="slider-row">
-              <div className="slider-row__header">
-                <span>Value</span>
-                <span className="slider-row__value">{isoValue} °C</span>
-              </div>
-              <input
-                type="range" className="panel-slider"
-                min="5" max="30" step="1"
-                value={isoValue}
-                onChange={(e) => setIsoValue(parseInt(e.target.value))}
-              />
-            </div>
-
-            <div className="slider-row">
-              <div className="slider-row__header">
-                <span>Opacity</span>
-                <span className="slider-row__value">{isoOpacity}%</span>
-              </div>
-              <input
-                type="range" className="panel-slider"
-                min="10" max="100" step="5"
-                value={isoOpacity}
-                onChange={(e) => setIsoOpacity(parseInt(e.target.value))}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-              <span style={{ fontSize: '0.66rem', color: 'var(--text-secondary)' }}>Show Isosurface</span>
-              <input
-                type="checkbox"
-                checked={showIso}
-                onChange={() => setShowIso(p => !p)}
-                style={{ accentColor: 'var(--accent-cyan)', cursor: 'pointer' }}
-              />
-            </div>
-          </div>
-
-          {/* 3D Envelope Preview Right */}
-          <div style={{ width: 85, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{
-              width: 85,
-              height: 68,
-              borderRadius: 8,
-              border: '1px solid rgba(0, 229, 255, 0.25)',
-              background: 'radial-gradient(ellipse at center, rgba(14, 30, 60, 0.9) 0%, rgba(4, 12, 28, 0.95) 100%)',
-              position: 'relative',
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'inset 0 0 16px rgba(0, 229, 255, 0.1)'
-            }}>
-              {/* Volumetric grid lines */}
-              <div style={{
-                position: 'absolute', inset: 4,
-                border: '1px dashed rgba(0, 229, 255, 0.2)',
-                borderRadius: 4,
-              }} />
-              {/* Thermal Isosurface Blob Illustration */}
-              <svg viewBox="0 0 60 45" style={{ width: '85%', height: '85%', filter: 'drop-shadow(0 0 6px rgba(255, 80, 40, 0.5))' }}>
-                <defs>
-                  <radialGradient id="isoGrad" cx="45%" cy="40%" r="55%">
-                    <stop offset="0%" stopColor="#ff4500" stopOpacity="0.85" />
-                    <stop offset="60%" stopColor="#ff8c00" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#00e5ff" stopOpacity="0.2" />
-                  </radialGradient>
-                </defs>
-                <path d="M 12 24 C 8 16, 20 8, 32 10 C 44 12, 54 18, 50 28 C 46 38, 30 36, 22 34 C 14 32, 16 32, 12 24 Z"
-                  fill="url(#isoGrad)" stroke="rgba(255, 120, 50, 0.8)" strokeWidth="1" />
-                <path d="M 18 22 C 24 16, 38 18, 44 24" fill="none" stroke="rgba(255, 220, 100, 0.6)" strokeWidth="0.8" strokeDasharray="2,2" />
-              </svg>
-            </div>
-
-            {/* Micro Colorbar below */}
-            <div style={{ width: '100%', marginTop: 4 }}>
-              <div style={{
-                height: 5, borderRadius: 2,
-                background: 'linear-gradient(90deg, #0d47a1, #00e5ff, #10b981, #f59e0b, #ef4444)'
-              }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.52rem', color: '#64748b', marginTop: 1 }}>
-                <span>15</span>
-                <span>20</span>
-                <span>25</span>
-                <span>30</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ──────────────────────────────────────────────────────────────
-   Card 4: Glider Profile
+   Card 3: Glider Profile
    ────────────────────────────────────────────────────────────── */
 function GliderProfileCard() {
   return (
     <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.15s' }}>
       <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span className="analytics-card__number">4</span>
+          <span className="analytics-card__number">3</span>
           <span className="analytics-card__title">Glider Profile</span>
         </div>
       </div>
@@ -514,14 +387,14 @@ function GliderProfileCard() {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Card 5: Data Provenance
+   Card 4: Data Provenance
    ────────────────────────────────────────────────────────────── */
 function DataProvenanceCard() {
   return (
     <div className="analytics-card panel-animate-in" style={{ animationDelay: '0.2s' }}>
       <div className="analytics-card__header">
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <span className="analytics-card__number">5</span>
+          <span className="analytics-card__number">4</span>
           <span className="analytics-card__title">Data Provenance</span>
         </div>
       </div>

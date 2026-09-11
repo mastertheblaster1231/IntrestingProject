@@ -79,6 +79,30 @@
         right: 424px;
         z-index: 15;
         text-decoration: none;
+        background: rgba(6, 20, 44, 0.85);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(255, 224, 66, 0.45);
+        color: #fff4bd;
+        padding: 9px 16px;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 0.84rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 14px rgba(255, 224, 66, 0.2);
+        white-space: nowrap;
+      }
+      .top-ocean-btn:hover {
+        background: rgba(255, 224, 66, 0.2);
+        border-color: #ffe042;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 28px rgba(255, 224, 66, 0.35);
+        color: #ffffff;
       }
 
       /* Sidebar Toggle Floating Button */
@@ -98,9 +122,12 @@
         font-size: 0.84rem;
         font-weight: 600;
         cursor: pointer;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 8px;
+        width: fit-content;
+        max-width: fit-content;
+        white-space: nowrap;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 14px rgba(0, 229, 255, 0.2);
       }
@@ -250,17 +277,22 @@
       }
 
       /* ======================================================================
-         🧭 GLOBE NAVIGATION CONTROLS (Left Dock, matching screenshot)
+         🧭 GLOBE NAVIGATION CONTROLS (Right Dock)
          ====================================================================== */
       .globe-nav-controls {
         position: absolute;
         top: 140px;
-        left: 24px;
+        right: 24px;
         z-index: 22;
         display: flex;
         flex-direction: column;
         gap: 12px;
         pointer-events: auto;
+        transition: right 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      body:has(.argo-float-panel.visible) .globe-nav-controls,
+      .argo-float-panel.visible ~ .globe-nav-controls {
+        right: 420px;
       }
       .nav-ctrl-btn {
         background: rgba(9, 19, 36, 0.88);
@@ -906,7 +938,7 @@
          ====================================================================== */
       .marker-settings-modal {
         position: fixed;
-        left: 80px;
+        right: 80px;
         bottom: 24px;
         width: 320px;
         max-width: calc(100vw - 100px);
@@ -922,6 +954,11 @@
         gap: 14px;
         box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.22);
         animation: fadeInModal 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: right 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      body:has(.argo-float-panel.visible) .marker-settings-modal,
+      .argo-float-panel.visible ~ .marker-settings-modal {
+        right: 476px;
       }
       .marker-settings-modal.visible {
         display: flex;
@@ -1119,20 +1156,8 @@
     <!-- Transition Overlay -->
     <div id="transitionOverlay" class="transition-overlay"></div>
 
-    <!-- Top Header -->
-    <div class="hud-header glass-panel">
-      <div>
-        <div class="hud-title">
-          <span>⚓ INCOIS Ocean Observation Buoys</span>
-          <span class="badge">OON / ARGO</span>
-          <span class="badge" style="background: linear-gradient(135deg, #10b981, #059669);">SIH ID: 26067</span>
-        </div>
-        <div class="hud-subtitle">3D Globe & APEX Profiling Floats Network · ERDDAP & NetCDF Integrated</div>
-      </div>
-    </div>
-
     <!-- Top Right Ocean View Switcher -->
-    <a href="/ocean.html" class="sidebar-toggle-btn top-ocean-btn" style="border-color: rgba(255, 224, 66, 0.45); color: #fff4bd;">
+    <a href="/ocean.html" class="top-ocean-btn">
       <span>🌊 3D Ocean Waves</span>
     </a>
 

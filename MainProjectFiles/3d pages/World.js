@@ -1421,7 +1421,7 @@ function onPointerClick(event) {
   // Ignore clicks on HUD UI panels and buttons
   if (
     event.target.closest &&
-    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .top-ocean-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
   ) {
     return;
   }
@@ -1491,7 +1491,7 @@ function onPointerClick(event) {
 function onPointerDoubleClick(event) {
   if (
     event.target.closest &&
-    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .top-ocean-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
   ) {
     return;
   }

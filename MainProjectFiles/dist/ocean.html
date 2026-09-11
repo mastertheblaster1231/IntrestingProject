@@ -2351,9 +2351,9 @@
         to { opacity: 1; transform: translate(-50%, 0); }
       }
     </style>
-    <script type="module" crossorigin src="/assets/ocean-DZLYyFde.js"></script>
+    <script type="module" crossorigin src="/assets/ocean-BzrC_aRk.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/oceanDataService-CgFaHZ1x.js">
-    <link rel="stylesheet" crossorigin href="/assets/ocean-DtprUEI6.css">
+    <link rel="stylesheet" crossorigin href="/assets/ocean-BoD31SZG.css">
   </head>
   <body>
     <!-- Transition Overlay -->
@@ -3266,7 +3266,7 @@
         let isDragging = false;
         let currentRatio = 0.0;
 
-        function updateDepth(ratio, updateInputField = true) {
+        function updateDepth(ratio, updateInputField = true, triggerSetOceanDepth = true) {
           ratio = Math.max(0, Math.min(1, ratio));
           currentRatio = ratio;
 
@@ -3280,12 +3280,11 @@
           }
 
           // Trigger Live Depth-Dependent Oceanographic Property Updates!
-          if (window.oceanStore) {
-            const currentStoreDepth = window.oceanStore.getState().modelControls.currentDepth;
-            if (currentStoreDepth !== depthMeters) {
-              window.oceanStore.setState((prev) => ({
-                modelControls: { ...prev.modelControls, currentDepth: depthMeters }
-              }));
+          if (window.oceanStore?.getState) {
+            const store = window.oceanStore.getState();
+            store.setModelControl('currentDepth', depthMeters);
+            if (store.setActiveInstrumentDepth) {
+              store.setActiveInstrumentDepth(depthMeters);
             }
           }
 
@@ -3315,10 +3314,14 @@
             zoneDot.style.boxShadow = '0 0 10px #00b4d8';
           }
 
-          if (window.setOceanDepth) {
+          if (triggerSetOceanDepth && window.setOceanDepth) {
             window.setOceanDepth(ratio);
           }
         }
+
+        window.updateDepthUI = function(ratio, triggerSetOceanDepth = false) {
+          updateDepth(ratio, true, triggerSetOceanDepth);
+        };
 
         function onInputChange() {
           let val = parseFloat(depthInput.value) || 0;

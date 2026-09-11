@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLiveTime } from '../hooks/useLiveTime.js';
+import { useOceanStore } from '../useOceanStore.js';
 
 /**
  * TopNavbar — React version of the ocean top navigation bar.
@@ -12,6 +14,11 @@ export function TopNavbar() {
   const [zoneText, setZoneText] = useState('0m · Sunlight Zone (Epipelagic)');
   const [zoneDotColor, setZoneDotColor] = useState('#ffe042');
   const [mhwStatus, setMhwStatus] = useState('Normal');
+
+  const selectedTimestamp = useOceanStore((state) => state.selectedTimestamp);
+
+  // Live ticking IST clock for the timeline date display
+  const liveTime = useLiveTime();
 
   // Sync zone from OCEAN_STATE
   useEffect(() => {
@@ -76,24 +83,6 @@ export function TopNavbar() {
     }
   }, []);
 
-  const handleOpenIngest = useCallback(() => {
-    if (window.openDataIngestModal) {
-      window.openDataIngestModal();
-    } else {
-      const modal = document.getElementById('dataIngestModal');
-      if (modal) {
-        modal.classList.add('open');
-        modal.style.display = 'flex';
-      }
-    }
-  }, []);
-
-  const getTimeLabel = () => {
-    if (timeOffset === 0) return 'Now (0h)';
-    return `${timeOffset > 0 ? '+' : ''}${timeOffset}h`;
-  };
-
-  const [activeTab, setActiveTab] = useState('3d');
   const [solarTimeName, setSolarTimeName] = useState('Daylight');
 
   const handleCycleEnvironment = useCallback(() => {
@@ -131,56 +120,6 @@ export function TopNavbar() {
         </a>
       </div>
 
-      {/* Center cluster: Navigation View Mode Tabs */}
-      <div className="navbar-cluster navbar-cluster--center">
-        <div className="nav-tabs-group">
-          <button
-            className={`nav-view-tab ${activeTab === '3d' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => setActiveTab('3d')}
-          >
-            <span>🌐</span>
-            <span>3D View</span>
-          </button>
-          <button
-            className={`nav-view-tab ${activeTab === 'map' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => {
-              setActiveTab('map');
-              if (window.location) window.location.href = '/mapview.html';
-            }}
-          >
-            <span>📍</span>
-            <span>Map</span>
-          </button>
-          <button
-            className={`nav-view-tab ${activeTab === 'analysis' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => {
-              setActiveTab('analysis');
-              const dock = document.querySelector('.analytics-dock');
-              if (dock) dock.scrollIntoView({ behavior: 'smooth' });
-            }}
-          >
-            <span>📊</span>
-            <span>Analysis</span>
-          </button>
-          <button
-            className={`nav-view-tab ${activeTab === 'sources' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => {
-              setActiveTab('sources');
-              handleOpenIngest();
-            }}
-          >
-            <span>🗄️</span>
-            <span>Data Sources</span>
-          </button>
-          <button
-            className={`nav-view-tab ${activeTab === 'settings' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <span>⚙️</span>
-            <span>Settings</span>
-          </button>
-        </div>
-      </div>
 
       {/* Right cluster: Timeline & Environment Controls */}
       <div className="navbar-cluster">
@@ -190,7 +129,10 @@ export function TopNavbar() {
         </button>
 
         {/* Timeline bar with time readout */}
-        <div className="nav-timeline-bar">
+        <div className="nav-timeline-bar" title="Simulation Timeline">
+          <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.04em', textTransform: 'uppercase', marginRight: '4px' }}>
+            Timeline:
+          </span>
           <div className="nav-timeline-track">
             <input
               type="range"
@@ -202,7 +144,7 @@ export function TopNavbar() {
               onChange={handleTimeChange}
             />
           </div>
-          <span className="nav-timeline-date">09 Sep 2026 17:42 UTC</span>
+          <span className="nav-timeline-date">{liveTime}</span>
         </div>
 
         {/* Step buttons */}

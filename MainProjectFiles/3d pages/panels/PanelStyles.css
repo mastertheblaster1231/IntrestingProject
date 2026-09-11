@@ -165,6 +165,8 @@
 .sidebar-panel--right {
   border-right: none;
   border-left: 1px solid var(--panel-border);
+  overflow: visible !important;
+  z-index: 100 !important;
 }
 
 .sidebar-header {

@@ -664,18 +664,47 @@
 }
 
 .fleet-chip.open-in-workspace {
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 229, 255, 0.15);
+}
+
+.fleet-chip.active {
   border-color: #00f0ff;
-  background: rgba(0, 229, 255, 0.25);
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.26), rgba(15, 23, 42, 0.85));
   color: #ffffff;
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.fleet-chip.active.tag-orange {
+  border-color: #ff9436;
+  background: linear-gradient(135deg, rgba(255, 148, 54, 0.28), rgba(20, 15, 25, 0.85));
+  box-shadow: 0 0 14px rgba(255, 148, 54, 0.45);
+}
+
+.fleet-chip.active.tag-yellow {
+  border-color: #facc15;
+  background: linear-gradient(135deg, rgba(250, 204, 21, 0.28), rgba(25, 22, 12, 0.85));
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.45);
+}
+
+.fleet-chip.active.tag-blue {
+  border-color: #38bdf8;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(10, 20, 35, 0.85));
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
 }
 
 .fleet-chip-active-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 6px #00f0ff;
+}
+
+.fleet-chip.active .fleet-chip-active-dot {
   background: #10b981;
-  box-shadow: 0 0 6px #10b981;
+  box-shadow: 0 0 8px #10b981;
 }
 
 /* Workspace Multi-Window Layout Tools */
@@ -916,9 +945,9 @@
   border-right: none;
   border-radius: 16px 0 0 16px;
   box-shadow: -10px 0 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.15);
-  z-index: 95;
+  z-index: 100;
   pointer-events: auto !important;
-  overflow: hidden;
+  overflow: visible !important;
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
@@ -1005,6 +1034,13 @@
 .fleet-dock-subcard.selected {
   border-color: #00f0ff;
   box-shadow: 0 0 24px rgba(0, 229, 255, 0.4), inset 0 0 12px rgba(0, 229, 255, 0.1);
+}
+
+.fleet-dock-subcard.is-dragging {
+  cursor: grabbing !important;
+  z-index: 9999 !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.9), 0 0 35px rgba(0, 229, 255, 0.5) !important;
+  transition: none !important;
 }
 
 .fleet-dock-subcard-scroll {

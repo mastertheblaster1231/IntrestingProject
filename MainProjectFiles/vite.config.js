@@ -4,6 +4,11 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@react-three/fiber': resolve(import.meta.dirname, 'shims/react-three-fiber.js'),
+    },
+  },
   build: {
     rollupOptions: {
       input: {

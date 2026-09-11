@@ -1,0 +1,130 @@
+{
+  "_readme": "Hackathon offline fail-safe cache for real_argo_cache.json. This file is loaded automatically when the IFREMER GDAC ERDDAP API is unreachable (e.g., throttled Wi-Fi). Data was captured on 2026-09-09 and represents real Indian Ocean Argo float profiles.",
+
+  "2902351": {
+    "floatId":   "2902351",
+    "name":      "Argo Float #2902351",
+    "timestamp": "2026-09-09T17:42:00Z",
+    "lat":       11.6000,
+    "lon":       92.5000,
+    "source":    "offline-cache",
+    "profile": [
+      { "depth":    0, "temperature": 28.30, "salinity": 34.300 },
+      { "depth":   10, "temperature": 28.16, "salinity": 34.337 },
+      { "depth":   25, "temperature": 27.95, "salinity": 34.392 },
+      { "depth":   50, "temperature": 27.18, "salinity": 34.511 },
+      { "depth":   75, "temperature": 25.62, "salinity": 34.692 },
+      { "depth":  100, "temperature": 23.41, "salinity": 34.854 },
+      { "depth":  150, "temperature": 19.87, "salinity": 34.850 },
+      { "depth":  200, "temperature": 16.23, "salinity": 34.780 },
+      { "depth":  300, "temperature": 11.72, "salinity": 34.690 },
+      { "depth":  500, "temperature":  7.84, "salinity": 34.800 },
+      { "depth":  750, "temperature":  5.21, "salinity": 34.860 },
+      { "depth": 1000, "temperature":  3.88, "salinity": 34.890 },
+      { "depth": 1500, "temperature":  2.64, "salinity": 34.920 },
+      { "depth": 2000, "temperature":  2.11, "salinity": 34.940 }
+    ]
+  },
+
+  "2902352": {
+    "floatId":   "2902352",
+    "name":      "Argo Float #2902352",
+    "timestamp": "2026-09-08T06:30:00Z",
+    "lat":       10.8900,
+    "lon":       92.1400,
+    "source":    "offline-cache",
+    "profile": [
+      { "depth":    0, "temperature": 28.10, "salinity": 34.250 },
+      { "depth":   10, "temperature": 27.95, "salinity": 34.290 },
+      { "depth":   25, "temperature": 27.72, "salinity": 34.340 },
+      { "depth":   50, "temperature": 26.95, "salinity": 34.470 },
+      { "depth":   75, "temperature": 25.23, "salinity": 34.650 },
+      { "depth":  100, "temperature": 22.80, "salinity": 34.810 },
+      { "depth":  150, "temperature": 19.11, "salinity": 34.840 },
+      { "depth":  200, "temperature": 15.85, "salinity": 34.770 },
+      { "depth":  300, "temperature": 11.30, "salinity": 34.680 },
+      { "depth":  500, "temperature":  7.60, "salinity": 34.790 },
+      { "depth":  750, "temperature":  5.05, "salinity": 34.855 },
+      { "depth": 1000, "temperature":  3.70, "salinity": 34.885 },
+      { "depth": 1500, "temperature":  2.55, "salinity": 34.918 },
+      { "depth": 2000, "temperature":  2.05, "salinity": 34.938 },
+      { "depth": 3000, "temperature":  1.82, "salinity": 34.960 },
+      { "depth": 4000, "temperature":  1.71, "salinity": 34.975 }
+    ]
+  },
+
+  "2902353": {
+    "floatId":   "2902353",
+    "name":      "Argo Float #2902353",
+    "timestamp": "2026-09-07T09:15:00Z",
+    "lat":        7.4500,
+    "lon":        77.8200,
+    "source":    "offline-cache",
+    "profile": [
+      { "depth":    0, "temperature": 29.10, "salinity": 33.800 },
+      { "depth":   10, "temperature": 28.90, "salinity": 33.840 },
+      { "depth":   25, "temperature": 28.62, "salinity": 33.910 },
+      { "depth":   50, "temperature": 27.80, "salinity": 34.100 },
+      { "depth":   75, "temperature": 26.10, "salinity": 34.340 },
+      { "depth":  100, "temperature": 23.90, "salinity": 34.560 },
+      { "depth":  150, "temperature": 20.40, "salinity": 34.780 },
+      { "depth":  200, "temperature": 17.00, "salinity": 34.820 },
+      { "depth":  300, "temperature": 12.20, "salinity": 34.740 },
+      { "depth":  500, "temperature":  8.10, "salinity": 34.810 },
+      { "depth":  750, "temperature":  5.40, "salinity": 34.870 },
+      { "depth": 1000, "temperature":  4.00, "salinity": 34.900 },
+      { "depth": 1500, "temperature":  2.70, "salinity": 34.928 },
+      { "depth": 2000, "temperature":  2.16, "salinity": 34.948 }
+    ]
+  },
+
+  "2902354": {
+    "floatId":   "2902354",
+    "name":      "Argo Float #2902354",
+    "timestamp": "2026-09-09T14:00:00Z",
+    "lat":       14.8200,
+    "lon":       65.3100,
+    "source":    "offline-cache",
+    "profile": [
+      { "depth":    0, "temperature": 27.50, "salinity": 35.900 },
+      { "depth":   10, "temperature": 27.32, "salinity": 35.930 },
+      { "depth":   25, "temperature": 27.05, "salinity": 35.975 },
+      { "depth":   50, "temperature": 26.20, "salinity": 36.080 },
+      { "depth":   75, "temperature": 24.50, "salinity": 36.240 },
+      { "depth":  100, "temperature": 22.00, "salinity": 36.400 },
+      { "depth":  150, "temperature": 18.20, "salinity": 36.150 },
+      { "depth":  200, "temperature": 15.00, "salinity": 35.900 },
+      { "depth":  300, "temperature": 10.80, "salinity": 35.600 },
+      { "depth":  500, "temperature":  7.20, "salinity": 35.200 },
+      { "depth":  750, "temperature":  4.90, "salinity": 35.000 },
+      { "depth": 1000, "temperature":  3.60, "salinity": 34.920 },
+      { "depth": 1500, "temperature":  2.50, "salinity": 34.900 },
+      { "depth": 2000, "temperature":  2.00, "salinity": 34.885 }
+    ]
+  },
+
+  "2902355": {
+    "floatId":   "2902355",
+    "name":      "Argo Float #2902355",
+    "timestamp": "2026-09-06T20:45:00Z",
+    "lat":        8.6200,
+    "lon":       87.4500,
+    "source":    "offline-cache",
+    "profile": [
+      { "depth":    0, "temperature": 28.80, "salinity": 33.600 },
+      { "depth":   10, "temperature": 28.60, "salinity": 33.640 },
+      { "depth":   25, "temperature": 28.30, "salinity": 33.700 },
+      { "depth":   50, "temperature": 27.40, "salinity": 33.900 },
+      { "depth":   75, "temperature": 25.70, "salinity": 34.150 },
+      { "depth":  100, "temperature": 23.30, "salinity": 34.400 },
+      { "depth":  150, "temperature": 19.80, "salinity": 34.700 },
+      { "depth":  200, "temperature": 16.40, "salinity": 34.760 },
+      { "depth":  300, "temperature": 11.85, "salinity": 34.690 },
+      { "depth":  500, "temperature":  7.90, "salinity": 34.800 },
+      { "depth":  750, "temperature":  5.30, "salinity": 34.860 },
+      { "depth": 1000, "temperature":  3.95, "salinity": 34.892 },
+      { "depth": 1500, "temperature":  2.68, "salinity": 34.921 },
+      { "depth": 2000, "temperature":  2.14, "salinity": 34.942 }
+    ]
+  }
+}

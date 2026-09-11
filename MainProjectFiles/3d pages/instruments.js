@@ -18,14 +18,18 @@ import * as THREE from 'three';
 // 1. DEMO UNIFIED INSTRUMENT DATASET (Ready for future API replacements)
 // ============================================================================
 export const DEMO_INSTRUMENTS = [
-  // 1. ARGO PROFILING FLOATS (Vertical Cylinders)
+  // 1. ARGO PROFILING FLOAT (Lagrangian Drifter)
   {
     id: "argo-2902351",
-    name: "Argo Float #2902351",
+    floatId: "2902351",
+    name: "Argo 2902351",
     type: "argo",
-    platform: "APEX Profiling Float",
+    platform: "APEX Profiling Float (Coastal Buoy)",
     position: [0, -0.2, 1.5], // Surface waterline (15m)
+    depth: 15,
     depthMeters: 15,
+    status: "active",
+    colorTag: "orange",
     geoCoordinates: { lat: 11.6000, lon: 92.5000, depthM: 15 },
     telemetry: {
       temperatureC: 28.3,
@@ -33,7 +37,7 @@ export const DEMO_INSTRUMENTS = [
       dissolvedOxygen: 198,
       batteryPct: 82,
       cycle: 147,
-      status: "surface-telemetry"
+      status: "active"
     },
     modelValidation: {
       modelName: "INCOIS-ROMS 1/12°",
@@ -49,48 +53,24 @@ export const DEMO_INSTRUMENTS = [
       lastRun: "00:00 UTC Assimilation"
     }
   },
-  {
-    id: "argo-2902352",
-    name: "Deep SOLO Float #2902352",
-    type: "argo",
-    platform: "Deep SOLO Profiler (6000m rated)",
-    position: [-6.4, -38.0, 5.2], // Abyssal depth (1600m)
-    depthMeters: 1600,
-    geoCoordinates: { lat: 10.8900, lon: 92.1400, depthM: 1600 },
-    telemetry: {
-      temperatureC: 2.8,
-      salinityPSU: 34.78,
-      dissolvedOxygen: 115,
-      batteryPct: 68,
-      cycle: 210,
-      status: "abyssal-parking"
-    },
-    modelValidation: {
-      modelName: "HYCOM Global 0.08°",
-      deltaTempC: 0.1,
-      deltaSalPSU: 0.02,
-      obsTemp: 2.8,
-      modelTemp: 2.7,
-      obsSal: 34.78,
-      modelSal: 34.76,
-      status: "DEEP WATER FIT",
-      confidenceScore: "99.1%",
-      biasRating: "MINIMAL BIAS",
-      lastRun: "06:00 UTC Assimilation"
-    }
-  },
 
-  // 2. UNDERWATER GLIDERS (Horizontal Capsules with Wings)
+  // 2. AUTONOMOUS UNDERWATER GLIDER (Autonomous Mobile Glider)
   {
     id: "glider-slocum-04",
-    name: "Slocum Glider SG-04 'Nautilus'",
+    name: "Slocum G0-04",
     type: "glider",
-    platform: "Teledyne Slocum G3",
+    platform: "Teledyne Slocum G3 Glider",
     position: [7.2, -4.5, -3.0], // Epipelagic thermocline border (190m)
+    depth: 190,
     depthMeters: 190,
     headingDeg: 35,
+    status: "gliding-dive",
+    colorTag: "yellow",
     geoCoordinates: { lat: 11.7500, lon: 92.8000, depthM: 190 },
     telemetry: {
+      temperatureC: 21.6,
+      salinityPSU: 34.85,
+      dissolvedOxygen: 172,
       speedKnots: 0.65,
       pitchDeg: -14,
       missionWaypoint: "Station Hydro-Alpha",
@@ -111,51 +91,28 @@ export const DEMO_INSTRUMENTS = [
       lastRun: "03:00 UTC Assimilation"
     }
   },
-  {
-    id: "glider-spray-09",
-    name: "Spray Glider #09 'Poseidon'",
-    type: "glider",
-    platform: "Scripps Spray Glider",
-    position: [-7.8, -14.2, 4.0], // Mesopelagic Oxygen Minimum Zone (600m)
-    depthMeters: 600,
-    headingDeg: 215,
-    telemetry: {
-      speedKnots: 0.58,
-      pitchDeg: 12,
-      missionWaypoint: "Transect Bravo",
-      batteryPct: 88,
-      status: "gliding-climb"
-    },
-    modelValidation: {
-      modelName: "INCOIS-ROMS 1/12°",
-      deltaTempC: 0.2,
-      deltaSalPSU: -0.05,
-      obsTemp: 11.2,
-      modelTemp: 11.0,
-      obsSal: 35.12,
-      modelSal: 35.17,
-      status: "OMZ BOUNDARY FIT",
-      confidenceScore: "97.5%",
-      biasRating: "LOW BIAS",
-      lastRun: "00:00 UTC Assimilation"
-    }
-  },
 
-  // 3. CTD ROSETTES (Wireframe Box Cages)
+  // 3. CTD ROSETTE (Shipboard Benchmark / Calibration)
   {
     id: "ctd-rosette-01",
-    name: "CTD Rosette Station #01",
+    name: "CTD Rosette",
     type: "ctd",
     platform: "SBE 32 Carousel 24-Bottle",
     position: [4.8, -28.5, 1.2], // Bathypelagic ocean cast (1200m)
+    depth: 1200,
     depthMeters: 1200,
+    status: "lowering",
+    colorTag: "blue",
     geoCoordinates: { lat: 11.6000, lon: 92.5000, depthM: 1200 },
     telemetry: {
+      temperatureC: 5.4,
+      salinityPSU: 34.90,
+      dissolvedOxygen: 95,
       wireTensionKg: 640,
       castRateMps: 1.0,
       activeBottlesClosed: 12,
       vessel: "R/V Sagar Kanya",
-      status: "downcast"
+      status: "lowering"
     },
     modelValidation: {
       modelName: "NCEP CFSv2 Hybrid",
@@ -169,35 +126,6 @@ export const DEMO_INSTRUMENTS = [
       confidenceScore: "99.5%",
       biasRating: "GOLD STANDARD QC",
       lastRun: "12:00 UTC Cast Sync"
-    }
-  },
-  {
-    id: "ctd-rosette-02",
-    name: "Seabed Moored CTD Station #02",
-    type: "ctd",
-    platform: "Deep Mooring Cage",
-    position: [-5.0, -46.3, -3.5], // Deep ocean abyss floor (1950m)
-    depthMeters: 1950,
-    geoCoordinates: { lat: 11.8500, lon: 93.4000, depthM: 1950 },
-    telemetry: {
-      wireTensionKg: 0,
-      castRateMps: 0.0,
-      activeBottlesClosed: 24,
-      vessel: "Abyssal Mooring",
-      status: "bottom-recording"
-    },
-    modelValidation: {
-      modelName: "ECCO Version 4",
-      deltaTempC: 0.05,
-      deltaSalPSU: -0.01,
-      obsTemp: 2.1,
-      modelTemp: 2.05,
-      obsSal: 34.72,
-      modelSal: 34.73,
-      status: "SEABED CALIBRATED",
-      confidenceScore: "99.8%",
-      biasRating: "PRISTINE ACCURACY",
-      lastRun: "Stationary Benchmark"
     }
   }
 ];
