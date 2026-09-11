@@ -3,15 +3,15 @@
    Modular Resizable Multi-Window Workspace & Fleet Navigation Bar
    ============================================================================ */
 
-/* 1. Root React Workspace Overlay - Must not block 3D canvas interaction! */
+/* 1. Root React Dashboard — Full viewport layout shell */
 #ocean-react-root {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  pointer-events: none !important; /* CRITICAL: OrbitControls can receive mouse events outside windows */
-  z-index: 1200;
+  pointer-events: auto;
+  z-index: 10;
   overflow: hidden;
   font-family: 'Outfit', 'Inter', sans-serif;
   color: #e2e8f0;
@@ -895,4 +895,217 @@
   background: #00f0ff;
   color: #020713;
   box-shadow: 0 0 14px rgba(0, 229, 255, 0.6);
+}
+
+/* ============================================================================
+   9. BIG BOX FLEET DOCK (Right Dock Panel with Sub-Component Cards)
+   ============================================================================ */
+.fleet-dock-container {
+  position: fixed;
+  top: 54px;
+  bottom: 30px;
+  right: 0px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(4, 15, 34, 0.96);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border-left: 1.5px solid rgba(0, 229, 255, 0.38);
+  border-top: 1px solid rgba(0, 229, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  border-right: none;
+  border-radius: 16px 0 0 16px;
+  box-shadow: -10px 0 45px rgba(0, 0, 0, 0.85), 0 0 25px rgba(0, 229, 255, 0.15);
+  z-index: 95;
+  pointer-events: auto !important;
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.fleet-dock-container.drop-active {
+  border-color: #00f0ff;
+  box-shadow: 0 0 45px rgba(0, 229, 255, 0.55), inset 0 0 25px rgba(0, 229, 255, 0.2);
+}
+
+.fleet-dock-container.minimized {
+  bottom: auto;
+  height: 48px;
+  border-radius: 20px 0 0 20px;
+}
+
+.fleet-dock-header {
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: linear-gradient(90deg, rgba(8, 25, 52, 0.95), rgba(4, 16, 36, 0.98));
+  border-bottom: 1px solid rgba(0, 229, 255, 0.22);
+  user-select: none;
+}
+
+.fleet-dock-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fleet-dock-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.3px;
+}
+
+.fleet-dock-badge {
+  font-family: var(--ws-font-mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.18);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #00f0ff;
+}
+
+.fleet-dock-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fleet-dock-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.fleet-dock-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.35);
+  border-radius: 4px;
+}
+
+.fleet-dock-subcard {
+  background: rgba(8, 22, 46, 0.88);
+  border: 1.2px solid rgba(0, 229, 255, 0.28);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.fleet-dock-subcard:hover {
+  border-color: rgba(0, 229, 255, 0.55);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7), 0 0 18px rgba(0, 229, 255, 0.15);
+}
+
+.fleet-dock-subcard.selected {
+  border-color: #00f0ff;
+  box-shadow: 0 0 24px rgba(0, 229, 255, 0.4), inset 0 0 12px rgba(0, 229, 255, 0.1);
+}
+
+.fleet-dock-subcard-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+.fleet-dock-subcard-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.fleet-dock-subcard-scroll::-webkit-scrollbar-track {
+  background: rgba(2, 8, 20, 0.4);
+  border-radius: 4px;
+}
+.fleet-dock-subcard-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.4);
+  border-radius: 4px;
+}
+.fleet-dock-subcard-scroll::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
+
+.fleet-dock-subcard-header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: linear-gradient(90deg, rgba(12, 32, 64, 0.95), rgba(6, 20, 44, 0.95));
+  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+  cursor: grab;
+  user-select: none;
+}
+
+.fleet-dock-subcard-header:active {
+  cursor: grabbing;
+}
+
+.fleet-dock-subcard-body {
+  padding: 12px 14px;
+  background: rgba(6, 18, 38, 0.92);
+}
+
+.fleet-dock-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.fleet-dock-resize-handle:hover,
+.fleet-dock-resize-handle:active {
+  background: rgba(0, 229, 255, 0.4);
+}
+
+.fleet-dock-drop-indicator {
+  border: 2px dashed #00f0ff;
+  border-radius: 14px;
+  padding: 20px 14px;
+  text-align: center;
+  color: #00f0ff;
+  background: rgba(0, 229, 255, 0.12);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: pulse-border 1.5s infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(0, 229, 255, 0.85); box-shadow: 0 0 20px rgba(0, 229, 255, 0.35); }
+  50% { border-color: rgba(0, 229, 255, 0.3); box-shadow: 0 0 6px rgba(0, 229, 255, 0.1); }
+}
+
+.win-btn.stick-btn {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #00f0ff;
+  font-size: 0.75rem;
+}
+
+.win-btn.stick-btn:hover {
+  background: #00f0ff;
+  color: #020713;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.6);
+}
+
+.win-btn.undock-btn {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+}
+
+.win-btn.undock-btn:hover {
+  background: #fbbf24;
+  color: #020713;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
 }

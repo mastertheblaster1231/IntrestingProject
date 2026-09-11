@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { WorkspaceManager } from "./WorkspaceManager.jsx";
+import { OceanDashboard } from "./OceanDashboard.jsx";
 import "./workspace.css";
 import {
   oceanDataService,
@@ -142,7 +142,11 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
+// Canvas is appended to body initially; OceanDashboard will move it into the panel container
 document.body.appendChild(renderer.domElement);
+// Store renderer globally so OceanDashboard can access it
+window.__oceanRenderer = renderer;
+window.__oceanCamera = camera;
 
 // Orbit Controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -2715,6 +2719,11 @@ window.focusInstrument = function (instrumentId) {
   if (window.workspaceManager && window.workspaceManager.openInstrument) {
     window.workspaceManager.openInstrument(inst.id);
   }
+
+  // 7. Update Zustand global oceanStore
+  if (window.oceanStore) {
+    window.oceanStore.getState().fetchAndSetInstrument(inst.id);
+  }
 };
 
 // Initialize Sector Fleet Chips in bottom bar
@@ -2839,11 +2848,15 @@ window.addEventListener("click", (e) => {
 
 // ============================================================================
 // 7. RESPONSIVE RESIZE HANDLING
+// Uses the canvas panel container if available, otherwise falls back to window
 // ============================================================================
 window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const container = window.oceanCanvasContainer;
+  const w = container ? container.clientWidth : window.innerWidth;
+  const h = container ? container.clientHeight : window.innerHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 });
 
@@ -3223,14 +3236,14 @@ function initReactWorkspace() {
       React.createElement(
         React.StrictMode,
         null,
-        React.createElement(WorkspaceManager, { instruments: DEMO_INSTRUMENTS })
+        React.createElement(OceanDashboard, { instruments: DEMO_INSTRUMENTS })
       )
     );
-    console.log("✅ [Ocean.js] React WorkspaceManager & FleetBar mounted successfully.");
+    console.log("✅ [Ocean.js] OceanDashboard (resizable panels) mounted successfully.");
   } catch (err) {
-    console.error("❌ [Ocean.js] Failed to mount React WorkspaceManager:", err);
+    console.error("❌ [Ocean.js] Failed to mount OceanDashboard:", err);
   }
 }
 
-// Mount workspace
+// Mount the full dashboard layout
 initReactWorkspace();

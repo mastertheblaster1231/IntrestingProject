@@ -8,6 +8,32 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
+      /* ======================================================================
+         LEGACY PANEL HIDING — These HTML elements are now rendered by React
+         OceanDashboard components. Hidden via CSS to preserve DOM references.
+         ====================================================================== */
+      #oceanTopNavbar,
+      #volumetricControlPanel,
+      #argoRightContainer,
+      #fleetSelectorBar,
+      .info-pill,
+      #metricGlossaryTooltip {
+        display: none !important;
+      }
+
+      /* React OceanDashboard takes over the full viewport */
+      #ocean-react-root {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 10 !important;
+        pointer-events: auto !important;
+      }
+
+      /* Ensure canvas inside the panel container fills it correctly */
+      body > canvas {
+        position: absolute !important;
+      }
+
       * {
         box-sizing: border-box;
         margin: 0;
@@ -2205,15 +2231,30 @@
         gap: 8px;
       }
       .modal-close-btn {
-        background: transparent;
-        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.18);
         color: #94a3b8;
-        font-size: 1.2rem;
+        font-size: 1.3rem;
+        line-height: 1;
         cursor: pointer;
-        transition: color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        padding: 0;
+        user-select: none;
+        flex-shrink: 0;
+        outline: none;
       }
       .modal-close-btn:hover {
-        color: #ffffff;
+        background: rgba(239, 68, 68, 0.22);
+        border-color: rgba(239, 68, 68, 0.6);
+        color: #ff6b6b;
+        transform: scale(1.08);
+        box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
       }
       .modal-tabs {
         display: flex;
@@ -2310,9 +2351,9 @@
         to { opacity: 1; transform: translate(-50%, 0); }
       }
     </style>
-    <script type="module" crossorigin src="/assets/ocean-Bxf1y7bC.js"></script>
+    <script type="module" crossorigin src="/assets/ocean-DZLYyFde.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/oceanDataService-CgFaHZ1x.js">
-    <link rel="stylesheet" crossorigin href="/assets/ocean-5sJ82Lia.css">
+    <link rel="stylesheet" crossorigin href="/assets/ocean-DtprUEI6.css">
   </head>
   <body>
     <!-- Transition Overlay -->
@@ -2494,7 +2535,7 @@
             <span>🛰️</span>
             <span>INCOIS Data Pipeline & Ingestion Engine</span>
           </div>
-          <button class="modal-close-btn" id="btnCloseIngestModal">&times;</button>
+          <button class="modal-close-btn" id="btnCloseIngestModal" title="Close" onclick="if(window.closeDataIngestModal){window.closeDataIngestModal();}else{const m=document.getElementById('dataIngestModal');if(m){m.classList.remove('open');m.style.display='none';}}">&times;</button>
         </div>
 
         <div class="modal-tabs">
@@ -2535,7 +2576,7 @@
             <span>🎓</span>
             <span id="tourStepTitle">Step 1: Sunlight Zone (0m - 200m)</span>
           </div>
-          <button class="modal-close-btn" id="btnCloseTourModal">&times;</button>
+          <button class="modal-close-btn" id="btnCloseTourModal" title="Close" onclick="if(window.closeTourModal){window.closeTourModal();}else{const m=document.getElementById('guidedTourModal');if(m){m.classList.remove('open');m.style.display='none';}}">&times;</button>
         </div>
         <div class="modal-body">
           <div id="tourStepDesc" style="font-size: 0.84rem; color: #cbd5e1; line-height: 1.55;">
@@ -3239,6 +3280,15 @@
           }
 
           // Trigger Live Depth-Dependent Oceanographic Property Updates!
+          if (window.oceanStore) {
+            const currentStoreDepth = window.oceanStore.getState().modelControls.currentDepth;
+            if (currentStoreDepth !== depthMeters) {
+              window.oceanStore.setState((prev) => ({
+                modelControls: { ...prev.modelControls, currentDepth: depthMeters }
+              }));
+            }
+          }
+
           if (window.updateLiveDepthData) {
             window.updateLiveDepthData(depthMeters);
           }
@@ -3515,8 +3565,37 @@
         const btnParseAscii = document.getElementById('btnParseAscii');
         const textareaAsciiData = document.getElementById('textareaAsciiData');
 
-        if (btnOpenIngestModal) btnOpenIngestModal.addEventListener('click', () => dataIngestModal.classList.add('open'));
-        if (btnCloseIngestModal) btnCloseIngestModal.addEventListener('click', () => dataIngestModal.classList.remove('open'));
+        function openDataIngestModal() {
+          if (dataIngestModal) {
+            dataIngestModal.classList.add('open');
+            dataIngestModal.style.display = 'flex';
+          }
+        }
+        window.openDataIngestModal = openDataIngestModal;
+
+        function closeDataIngestModal() {
+          if (dataIngestModal) {
+            dataIngestModal.classList.remove('open');
+            dataIngestModal.style.display = 'none';
+          }
+        }
+        window.closeDataIngestModal = closeDataIngestModal;
+
+        if (btnOpenIngestModal) btnOpenIngestModal.addEventListener('click', openDataIngestModal);
+        if (btnCloseIngestModal) {
+          btnCloseIngestModal.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeDataIngestModal();
+          });
+        }
+
+        // Close on clicking backdrop outside card
+        if (dataIngestModal) {
+          dataIngestModal.addEventListener('click', (e) => {
+            if (e.target === dataIngestModal) closeDataIngestModal();
+          });
+        }
 
         if (tabErddapBtn) {
           tabErddapBtn.addEventListener('click', () => {
@@ -3559,7 +3638,7 @@
             if (!txt) return alert("Please enter or paste delimited text buoy data");
             if (window.ingestAsciiBuoyData) {
               window.ingestAsciiBuoyData(txt);
-              dataIngestModal.classList.remove('open');
+              closeDataIngestModal();
             }
           });
         }
@@ -3572,6 +3651,35 @@
         const tourStepTitle = document.getElementById('tourStepTitle');
         const tourStepDesc = document.getElementById('tourStepDesc');
         const tourStepCounter = document.getElementById('tourStepCounter');
+
+        function closeTourModal() {
+          if (guidedTourModal) {
+            guidedTourModal.classList.remove('open');
+            guidedTourModal.style.display = 'none';
+          }
+        }
+        window.closeTourModal = closeTourModal;
+
+        if (btnCloseTourModal) {
+          btnCloseTourModal.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeTourModal();
+          });
+        }
+
+        if (guidedTourModal) {
+          guidedTourModal.addEventListener('click', (e) => {
+            if (e.target === guidedTourModal) closeTourModal();
+          });
+        }
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            closeDataIngestModal();
+            closeTourModal();
+          }
+        });
 
         const tourSteps = [
           {
