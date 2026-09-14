@@ -18,6 +18,14 @@ export default defineConfig({
     },
   },
   server: {
+    proxy: {
+      '/erddap-proxy': {
+        target: 'https://erddap.ifremer.fr',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/erddap-proxy/, ''),
+      },
+    },
     watch: {
       // Ignore watching heavy image/binary directories to avoid Windows EBUSY file locks
       ignored: [

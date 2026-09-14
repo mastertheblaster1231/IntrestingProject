@@ -132,11 +132,11 @@ export class ProceduralArgoProvider extends ArgoDataProvider {
     const randSal = this._pseudoRandom(`${id}_sal`);
     const isA7 = id === "A7" || baseInfo.code === "CB01" || wmoId === 2902351;
 
-    // Apply baseline + seasonal + diurnal variations
-    const baseTemp = isA7 ? 28.3 : (27.5 + randTemp * 2.3);
-    const baseSal = isA7 ? 34.3 : (34.2 + randSal * 1.3);
-    const surfaceTemp = parseFloat(Math.max(22.0, Math.min(32.5, baseTemp + seasonalTempAnomaly + diurnalTemp)).toFixed(1));
-    const surfaceSalinity = parseFloat(Math.max(30.0, Math.min(37.0, baseSal + seasonalSalAnomaly)).toFixed(1));
+    // Apply baseline + seasonal + diurnal variations (preserve live ERDDAP measurements when present)
+    const baseTemp = baseInfo.surfaceTemp !== undefined ? baseInfo.surfaceTemp : (isA7 ? 28.3 : (27.5 + randTemp * 2.3));
+    const baseSal = baseInfo.surfaceSalinity !== undefined ? baseInfo.surfaceSalinity : (isA7 ? 34.3 : (34.2 + randSal * 1.3));
+    const surfaceTemp = baseInfo.surfaceTemp !== undefined ? Number(baseInfo.surfaceTemp) : parseFloat(Math.max(22.0, Math.min(32.5, baseTemp + seasonalTempAnomaly + diurnalTemp)).toFixed(1));
+    const surfaceSalinity = baseInfo.surfaceSalinity !== undefined ? Number(baseInfo.surfaceSalinity) : parseFloat(Math.max(30.0, Math.min(37.0, baseSal + seasonalSalAnomaly)).toFixed(1));
     const surfaceOxygen = Math.round(Math.max(145, Math.min(235, (isA7 ? 198 : (190 + randTemp * 22)) - seasonalTempAnomaly * 6)));
     const surfaceChlorophyll = parseFloat(Math.max(0.05, Math.min(2.8, (isA7 ? 0.42 : (0.35 + randSal * 0.28)) * seasonalChlMultiplier)).toFixed(2));
     const currentSpeed = parseFloat((seasonalCurrentSpeed + (randTemp - 0.5) * 0.08).toFixed(2));

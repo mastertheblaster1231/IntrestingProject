@@ -17,15 +17,16 @@
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
-/** Live ERDDAP endpoint at IFREMER GDAC (international Argo data mirror) */
-const ERDDAP_BASE = 'https://www.ifremer.fr/erddap/tabledap/ArgoFloats.json';
+/** Live ERDDAP endpoint (routed through /erddap-proxy in browser to bypass CORS) */
+const ERDDAP_BASE = (typeof window !== 'undefined' && window.location && window.location.origin)
+  ? '/erddap-proxy/erddap/tabledap/ArgoFloats.json'
+  : 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json';
 
 /**
  * Fetch timeout in milliseconds.
- * 5 seconds is enough for a good connection; keeps the UI snappy on bad Wi-Fi
- * before the fail-safe kicks in.
+ * 12 seconds provides ample time for international oceanographic API response.
  */
-const FETCH_TIMEOUT_MS = 5000;
+const FETCH_TIMEOUT_MS = 12000;
 
 /**
  * Path to the bundled offline JSON cache.

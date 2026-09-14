@@ -5,6 +5,7 @@ import earth8kMapUrl from "../Images/8k_earth_daymap.jpg";
 import earth8kCloudsUrl from "../Images/8k_earth_clouds.jpg";
 import { oceanDataService } from "./oceanDataService.js";
 import { createOrbitalDiveController } from "./orbitalDive.js";
+import { getRealArgoPoints, ARGO_FLEET_CONFIG } from "./argoFleetService.js";
 
 // ============================================================================
 // ⚙️ ANCHOR & BADGE SIZE CONFIGURATION (User Configurable)
@@ -508,139 +509,179 @@ atmosphere.renderOrder = 4;
 atmosphere.raycast = () => {}; // Never block raycasting
 scene.add(atmosphere);
 
-// 8. Argo / OON Observation Points Data (10 Stations matching Map & Convenient Naming)
-export const argoPoints = [
-  {
-    id: "AD07",
-    code: "AD07",
-    altId: "A1",
-    name: "AD07 - Arabian Sea Deep",
-    wmoId: 2300007,
-    lat: 15.00,
-    lon: 69.00,
-    sea: "Arabian Sea (West of Goa)",
-    type: "OMNI Deep Sea Meteorological Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
-  {
-    id: "AD08",
-    code: "AD08",
-    altId: "A2",
-    name: "AD08 - Central Arabian Sea",
-    wmoId: 2300008,
-    lat: 12.00,
-    lon: 68.50,
-    sea: "Arabian Sea (Central Deep Basin)",
-    type: "OMNI Meteorological Moored Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
-  {
-    id: "CB02",
-    code: "CB02",
-    altId: "A3",
-    name: "CB02 - Lakshadweep North",
-    wmoId: 2300022,
-    lat: 10.88,
-    lon: 72.20,
-    sea: "Lakshadweep (Agatti / Bangaram)",
-    type: "Coastal Observation & Coral Reef Buoy",
-    markerType: "pin-red",
-    beaconColor: 0xff3b30,
-  },
-  {
-    id: "CALVAL",
-    code: "CALVAL",
-    altId: "CALVAL",
-    name: "CALVAL - Kavaratti Site",
-    wmoId: 2300023,
-    lat: 10.35,
-    lon: 72.28,
-    sea: "Lakshadweep (Kavaratti Cal/Val)",
-    type: "Satellite Radiometry Cal/Val Site",
-    markerType: "pin-red",
-    beaconColor: 0xff3b30,
-  },
-  {
-    id: "AD10",
-    code: "AD10",
-    altId: "AD10",
-    name: "AD10 - South Lakshadweep",
-    wmoId: 2300010,
-    lat: 9.80,
-    lon: 72.75,
-    sea: "Lakshadweep (Off Suheli / Kalpeni)",
-    type: "OMNI Deep Sea Moored Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
-  {
-    id: "AD09",
-    code: "AD09",
-    altId: "A4",
-    name: "AD09 - Minicoy Channel",
-    wmoId: 2300009,
-    lat: 8.25,
-    lon: 73.25,
-    sea: "Eight Degree Channel / Minicoy",
-    type: "Deep Ocean Meteorological Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
-  {
-    id: "CB06",
-    code: "CB06",
-    altId: "A5",
-    name: "CB06 - Chennai Offshore",
-    wmoId: 2300026,
-    lat: 13.10,
-    lon: 80.30,
-    sea: "Bay of Bengal (Chennai Coast)",
-    type: "Coastal Moored Observation Station",
-    markerType: "pin-grey",
-    beaconColor: 0xb0bec5,
-  },
-  {
-    id: "BD13",
-    code: "BD13",
-    altId: "A6",
-    name: "BD13 - Central Bay of Bengal",
-    wmoId: 2300013,
-    lat: 14.00,
-    lon: 87.00,
-    sea: "Bay of Bengal (Central Basin)",
-    type: "OMNI Deep Sea Meteorological Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
-  {
-    id: "CB01",
-    code: "CB01",
-    altId: "A7",
-    name: "CB01 - Port Blair / Andaman",
-    wmoId: 2300021,
-    lat: 11.60,
-    lon: 92.50,
-    sea: "Andaman Sea (Port Blair Coast)",
-    type: "Coastal Observation & Tsunami Buoy",
-    markerType: "pin-red",
-    beaconColor: 0xff3b30,
-  },
-  {
-    id: "BD12",
-    code: "BD12",
-    altId: "A8",
-    name: "BD12 - South Andaman Sea",
-    wmoId: 2300012,
-    lat: 10.50,
-    lon: 94.00,
-    sea: "South Andaman Sea (Nicobar Channel)",
-    type: "Deep Sea Moored Meteorological Buoy",
-    markerType: "buoy-yellow",
-    beaconColor: 0xffea00,
-  },
+// ----------------------------------------------------------------------------
+// 7b. Real-Time Sea Surface Temperature (SST) Thermal Heatmap Layer
+// ----------------------------------------------------------------------------
+// Dynamically renders a continuous high-resolution satellite-style ocean thermal
+// field across the Indian Ocean basin interpolated directly from live ERDDAP floats.
+const sstCanvas = document.createElement("canvas");
+sstCanvas.width = 2048;
+sstCanvas.height = 1024;
+const sstCtx = sstCanvas.getContext("2d", { willReadFrequently: true });
+const sstTexture = new THREE.CanvasTexture(sstCanvas);
+sstTexture.colorSpace = THREE.SRGBColorSpace;
+sstTexture.minFilter = THREE.LinearFilter;
+sstTexture.magFilter = THREE.LinearFilter;
+
+const sstGeometry = new THREE.SphereGeometry(GLOBE_RADIUS * 1.0022, 128, 96);
+const sstMaterial = new THREE.MeshBasicMaterial({
+  map: sstTexture,
+  transparent: true,
+  opacity: 0.0,
+  depthWrite: false,
+  depthTest: true,
+  blending: THREE.NormalBlending,
+});
+export const sstMesh = new THREE.Mesh(sstGeometry, sstMaterial);
+sstMesh.renderOrder = 2; // Above Earth daymap (0) & shadows (1), beneath clouds (3) & atmosphere (4)
+sstMesh.raycast = () => {}; // Never block raycasting
+scene.add(sstMesh);
+
+// ─── Indian Ocean Geographic Land Mask Helpers ──────────────────────────────
+function getWestCoastLon(lat) {
+  if (lat < 8.08) return 77.55;
+  if (lat < 10.0) return 77.55 - ((lat - 8.08) / (10.0 - 8.08)) * (77.55 - 76.2);
+  if (lat < 13.0) return 76.2 - ((lat - 10.0) / 3.0) * (76.2 - 74.8);
+  if (lat < 16.0) return 74.8 - ((lat - 13.0) / 3.0) * (74.8 - 73.5);
+  if (lat < 19.5) return 73.5 - ((lat - 16.0) / 3.5) * (73.5 - 72.7);
+  if (lat < 21.0) return 72.7 - ((lat - 19.5) / 1.5) * (72.7 - 71.0);
+  if (lat < 22.5) return 71.0 - ((lat - 21.0) / 1.5) * (71.0 - 69.0);
+  if (lat <= 24.0) return 69.0 - ((lat - 22.5) / 1.5) * (69.0 - 68.3);
+  return 68.3;
+}
+
+function getEastCoastLon(lat) {
+  if (lat < 8.08) return 77.55;
+  if (lat < 10.5) return 77.55 + ((lat - 8.08) / (10.5 - 8.08)) * (79.8 - 77.55);
+  if (lat < 13.5) return 79.8 + ((lat - 10.5) / 3.0) * (80.3 - 79.8);
+  if (lat < 16.5) return 80.3 + ((lat - 13.5) / 3.0) * (82.0 - 80.3);
+  if (lat < 19.0) return 82.0 + ((lat - 16.5) / 2.5) * (84.5 - 82.0);
+  if (lat < 21.5) return 84.5 + ((lat - 19.0) / 2.5) * (87.2 - 84.5);
+  if (lat <= 23.5) return 87.2 + ((lat - 21.5) / 2.0) * (91.0 - 87.2);
+  return 91.0;
+}
+
+function isIndianOceanWater(lat, lon) {
+  if (lat < 0.0 || lat > 25.5 || lon < 54.0 || lon > 99.0) return false;
+  // Sri Lanka
+  if (lat >= 5.85 && lat <= 9.85 && lon >= 79.6 && lon <= 81.9) return false;
+  // Indian Peninsula
+  if (lat >= 8.08 && lat <= 23.5) {
+    const w = getWestCoastLon(lat);
+    const e = getEastCoastLon(lat);
+    if (lon >= w && lon <= e) return false;
+  }
+  // North India mainland
+  if (lat > 23.5 && lon >= 68.0 && lon <= 89.0) return false;
+  // Northwest land (Pakistan / Iran / Oman)
+  if (lat > 24.5 && lon < 67.2) return false;
+  if (lat > 22.0 && lon < 59.5) return false;
+  // East land (Myanmar / Thailand / Malay peninsula)
+  if (lat > 16.0 && lon > 94.5) return false;
+  if (lat > 10.0 && lon > 98.5) return false;
+  if (lat < 5.5 && lon > 95.5) return false;
+  return true;
+}
+
+// ─── Thermal Color Ramp (Satellite Ocean Sea Surface Temperature) ───────────
+const SST_COLOR_STOPS = [
+  { t: 26.0, r: 14,  g: 116, b: 144 }, // Deep Ocean Teal
+  { t: 27.0, r: 6,   g: 182, b: 212 }, // Cool Cyan
+  { t: 27.7, r: 34,  g: 197, b: 94  }, // Sea Green
+  { t: 28.4, r: 234, g: 179, b: 8   }, // Golden Amber
+  { t: 29.1, r: 249, g: 115, b: 22  }, // Flame Orange
+  { t: 29.7, r: 225, g: 29,  b: 72  }, // Rich Crimson
+  { t: 30.8, r: 115, g: 20,  b: 48  }, // Deep Burgundy / Thermal Maroon
 ];
+
+function tempToSstColor(t) {
+  const stops = SST_COLOR_STOPS;
+  if (t <= stops[0].t) return [stops[0].r, stops[0].g, stops[0].b];
+  if (t >= stops[stops.length - 1].t) {
+    const last = stops[stops.length - 1];
+    return [last.r, last.g, last.b];
+  }
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].t && t <= stops[i + 1].t) {
+      const factor = (t - stops[i].t) / (stops[i + 1].t - stops[i].t);
+      const r = Math.round(stops[i].r + factor * (stops[i + 1].r - stops[i].r));
+      const g = Math.round(stops[i].g + factor * (stops[i + 1].g - stops[i].g));
+      const b = Math.round(stops[i].b + factor * (stops[i + 1].b - stops[i].b));
+      return [r, g, b];
+    }
+  }
+  return [115, 20, 48];
+}
+
+/**
+ * Generate high-resolution continuous thermal sea surface temperature field
+ * interpolated from live Argo float observations across the North Indian Ocean basin.
+ */
+export function updateSstHeatmap(floats) {
+  if (!floats || floats.length === 0) return;
+  const validFloats = floats.filter(f => f.surfaceTemp !== undefined && !isNaN(f.surfaceTemp));
+  if (validFloats.length === 0) return;
+
+  const W = sstCanvas.width;
+  const H = sstCanvas.height;
+  const xMin = Math.floor(((54.0 + 180.0) / 360.0) * W);
+  const xMax = Math.ceil(((99.0 + 180.0) / 360.0) * W);
+  const yMin = Math.floor(((90.0 - 25.5) / 180.0) * H);
+  const yMax = Math.ceil(((90.0 - 0.0) / 180.0) * H);
+  const patchW = xMax - xMin;
+  const patchH = yMax - yMin;
+
+  const imgData = sstCtx.createImageData(patchW, patchH);
+  const data = imgData.data;
+
+  for (let y = yMin; y < yMax; y++) {
+    const lat = 90.0 - (y / H) * 180.0;
+    for (let x = xMin; x < xMax; x++) {
+      const lon = (x / W) * 360.0 - 180.0;
+      const idx = ((y - yMin) * patchW + (x - xMin)) * 4;
+
+      if (!isIndianOceanWater(lat, lon)) {
+        data[idx + 3] = 0;
+        continue;
+      }
+
+      // Inverse Distance Weighting (IDW) interpolation from real-time floats
+      let sumW = 0.0;
+      let sumT = 0.0;
+      for (let k = 0; k < validFloats.length; k++) {
+        const f = validFloats[k];
+        const d2 = (lat - f.lat) * (lat - f.lat) + (lon - f.lon) * (lon - f.lon);
+        const w = 1.0 / (d2 + 0.42);
+        sumW += w;
+        sumT += w * f.surfaceTemp;
+      }
+      const t = sumT / sumW;
+      const [r, g, b] = tempToSstColor(t);
+
+      // Smooth alpha feathering near outer domain boundaries
+      const fNorth = Math.min(1.0, Math.max(0.0, (25.5 - lat) / 1.2));
+      const fSouth = Math.min(1.0, Math.max(0.0, (lat - 0.0) / 1.2));
+      const fWest = Math.min(1.0, Math.max(0.0, (lon - 54.0) / 1.5));
+      const fEast = Math.min(1.0, Math.max(0.0, (99.0 - lon) / 1.5));
+      const alpha = Math.round(212 * fNorth * fSouth * fWest * fEast);
+
+      data[idx] = r;
+      data[idx + 1] = g;
+      data[idx + 2] = b;
+      data[idx + 3] = alpha;
+    }
+  }
+
+  sstCtx.clearRect(0, 0, W, H);
+  sstCtx.putImageData(imgData, xMin, yMin);
+  sstTexture.needsUpdate = true;
+  console.info(`[SST Heatmap] ✓ Real-time sea surface temperature field generated from ${validFloats.length} live Argo floats.`);
+}
+window.updateSstHeatmap = updateSstHeatmap;
+
+// 8. Argo Float Points — loaded dynamically from ERDDAP (or fallback)
+// Mutable array: populated by loadLiveArgoFleet() at startup
+export let argoPoints = [];
 
 // Helper: Convert Lat/Lon to 3D Cartesian Vector on Three.js Sphere
 export function latLonToVector3(lat, lon, radius) {
@@ -953,48 +994,212 @@ const beaconMeshes = [];
 const stemLines = [];
 let selectedStationId = null;
 let currentLoadedData = null;
+let temperatureColorMode = false; // Toggle state for temperature-based beacon colors
 
-argoPoints.forEach((point) => {
-  const surfacePos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS);
-  // Snug marker altitude so stem is short, clean, and tight to the surface
-  const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.075);
+/**
+ * Initialize 3D markers on the globe for the given array of float points.
+ * Clears any existing markers first, allowing dynamic reload.
+ */
+function initArgoMarkers(points) {
+  // Clear existing markers
+  clickableSprites.length = 0;
+  beaconMeshes.length = 0;
+  stemLines.length = 0;
 
-  // 1. Surface beacon dot matching markerType
-  const defaultColor = point.beaconColor || 0x00f0ff;
-  const beaconGeo = new THREE.SphereGeometry(0.022, 16, 16);
-  const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor, depthTest: true });
-  const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-  beacon.position.copy(surfacePos);
-  beacon.userData = { id: point.id, defaultColor: defaultColor, point: point };
-  beacon.renderOrder = 150;
-  markersGroup.add(beacon);
-  beaconMeshes.push(beacon);
+  // Remove all children from markersGroup
+  while (markersGroup.children.length > 0) {
+    const child = markersGroup.children[0];
+    markersGroup.remove(child);
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (child.material.map) child.material.map.dispose();
+      child.material.dispose();
+    }
+  }
 
-  // 2. Connecting stem line matching beacon color
-  const lineGeo = new THREE.BufferGeometry().setFromPoints([
-    surfacePos,
-    markerPos,
-  ]);
-  const lineMat = new THREE.LineBasicMaterial({
-    color: defaultColor,
-    transparent: true,
-    opacity: 0.9,
-    linewidth: 2,
-    depthTest: true,
+  points.forEach((point) => {
+    const surfacePos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS);
+    // Snug marker altitude so stem is short, clean, and tight to the surface
+    const markerPos = latLonToVector3(point.lat, point.lon, GLOBE_RADIUS + 0.075);
+
+    // Determine beacon color: temperature-based or default
+    let defaultColor = point.beaconColor || 0x00f0ff;
+    if (temperatureColorMode && point.surfaceTemp !== undefined) {
+      defaultColor = point.surfaceTemp > 28 ? 0xff4d4d : 0x00f0ff;
+    }
+
+    // 1. Surface beacon dot
+    const beaconGeo = new THREE.SphereGeometry(0.022, 16, 16);
+    const beaconMat = new THREE.MeshBasicMaterial({ color: defaultColor, depthTest: true });
+    const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+    beacon.position.copy(surfacePos);
+    beacon.userData = { id: point.id, defaultColor: defaultColor, point: point };
+    beacon.renderOrder = 150;
+    markersGroup.add(beacon);
+    beaconMeshes.push(beacon);
+
+    // 2. Connecting stem line matching beacon color
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([
+      surfacePos,
+      markerPos,
+    ]);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: defaultColor,
+      transparent: true,
+      opacity: 0.9,
+      linewidth: 2,
+      depthTest: true,
+    });
+    const stem = new THREE.Line(lineGeo, lineMat);
+    stem.renderOrder = 120;
+    markersGroup.add(stem);
+    stemLines.push(stem);
+
+    // 3. Floating billboard anchor sprite
+    const sprite = createAnchorSprite(point);
+    sprite.position.copy(markerPos);
+    sprite.userData = point;
+    sprite.renderOrder = 200;
+    markersGroup.add(sprite);
+    clickableSprites.push(sprite);
   });
-  const stem = new THREE.Line(lineGeo, lineMat);
-  stem.renderOrder = 120;
-  markersGroup.add(stem);
-  stemLines.push(stem);
 
-  // 3. Floating billboard anchor sprite
-  const sprite = createAnchorSprite(point);
-  sprite.position.copy(markerPos);
-  sprite.userData = point;
-  sprite.renderOrder = 200;
-  markersGroup.add(sprite);
-  clickableSprites.push(sprite);
-});
+  // Update sidebar station count if present
+  const countEl = document.querySelector('.sidebar-count');
+  if (countEl) countEl.textContent = `${points.length} FLOATS`;
+}
+
+/**
+ * Load live Argo fleet data from ERDDAP and render markers on the globe.
+ * @param {number} [count] - Override targetCount (optional)
+ */
+async function loadLiveArgoFleet(count) {
+  const targetCount = count || ARGO_FLEET_CONFIG.targetCount;
+  console.info(`[ArgoFleet] Loading ${targetCount} live Argo floats...`);
+
+  try {
+    const points = await getRealArgoPoints(targetCount);
+    argoPoints = points;
+    initArgoMarkers(argoPoints);
+
+    // Build sidebar station cards dynamically
+    buildSidebarCards(argoPoints);
+
+    // Generate real-time Sea Surface Temperature (SST) thermal field across the basin
+    const allFloats = (typeof window !== 'undefined' && window.argoAllBasinFloats && window.argoAllBasinFloats.length > 0)
+      ? window.argoAllBasinFloats
+      : argoPoints;
+    updateSstHeatmap(allFloats);
+
+    // Select the first float
+    if (argoPoints.length > 0) {
+      selectStation(argoPoints[0].id);
+    }
+
+    console.info(`[ArgoFleet] ✓ ${argoPoints.length} Argo floats rendered on globe`);
+  } catch (err) {
+    console.error('[ArgoFleet] Failed to load fleet:', err);
+  }
+}
+
+/**
+ * Build sidebar station cards from live Argo data.
+ */
+function buildSidebarCards(points) {
+  const list = document.querySelector('.stations-list');
+  if (!list) return;
+
+  list.innerHTML = points.map(pt => {
+    const icon = pt.surfaceTemp !== undefined && pt.surfaceTemp > 28 ? '🔴' : '🔵';
+    const typeLabel = pt.type || 'Argo Profiling Float';
+    return `
+      <div class="station-card" data-id="${pt.id}" data-alt-id="${pt.altId || pt.id}" onclick="focusOnPoint('${pt.id}')">
+        <div class="card-top">
+          <span class="card-id" style="color:#00f0ff;">${icon} ${pt.id}</span>
+          <span class="card-code">${typeLabel.split(' ').slice(0,2).join(' ').toUpperCase()}</span>
+        </div>
+        <div class="card-sea">${pt.sea || pt.region}</div>
+        <div class="card-coords">
+          <span>${pt.lat.toFixed(2)}°N</span>
+          <span>${pt.lon.toFixed(2)}°E</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Apply or remove temperature-based beacon coloring and ocean SST thermal field.
+ * Called by the Temperature toggle checkbox in the UI.
+ */
+function applyTemperatureColors(enabled) {
+  temperatureColorMode = enabled;
+
+  // 1. Recolor beacon meshes
+  beaconMeshes.forEach((b) => {
+    const pt = b.userData.point;
+    if (!pt) return;
+
+    let newColor;
+    if (enabled && pt.surfaceTemp !== undefined) {
+      // Temperature-based: warm red (>28°C) vs cool cyan (≤28°C)
+      newColor = pt.surfaceTemp > 28 ? 0xff4d4d : 0x00f0ff;
+    } else {
+      // Default uniform cyan
+      newColor = pt.beaconColor || 0x00f0ff;
+    }
+
+    b.userData.defaultColor = newColor;
+    // Only recolor if not currently selected (selected = green)
+    if (b.userData.id !== selectedStationId) {
+      b.material.color.setHex(newColor);
+    }
+  });
+
+  // 2. Recolor stem lines
+  stemLines.forEach((stem, idx) => {
+    if (beaconMeshes[idx]) {
+      stem.material.color.setHex(beaconMeshes[idx].userData.defaultColor);
+    }
+  });
+
+  // 3. Animate Real-Time Sea Surface Temperature (SST) Thermal Heatmap Layer on Globe
+  if (sstMaterial) {
+    if (enabled) {
+      sstMesh.visible = true;
+      gsap.killTweensOf(sstMaterial);
+      gsap.to(sstMaterial, {
+        opacity: 0.86,
+        duration: 0.75,
+        ease: "power2.out",
+      });
+    } else {
+      gsap.killTweensOf(sstMaterial);
+      gsap.to(sstMaterial, {
+        opacity: 0.0,
+        duration: 0.55,
+        ease: "power2.in",
+        onComplete: () => {
+          if (!temperatureColorMode) sstMesh.visible = false;
+        },
+      });
+    }
+  }
+
+  // 4. Toggle HUD SST Color Scale Legend
+  const legend = document.getElementById("sstLegendPanel");
+  if (legend) {
+    if (enabled) {
+      legend.classList.add("visible");
+    } else {
+      legend.classList.remove("visible");
+    }
+  }
+}
+
+// Expose developer controls on window
+window.reloadArgoFleet = function(count) { loadLiveArgoFleet(count); };
+window.applyTemperatureColors = applyTemperatureColors;
 
 // Smooth Camera Transition State
 let cameraTransition = null;
@@ -1203,7 +1408,8 @@ function updateArgoFloatUI(data) {
 
 // Selection function: Turns clicked station's dot to GREEN (#00ff66) & fetches data
 export async function selectStation(id) {
-  const cleanId = String(id || "AD07").trim().toUpperCase();
+  const defaultId = (argoPoints.length > 0 ? argoPoints[0].id : '');
+  const cleanId = String(id || defaultId).trim().toUpperCase();
   const point = argoPoints.find(
     (p) =>
       p.id.toUpperCase() === cleanId ||
@@ -1267,7 +1473,7 @@ window.orbitalDiveController = orbitalDiveController;
  */
 export function startOrbitalDiveTransition(target) {
   const data = (target && target.userData) ? target.userData : (target || {});
-  const rawId = data.id || data.code || selectedStationId || "AD07";
+  const rawId = data.id || data.code || selectedStationId || (argoPoints.length > 0 ? argoPoints[0].id : '');
   const point = argoPoints.find(
     (p) =>
       p.id === rawId ||
@@ -1316,10 +1522,13 @@ export function startOrbitalDiveTransition(target) {
     onThresholdCrossed: ({ distance, floatId: fId }) => {
       console.log(`[OrbitalDive] Distance threshold crossed at ${distance.toFixed(3)}. Fading globe & activating water column grid...`);
 
-      // 1. Fade out globe sphere
+      // 1. Fade out globe sphere & SST thermal layer
       if (globeMaterial) {
         globeMaterial.transparent = true;
         gsap.to(globeMaterial, { opacity: 0.0, duration: 0.65, ease: "power2.out" });
+      }
+      if (sstMaterial && sstMesh.visible) {
+        gsap.to(sstMaterial, { opacity: 0.0, duration: 0.65, ease: "power2.out" });
       }
 
       // 2. Fade out 8K atmospheric clouds, shadows & white fog mist
@@ -1359,7 +1568,7 @@ export function startOrbitalDiveTransition(target) {
 window.startOrbitalDiveTransition = startOrbitalDiveTransition;
 
 window.triggerOrbitalDiveForSelected = function () {
-  const id = selectedStationId || "AD07";
+  const id = selectedStationId || (argoPoints.length > 0 ? argoPoints[0].id : '');
   const sprite = clickableSprites.find(
     (s) => s.userData?.id === id || s.userData?.code === id
   );
@@ -1390,16 +1599,19 @@ function onPointerMove(event) {
     const data = target.userData;
 
     if (tooltip) {
-      const icon = data.markerType === 'pin-red' ? '📍' : (data.markerType === 'pin-grey' ? '🔘' : '🟡');
+      const icon = data.surfaceTemp !== undefined && data.surfaceTemp > 28 ? '🔴' : '🔵';
+      const tempStr = data.surfaceTemp !== undefined ? `${data.surfaceTemp}°C` : '—';
+      const salStr = data.surfaceSalinity !== undefined ? `${data.surfaceSalinity} PSU` : '—';
       tooltip.style.display = "block";
       tooltip.style.left = `${event.clientX + 16}px`;
       tooltip.style.top = `${event.clientY - 24}px`;
       tooltip.innerHTML = `
-        <div class="tooltip-header">${icon} ${data.code} • ${data.name ? (data.name.split(" - ")[1] || data.name) : data.sea}</div>
+        <div class="tooltip-header">${icon} ${data.name || data.code} • ${data.sea || data.region || ''}</div>
         <div class="tooltip-body">
-          <div><strong>Station:</strong> <span style="color:#00f0ff; font-weight:700;">${data.code}</span> (WMO: ${data.wmoId})</div>
-          <div><strong>Basin:</strong> ${data.sea}</div>
+          <div><strong>Float ID:</strong> <span style="color:#00f0ff; font-weight:700;">${data.id}</span> (WMO: ${data.wmoId})</div>
+          <div><strong>Basin:</strong> ${data.sea || data.region}</div>
           <div><strong>Coordinates:</strong> ${data.lat.toFixed(2)}°N, ${data.lon.toFixed(2)}°E</div>
+          <div><strong>Surface:</strong> <span style="color:#ff9436;">${tempStr}</span> | <span style="color:#38bdf8;">${salStr}</span></div>
           <div><strong>Platform:</strong> ${data.type}</div>
           <div style="margin-top:5px; color:#00e5ff;">✦ Click to inspect station ocean data</div>
           <div style="margin-top:2px; color:#00ff66; font-weight:700;">🚀 Double-click for Cinematic Orbital Dive</div>
@@ -1421,7 +1633,7 @@ function onPointerClick(event) {
   // Ignore clicks on HUD UI panels and buttons
   if (
     event.target.closest &&
-    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .top-ocean-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn")
+    event.target.closest(".hud-sidebar, .hud-header, .sidebar-toggle-btn, .top-ocean-btn, .argo-float-panel, .globe-nav-controls, .orbital-dive-hud-btn, .top-right-bar, .temp-toggle-container, .argo-live-pill, .sst-legend-panel, .modal-overlay")
   ) {
     return;
   }
@@ -1515,7 +1727,8 @@ window.addEventListener("dblclick", onPointerDoubleClick);
 window.focusOnPoint = function (id) {
   selectStation(id);
 
-  const cleanId = String(id || "AD07").trim().toUpperCase();
+  const defaultId = (argoPoints.length > 0 ? argoPoints[0].id : '');
+  const cleanId = String(id || defaultId).trim().toUpperCase();
   const pt = argoPoints.find(
     (p) =>
       p.id.toUpperCase() === cleanId ||
@@ -1720,7 +1933,7 @@ function animate() {
 
 animate();
 
-// Initialize with Station AD07 selected by default after a brief load delay
+// Initialize live Argo fleet from ERDDAP after a brief load delay
 setTimeout(() => {
-  selectStation("AD07");
+  loadLiveArgoFleet();
 }, 400);
