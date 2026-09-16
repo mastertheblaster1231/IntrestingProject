@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Backend base URL — Vite proxy handles /api → 127.0.0.1:8000 in dev.
- * In production, same-origin relative fetch allows Vercel serverless / Render / Railway.
+ * Backend base URL — from frontend/.env VITE_BACKEND_URL.
+ * - Local dev: VITE_BACKEND_URL=http://localhost:8000 (direct)
+ * - Prod: VITE_BACKEND_URL= (empty) → same-origin /api via Vite proxy / Vercel rewrite
+ * Falls back to localhost:8000 for SSR/tests when window is undefined.
  */
-const BACKEND_URL = (typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://localhost:8000';
+const BACKEND_URL = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '').replace(/\/$/, '') || ((typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://localhost:8000');
 
 export function useOceanData(selectedFloatId = '2902351', activeDepth = 15) {
   const [isLive, setIsLive] = useState(false);

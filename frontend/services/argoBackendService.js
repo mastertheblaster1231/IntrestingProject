@@ -4,8 +4,9 @@
  */
 
 let fetchController = null;
-// Rely on relative path to use Vite proxy locally, and degrade gracefully on production deployments
-const BACKEND_URL = '';
+// Backend URL from frontend/.env (VITE_BACKEND_URL) — e.g. http://localhost:8000 for local dev
+// Falls back to same-origin '' which uses Vite proxy in dev and Vercel rewrite in prod
+const BACKEND_URL = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '').replace(/\/$/, '');
 
 /**
  * Fetches BGC Argo telemetry from the backend at a specific depth

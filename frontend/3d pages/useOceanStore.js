@@ -34,11 +34,12 @@ import {
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
 /**
- * Backend base URL — uses Vite proxy (/api → http://127.0.0.1:8000) in dev,
- * and relative path in production so Vercel / Railway / Render deployments work.
+ * Backend base URL — from frontend/.env VITE_BACKEND_URL.
+ * - Local dev: VITE_BACKEND_URL=http://localhost:8000
+ * - Prod: VITE_BACKEND_URL= (empty) → same-origin /api via Vite proxy / Vercel rewrite
  * Falls back to localhost:8000 only if window is unavailable (SSR/test).
  */
-const MODEL_API_BASE = (typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://127.0.0.1:8000';
+const MODEL_API_BASE = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '').replace(/\/$/, '') || ((typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://127.0.0.1:8000');
 
 /** Timeout for FastAPI model API calls in milliseconds */
 const MODEL_API_TIMEOUT_MS = 5000;
