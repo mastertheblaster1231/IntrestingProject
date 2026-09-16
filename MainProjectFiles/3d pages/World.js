@@ -1597,7 +1597,11 @@ export function startOrbitalDiveTransition(target) {
     },
     onComplete: ({ floatId: fId }) => {
       console.log(`[OrbitalDive] Plunge complete. Transitioning to Ocean view...`);
-      window.location.href = `/ocean.html?id=${encodeURIComponent(fId)}`;
+      // Pass coordinates and basin to dynamically override the fallback model in Ocean view
+      const lat = point.lat || 0;
+      const lon = point.lon !== undefined ? point.lon : (point.lng || 0);
+      const sea = point.basin || "Indian Ocean Basin";
+      window.location.href = `/ocean.html?id=${encodeURIComponent(fId)}&lat=${lat}&lon=${lon}&sea=${encodeURIComponent(sea)}`;
     },
   });
 }

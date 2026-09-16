@@ -33,7 +33,7 @@ export function OceanDashboard({ instruments = [] }) {
 
   // Health check for backend status
   useEffect(() => {
-    fetch('http://localhost:8000/health')
+    fetch('/api/health')
       .then(res => {
         if (res.ok) setBackendStatus('connected');
         else setBackendStatus('fallback');

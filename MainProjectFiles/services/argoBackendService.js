@@ -4,9 +4,8 @@
  */
 
 let fetchController = null;
-const BACKEND_URL = (typeof window !== 'undefined' && window.location && window.location.port === '5173')
-  ? '' 
-  : 'http://127.0.0.1:8000';
+// Rely on relative path to use Vite proxy locally, and degrade gracefully on production deployments
+const BACKEND_URL = '';
 
 /**
  * Fetches BGC Argo telemetry from the backend at a specific depth

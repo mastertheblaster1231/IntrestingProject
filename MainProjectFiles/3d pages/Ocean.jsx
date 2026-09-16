@@ -1507,7 +1507,25 @@ window.queryOceanDataByDateTime = async function (dateStr, timeStr = "12:00") {
 async function initFloatDescription() {
   const urlParams = new URLSearchParams(window.location.search);
   const buoyId = urlParams.get("id") || "A7";
-  currentStation = getStationById(buoyId);
+  const urlLat = urlParams.get("lat");
+  const urlLon = urlParams.get("lon");
+  const urlSea = urlParams.get("sea");
+
+  let stationFallback = getStationById(buoyId);
+  
+  if (urlLat && urlLon) {
+    currentStation = {
+      ...stationFallback,
+      id: buoyId,
+      code: buoyId,
+      lat: parseFloat(urlLat),
+      lon: parseFloat(urlLon),
+      sea: urlSea || stationFallback.sea,
+      name: `Argo Float ${buoyId}`
+    };
+  } else {
+    currentStation = stationFallback;
+  }
   const floatData = await oceanDataService.getFloatDetails(currentStation);
   populateUIWithFloatData(floatData);
 
