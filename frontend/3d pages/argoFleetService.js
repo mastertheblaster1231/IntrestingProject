@@ -26,7 +26,7 @@ export const ARGO_FLEET_CONFIG = {
   regionLonMin: 55, // Western longitude bound
   regionLonMax: 98, // Eastern longitude bound
   timeWindowDays: 45, // How far back to search for recent profiles
-  fetchTimeoutMs: 15000, // ERDDAP fetch timeout in milliseconds (15s guard for international API)
+  fetchTimeoutMs: 35000, // ERDDAP fetch timeout for public API (35s, international latency)
 };
 
 // Expose config on window for console access

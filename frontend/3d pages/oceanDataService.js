@@ -989,7 +989,7 @@ export class ErddapOceanService {
     const ifremerBaseFromEnv = envIfremer ? envIfremer.replace(/\/tabledap\/ArgoFloats\.json.*$/, '') : null;
     this.incoisBaseUrl = endpoints.incois || envIncois || "https://erddap.incois.gov.in/erddap";
     this.ifremerBaseUrl = endpoints.ifremer || ifremerBaseFromEnv || "https://www.ifremer.fr/erddap";
-    this.requestTimeoutMs = 7000;
+    this.requestTimeoutMs = 20000; // public ERDDAP (was 7000)
   }
 
   /**

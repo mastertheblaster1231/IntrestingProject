@@ -29,9 +29,9 @@ const ERDDAP_BASE = _envErddap && !_envErddap.includes('erddap.ifremer.fr')
 
 /**
  * Fetch timeout in milliseconds.
- * 12 seconds provides ample time for international oceanographic API response.
+ * 25 seconds for public ERDDAP (international latency, large tables).
  */
-const FETCH_TIMEOUT_MS = 12000;
+const FETCH_TIMEOUT_MS = 25000;
 
 /**
  * Path to the bundled offline JSON cache.

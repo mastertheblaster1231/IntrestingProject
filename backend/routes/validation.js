@@ -7,7 +7,7 @@ dotenv.config();
 const router = Router();
 
 const ERDDAP_BASE = process.env.ERDDAP_IFREMER_BASE || 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json';
-const ERDDAP_TIMEOUT_MS = parseInt(process.env.ERDDAP_TIMEOUT_MS || '12000', 10);
+const ERDDAP_TIMEOUT_MS = parseInt(process.env.ERDDAP_TIMEOUT_MS || '35000', 10); // increased for public ERDDAP latency
 
 // ---- helpers -------------------------------------------------------------
 function analyticalTemp(d) { return Math.round((28.5 * Math.exp(-d / 350) + 1.8) * 100) / 100; }
@@ -328,7 +328,7 @@ router.get('/validate', async (req, res) => {
     const erddapUrl = `${baseForValidate}?pres,temp,psal,doxy&platform_number=%22${encodeURIComponent(pid)}%22${timeQuery}&orderByClosest%28%22pres%2C${targetDepth}%22%29&limit=1`;
     let row;
     try {
-      const response = await fetch(erddapUrl, { signal: AbortSignal.timeout(Math.min(ERDDAP_TIMEOUT_MS, 8000)) });
+      const response = await fetch(erddapUrl, { signal: AbortSignal.timeout(Math.min(ERDDAP_TIMEOUT_MS, 20000)) });
       if (!response.ok) throw new Error(`ERDDAP ${response.status}`);
       const data = await response.json();
       if (!data.table || !data.table.rows || data.table.rows.length === 0) throw new Error('No Data');

@@ -41,8 +41,8 @@ import {
  */
 const MODEL_API_BASE = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '').replace(/\/$/, '') || ((typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://127.0.0.1:8000');
 
-/** Timeout for FastAPI model API calls in milliseconds */
-const MODEL_API_TIMEOUT_MS = 5000;
+/** Timeout for model API calls (public backend, was 5000) */
+const MODEL_API_TIMEOUT_MS = 15000;
 
 // ─── STORE ───────────────────────────────────────────────────────────────────
 export const useOceanStore = create((set, get) => ({

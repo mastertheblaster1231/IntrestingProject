@@ -10,7 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 const ERDDAP_IFREMER_INDEX = process.env.ERDDAP_IFREMER_INDEX || 'https://erddap.ifremer.fr/erddap/index.json';
-const HEALTH_PING_TIMEOUT_MS = parseInt(process.env.HEALTH_PING_TIMEOUT_MS || '3000', 10);
+const HEALTH_PING_TIMEOUT_MS = parseInt(process.env.HEALTH_PING_TIMEOUT_MS || '10000', 10); // increased for public API
 
 const corsOptions = CORS_ORIGIN === '*'
   ? { origin: '*' }
