@@ -20,7 +20,7 @@
 // Change these values to control the fleet display
 
 export const ARGO_FLEET_CONFIG = {
-  targetCount: 30, // ← How many Argo floats to show on the globe
+  targetCount: 200, // ← How many Argo floats to show on the globe
   regionLatMin: 0, // Southern latitude bound
   regionLatMax: 25, // Northern latitude bound
   regionLonMin: 55, // Western longitude bound

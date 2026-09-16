@@ -4,6 +4,7 @@ import { TopNavbar } from './panels/TopNavbar.jsx';
 import { FooterBar } from './panels/FooterBar.jsx';
 import { WorkspaceManager } from './WorkspaceManager.jsx';
 import { useOceanStore } from './useOceanStore.js';
+import { useOceanData } from './hooks/useOceanData.js';
 import { InfoCircle } from './components/InfoCircle.jsx';
 import { GliderHorizontalScrollbar } from './components/GliderHorizontalScrollbar.jsx';
 
@@ -29,17 +30,8 @@ export function OceanDashboard({ instruments = [] }) {
   const canvasContainerRef = useRef(null);
   const [showDepthBar, setShowDepthBar] = useState(true);
   const activeInstrument = useOceanStore((state) => state.activeInstrument);
-  const [backendStatus, setBackendStatus] = useState('checking'); // 'checking', 'connected', 'fallback'
-
-  // Health check for backend status
-  useEffect(() => {
-    fetch('/api/health')
-      .then(res => {
-        if (res.ok) setBackendStatus('connected');
-        else setBackendStatus('fallback');
-      })
-      .catch(() => setBackendStatus('fallback'));
-  }, []);
+  const { isLive } = useOceanData(activeInstrument?.id || '2902351', 15);
+  const backendStatus = isLive ? 'connected' : 'fallback';
 
   // Expose the canvas container ref for Ocean.js to attach the Three.js renderer
   useEffect(() => {
@@ -166,7 +158,7 @@ export function OceanDashboard({ instruments = [] }) {
                 background: backendStatus === 'connected' ? '#4ade80' : '#fbbf24',
                 boxShadow: `0 0 8px ${backendStatus === 'connected' ? '#4ade80' : '#fbbf24'}`
               }} />
-              {backendStatus === 'connected' ? 'Backend Connected' : 'Fallback Mode'}
+              {backendStatus === 'connected' ? '● LIVE STREAM' : 'Fallback Mode'}
             </div>
 
             <button
