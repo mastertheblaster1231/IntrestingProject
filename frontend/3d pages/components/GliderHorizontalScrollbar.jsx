@@ -46,7 +46,7 @@ export function GliderHorizontalScrollbar() {
     e.stopPropagation();
     setIsDragging(true);
     if (e.currentTarget.setPointerCapture) {
-      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
     }
     updateFromPointer(e.clientX);
   };
@@ -64,7 +64,7 @@ export function GliderHorizontalScrollbar() {
     e.stopPropagation();
     setIsDragging(false);
     if (e.currentTarget.releasePointerCapture) {
-      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_err) { /* ignore */ }
     }
   };
 

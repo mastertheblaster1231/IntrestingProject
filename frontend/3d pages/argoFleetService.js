@@ -65,7 +65,7 @@ function getCandidateErddapUrls() {
   if (isBrowser) {
     // Order: backend (no CORS, fastest, cached) → Vite proxy (same-origin) → direct (will be CORS-blocked, last resort)
     const urls = [];
-    if (backendBase || true) urls.push(backendFleetUrl); // always try backend first
+    urls.push(backendFleetUrl); // always try backend first
     urls.push(`${proxyPath}/erddap/tabledap/ArgoFloats.json${query}`);
     // Public CORS proxies removed — they cause 403/522 and spam; keep direct as final fallback (will fail CORS but caught)
     urls.push(directUrl);

@@ -37,7 +37,7 @@ window.updateMarkerSizing = function (newCfg) {
   Object.assign(ANCHOR_SIZE_CONFIG, newCfg);
   try {
     localStorage.setItem("ocean_marker_config", JSON.stringify(ANCHOR_SIZE_CONFIG));
-  } catch (e) {}
+  } catch (_e) { /* ignore */ }
 };
 // ============================================================================
 

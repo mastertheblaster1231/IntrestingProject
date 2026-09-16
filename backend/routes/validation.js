@@ -83,7 +83,7 @@ async function fetchVerticalProfile(platformNumber, timestamp, _opts = {}) {
               const end = new Date(dt.getTime() + 5 * 86400000).toISOString();
               timeConstraint = `&time%3E=%22${encodeURIComponent(start)}%22&time%3C=%22${encodeURIComponent(end)}%22`;
             }
-          } catch {}
+          } catch (_e) { /* ignore invalid timestamp */ }
         }
         const quoted = encodeURIComponent(`"${platformNumber}"`);
         const url = `${ERDDAP_BASE}?time,pres,temp,psal&platform_number=${quoted}${timeConstraint}&orderByMax%28%22time%22%29`;
@@ -333,7 +333,7 @@ router.get('/validate', async (req, res) => {
       const data = await response.json();
       if (!data.table || !data.table.rows || data.table.rows.length === 0) throw new Error('No Data');
       row = data.table.rows[0];
-    } catch (err) {
+    } catch (_err) {
       row = [targetDepth, 28.3 - (targetDepth / 50) * 0.4, 34.3, 135];
     }
     // Robust column lookup: ERDDAP table returns columnNames, but we assume order pres,temp,psal,doxy

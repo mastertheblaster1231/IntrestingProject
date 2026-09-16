@@ -1985,7 +1985,7 @@ function FloatingWorkspaceWindow({
       dragRef.current.isDragging = false;
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch (err) {}
+      } catch (_err) { /* ignore */ }
 
       const hasMoved = dragRef.current.currentX !== dragRef.current.initialX || dragRef.current.currentY !== dragRef.current.initialY;
 
@@ -2076,7 +2076,7 @@ function FloatingWorkspaceWindow({
       resizeRef.current.isResizing = false;
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch (err) {}
+      } catch (_err) { /* ignore */ }
 
       onUpdate(id, {
         width: resizeRef.current.currentW,
