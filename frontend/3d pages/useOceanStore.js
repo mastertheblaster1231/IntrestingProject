@@ -882,7 +882,7 @@ export const useOceanStore = create((set, get) => ({
       } else {
         throw new Error('Invalid model response payload');
       }
-    } catch (modelErr) {
+    } catch (_modelErr) {
       modelRaw = _simulateModelPointFallback(
         instrument?.lat ?? 11.6,
         instrument?.lon ?? 92.5,

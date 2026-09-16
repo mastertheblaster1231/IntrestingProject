@@ -14,7 +14,7 @@ export function useFrame(callback) {
       lastTime = time;
       try {
         callback({ clock: { elapsedTime: time * 0.001 } }, delta);
-      } catch (err) {
+      } catch (_err) {
         // Silently handle frame exceptions
       }
       frameId = requestAnimationFrame(animate);
