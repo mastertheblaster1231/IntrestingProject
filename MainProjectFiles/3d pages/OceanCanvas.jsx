@@ -299,15 +299,19 @@ export function OceanCanvas({ instruments = [] }) {
         gap: 8,
         zIndex: 15,
       }}>
-        {showArgo && (
-          <button
-            className={`nav-step-btn ${activeInstrument?.floatId === '2902351' ? 'nav-view-tab--active' : ''}`}
-            onClick={() => handleArgoFloatClick({ id: 'argo-2902351', floatId: '2902351', position: [0, -0.2, 1.5] })}
-            style={{ fontSize: '0.66rem', display: 'flex', alignItems: 'center', gap: 4 }}
+        {activeInstrument && (
+          <div
+            className={`nav-step-btn nav-view-tab--active`}
+            style={{ fontSize: '0.66rem', display: 'flex', alignItems: 'center', gap: 6, cursor: 'default' }}
           >
-            <span>🟠</span>
-            <span>Argo 2902351 (Dive)</span>
-          </button>
+            <span>🎈</span>
+            <span style={{ fontWeight: 'bold' }}>{activeInstrument.name || activeInstrument.id}</span>
+            {activeInstrument.lat != null && activeInstrument.lon != null && (
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', color: '#00e5ff', marginLeft: 6, opacity: 0.9 }}>
+                {activeInstrument.lat.toFixed(4)}° N, {activeInstrument.lon.toFixed(4)}° E
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>

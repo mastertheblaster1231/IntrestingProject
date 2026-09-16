@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOceanStore, selectFleet, selectActiveInstrument } from './useOceanStore.js';
 import { DEMO_INSTRUMENTS } from './instruments.js';
+import { ColorBars } from './components/ColorBars.jsx';
 
 /**
  * FleetBar / SectorFleetBar Component
@@ -87,6 +88,9 @@ export function FleetBar({
   return (
     <>
       <div className="fleet-bar-wrapper workspace-interactive">
+        <div style={{ position: 'absolute', bottom: 'calc(100% + 15px)', left: '0' }}>
+          <ColorBars />
+        </div>
         <div className="fleet-bar">
           {/* 1. SECTOR FLEET Badge & Radar Dot */}
           <div className="fleet-brand">

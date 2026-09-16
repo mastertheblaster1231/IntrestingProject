@@ -12,12 +12,48 @@
  */
 
 export const SUPPORTED_VARIABLES = [
-  { key: 'temperature',      label: 'Temperature',       unit: '°C',      precision: 1, isAngular: false },
-  { key: 'salinity',         label: 'Salinity',          unit: 'PSU',     precision: 2, isAngular: false },
-  { key: 'chlorophyll',      label: 'Chlorophyll-a',     unit: 'mg/m³',   precision: 2, isAngular: false },
-  { key: 'currentSpeed',     label: 'Current Speed',     unit: 'm/s',     precision: 2, isAngular: false },
-  { key: 'currentDirection', label: 'Current Direction', unit: '°',       precision: 1, isAngular: true  },
-  { key: 'dissolvedOxygen',  label: 'Dissolved Oxygen',  unit: 'µmol/kg', precision: 1, isAngular: false },
+  {
+    key: "temperature",
+    label: "Temperature",
+    unit: "°C",
+    precision: 1,
+    isAngular: false,
+  },
+  {
+    key: "salinity",
+    label: "Salinity",
+    unit: "PSU",
+    precision: 2,
+    isAngular: false,
+  },
+  {
+    key: "chlorophyll",
+    label: "Chlorophyll-a",
+    unit: "mg/m³",
+    precision: 2,
+    isAngular: false,
+  },
+  {
+    key: "currentSpeed",
+    label: "Current Speed",
+    unit: "m/s",
+    precision: 2,
+    isAngular: false,
+  },
+  {
+    key: "currentDirection",
+    label: "Current Direction",
+    unit: "°",
+    precision: 1,
+    isAngular: true,
+  },
+  {
+    key: "dissolvedOxygen",
+    label: "Dissolved Oxygen",
+    unit: "µmol/kg",
+    precision: 1,
+    isAngular: false,
+  },
 ];
 
 /**
@@ -88,14 +124,16 @@ export function calculateDelta(varKey, obsVal, modelVal) {
  * e.g. 'current_speed' -> 'currentSpeed', 'thetao' -> 'temperature', 'so' -> 'salinity'
  */
 export function normalizeVariableKey(key) {
-  if (!key) return 'temperature';
-  const k = String(key).toLowerCase().replace(/[-_]/g, '');
-  if (k.includes('temp') || k === 'thetao') return 'temperature';
-  if (k.includes('sal') || k === 'so') return 'salinity';
-  if (k.includes('chl') || k.includes('chlor')) return 'chlorophyll';
-  if (k.includes('dir') || k.includes('heading')) return 'currentDirection';
-  if (k.includes('speed') || k.includes('velocity') || k === 'current') return 'currentSpeed';
-  if (k.includes('oxy') || k.includes('o2') || k.includes('doxy')) return 'dissolvedOxygen';
+  if (!key) return "temperature";
+  const k = String(key).toLowerCase().replace(/[-_]/g, "");
+  if (k.includes("temp") || k === "thetao") return "temperature";
+  if (k.includes("sal") || k === "so") return "salinity";
+  if (k.includes("chl") || k.includes("chlor")) return "chlorophyll";
+  if (k.includes("dir") || k.includes("heading")) return "currentDirection";
+  if (k.includes("speed") || k.includes("velocity") || k === "current")
+    return "currentSpeed";
+  if (k.includes("oxy") || k.includes("o2") || k.includes("doxy"))
+    return "dissolvedOxygen";
   return key;
 }
 
@@ -108,14 +146,16 @@ export function normalizeVariableKey(key) {
  * @returns {string} Formatted string, or "—" if value is null
  */
 export function formatVariableValue(varKey, value, isDelta = false) {
-  if (value == null || isNaN(value)) return '—';
+  if (value == null || isNaN(value)) return "—";
   const num = Number(value);
-  const meta = SUPPORTED_VARIABLES.find((v) => v.key === normalizeVariableKey(varKey));
+  const meta = SUPPORTED_VARIABLES.find(
+    (v) => v.key === normalizeVariableKey(varKey),
+  );
   const precision = meta ? meta.precision : 2;
-  const unit = meta ? meta.unit : '';
+  const unit = meta ? meta.unit : "";
 
   const fixed = num.toFixed(precision);
-  const prefix = isDelta && num > 0 ? '+' : '';
+  const prefix = isDelta && num > 0 ? "+" : "";
 
   return `${prefix}${fixed} ${unit}`.trim();
 }
@@ -132,17 +172,18 @@ export function getComparisonStatus(obsVal, modelVal) {
   const hasObs = obsVal != null && !isNaN(obsVal);
   const hasMod = modelVal != null && !isNaN(modelVal);
 
-  if (hasObs && hasMod) return 'VALID';
-  if (hasObs && !hasMod) return 'MISSING_MODEL';
-  if (!hasObs && hasMod) return 'MISSING_OBS';
-  return 'UNAVAILABLE';
+  if (hasObs && hasMod) return "VALID";
+  if (hasObs && !hasMod) return "MISSING_MODEL";
+  if (!hasObs && hasMod) return "MISSING_OBS";
+  return "UNAVAILABLE";
 }
 
 /**
  * Evaluates agreement rating based on Delta magnitude.
  */
 export function getAgreementRating(varKey, delta) {
-  if (delta == null || isNaN(delta)) return { label: 'Data Missing', tone: 'missing' };
+  if (delta == null || isNaN(delta))
+    return { label: "Data Missing", tone: "missing" };
 
   const abs = Math.abs(delta);
   const k = normalizeVariableKey(varKey);
@@ -150,39 +191,42 @@ export function getAgreementRating(varKey, delta) {
   let thresholdGood = 0.3;
   let thresholdWarning = 0.8;
 
-  if (k === 'salinity') {
+  if (k === "salinity") {
     thresholdGood = 0.1;
     thresholdWarning = 0.25;
-  } else if (k === 'currentDirection') {
+  } else if (k === "currentDirection") {
     thresholdGood = 10.0;
     thresholdWarning = 30.0;
-  } else if (k === 'currentSpeed') {
+  } else if (k === "currentSpeed") {
     thresholdGood = 0.05;
     thresholdWarning = 0.15;
-  } else if (k === 'chlorophyll') {
+  } else if (k === "chlorophyll") {
     thresholdGood = 0.08;
     thresholdWarning = 0.25;
-  } else if (k === 'dissolvedOxygen') {
+  } else if (k === "dissolvedOxygen") {
     thresholdGood = 8.0;
     thresholdWarning = 25.0;
   }
 
   if (abs <= thresholdGood) {
-    return { label: 'Optimal Match', tone: 'optimal' };
+    return { label: "Optimal Match", tone: "optimal" };
   }
   if (abs <= thresholdWarning) {
-    return { label: 'Moderate Bias', tone: 'warning' };
+    return { label: "Moderate Bias", tone: "warning" };
   }
-  return { label: delta > 0 ? 'Positive Anomaly' : 'Negative Anomaly', tone: 'anomaly' };
+  return {
+    label: delta > 0 ? "Positive Anomaly" : "Negative Anomaly",
+    tone: "anomaly",
+  };
 }
 
 /**
  * Standard NetCDF vertical model grid levels (INCOIS-ROMS / HYCOM / CMEMS standard z-levels)
  */
 export const STANDARD_MODEL_DEPTHS = [
-  0, 5, 10, 15, 20, 30, 50, 75, 100, 125, 150, 200, 250, 300,
-  400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400,
-  1500, 1750, 2000, 2500, 3000, 3500, 4000
+  0, 5, 10, 15, 20, 30, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 600,
+  700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1750, 2000, 2500, 3000,
+  3500, 4000,
 ];
 
 /**
@@ -194,8 +238,15 @@ export const STANDARD_MODEL_DEPTHS = [
  * @param {number|null} fallbackObsDepth In-situ instrument physical depth
  * @returns {{ targetDepth: number, observationDepth: number, modelDepth: number, matchingMethod: string }}
  */
-export function alignDepthProvenance(targetDepth, profileLevels = null, fallbackObsDepth = null) {
-  const target = Math.max(0, Math.min(4000, Math.round(Number(targetDepth) || 0)));
+export function alignDepthProvenance(
+  targetDepth,
+  profileLevels = null,
+  fallbackObsDepth = null,
+) {
+  const target = Math.max(
+    0,
+    Math.min(4000, Math.round(Number(targetDepth) || 0)),
+  );
 
   // 1. Model grid alignment (find closest standard NetCDF level)
   let closestModel = STANDARD_MODEL_DEPTHS[0];
@@ -210,35 +261,40 @@ export function alignDepthProvenance(targetDepth, profileLevels = null, fallback
 
   // 2. Observation depth alignment
   let obsDepth = target;
-  let matchingMethod = 'Nearest Valid';
+  let matchingMethod = "Nearest Valid";
 
-  if (profileLevels && Array.isArray(profileLevels) && profileLevels.length > 0) {
+  if (
+    profileLevels &&
+    Array.isArray(profileLevels) &&
+    profileLevels.length > 0
+  ) {
     const minD = profileLevels[0].depth;
     const maxD = profileLevels[profileLevels.length - 1].depth;
 
     if (target < minD) {
       obsDepth = minD;
-      matchingMethod = 'Nearest Valid';
+      matchingMethod = "Nearest Valid";
     } else if (target > maxD) {
       obsDepth = maxD;
-      matchingMethod = 'Nearest Valid';
+      matchingMethod = "Nearest Valid";
     } else {
       // Check if target matches an exact profile level
       const exactMatch = profileLevels.some((p) => p.depth === target);
       if (exactMatch) {
         obsDepth = target;
-        matchingMethod = closestModel === target ? 'Exact Match' : 'Nearest Valid';
+        matchingMethod =
+          closestModel === target ? "Exact Match" : "Nearest Valid";
       } else {
         obsDepth = target;
-        matchingMethod = 'Interpolated';
+        matchingMethod = "Interpolated";
       }
     }
   } else if (fallbackObsDepth != null) {
     obsDepth = Math.round(Number(fallbackObsDepth));
     if (obsDepth === target && closestModel === target) {
-      matchingMethod = 'Exact Match';
+      matchingMethod = "Exact Match";
     } else {
-      matchingMethod = 'Nearest Valid';
+      matchingMethod = "Nearest Valid";
     }
   }
 
@@ -264,10 +320,14 @@ export function alignDepthProvenance(targetDepth, profileLevels = null, fallback
  * 5. Ekman velocity spiral rotation with depth
  * 6. Atmospheric saturation -> Oxycline -> Oxygen Minimum Zone (OMZ minimum at 300-600m) -> Deep ventilation
  */
-export function calculateRealisticObservedProfile(depthM, instrumentType = 'argo', baseObs = {}) {
+export function calculateRealisticObservedProfile(
+  depthM,
+  instrumentType = "argo",
+  baseObs = {},
+) {
   const d = Math.max(0, Math.min(4000, Number(depthM) || 0));
-  const isGlider = instrumentType === 'glider';
-  const isCTD = instrumentType === 'ctd';
+  const isGlider = instrumentType === "glider";
+  const isCTD = instrumentType === "ctd";
 
   // 1. Temperature (°C)
   let temp;
@@ -275,9 +335,9 @@ export function calculateRealisticObservedProfile(depthM, instrumentType = 'argo
     temp = 28.35 - (d / 50) * 0.45;
   } else if (d <= 200) {
     const f = (d - 50) / 150;
-    temp = 27.90 - f * (27.90 - 14.50);
+    temp = 27.9 - f * (27.9 - 14.5);
   } else if (d <= 1000) {
-    temp = 3.8 + (14.50 - 3.8) * Math.exp(-(d - 200) / 320);
+    temp = 3.8 + (14.5 - 3.8) * Math.exp(-(d - 200) / 320);
   } else {
     temp = 2.1 + (4.65 - 2.1) * Math.exp(-(d - 1000) / 950);
   }
@@ -291,13 +351,13 @@ export function calculateRealisticObservedProfile(depthM, instrumentType = 'argo
   // 2. Salinity (PSU)
   let sal;
   if (d <= 30) {
-    sal = 34.30 + (d / 30) * 0.15;
+    sal = 34.3 + (d / 30) * 0.15;
   } else if (d <= 150) {
     const f = (d - 30) / 120;
     sal = 34.45 + f * 0.45; // Subsurface Maximum ~34.90 PSU
   } else if (d <= 800) {
     const f = (d - 150) / 650;
-    sal = 34.90 - f * 0.25;
+    sal = 34.9 - f * 0.25;
   } else {
     sal = 34.65 + ((d - 800) / 1200) * 0.08;
   }
@@ -323,7 +383,7 @@ export function calculateRealisticObservedProfile(depthM, instrumentType = 'argo
   // 4. Current Speed (m/s)
   let curSpd;
   if (d <= 30) {
-    curSpd = 0.40 - (d / 30) * 0.05;
+    curSpd = 0.4 - (d / 30) * 0.05;
   } else if (d <= 400) {
     curSpd = 0.35 * Math.exp(-(d - 30) / 180);
   } else {
@@ -370,14 +430,14 @@ export function calculateRealisticModelProfile(depthM) {
   // 1. Model Temperature (°C)
   let temp;
   if (d <= 50) {
-    temp = 28.00 - (d / 50) * 0.40;
+    temp = 28.0 - (d / 50) * 0.4;
   } else if (d <= 200) {
     const f = (d - 50) / 150;
-    temp = 27.60 - f * (27.60 - 15.20);
+    temp = 27.6 - f * (27.6 - 15.2);
   } else if (d <= 1000) {
-    temp = 3.65 + (15.20 - 3.65) * Math.exp(-(d - 200) / 330);
+    temp = 3.65 + (15.2 - 3.65) * Math.exp(-(d - 200) / 330);
   } else {
-    temp = 2.05 + (4.50 - 2.05) * Math.exp(-(d - 1000) / 980);
+    temp = 2.05 + (4.5 - 2.05) * Math.exp(-(d - 1000) / 980);
   }
 
   // 2. Model Salinity (PSU)
@@ -391,7 +451,7 @@ export function calculateRealisticModelProfile(depthM) {
     const f = (d - 150) / 650;
     sal = 34.84 - f * 0.22;
   } else {
-    sal = 34.62 + ((d - 800) / 1200) * 0.10;
+    sal = 34.62 + ((d - 800) / 1200) * 0.1;
   }
 
   // 3. Model Chlorophyll-a (mg/m³) — null below 120m
@@ -443,4 +503,3 @@ export function calculateRealisticModelProfile(depthM) {
     dissolvedOxygen: parseFloat(doxy.toFixed(1)),
   };
 }
-

@@ -1,5 +1,5 @@
-import React from 'react';
-import { FleetBar } from '../FleetBar.jsx';
+import React from "react";
+import { FleetBar } from "../FleetBar.jsx";
 
 /**
  * SectorFleetBar

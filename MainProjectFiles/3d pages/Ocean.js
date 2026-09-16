@@ -19,6 +19,7 @@ import {
   DEMO_INSTRUMENTS,
   createGliderSawtoothTrail,
 } from "./instruments.js";
+import { fetchArgoDepthSlice } from "../services/argoBackendService.js";
 
 
 // ============================================================================
@@ -742,6 +743,68 @@ let currentFloatData = null;
 window.oceanDataService = oceanDataService;
 window.getCurrentFloatData = () => currentFloatData;
 
+window.updateVolumeVariable = function (activeVariable) {
+  if (!currentFloatData || !waterMaterial) return;
+  const depth = window.OCEAN_STATE?.currentDepth || 15;
+  const interp = oceanDataService.interpolateAtDepth(currentFloatData, depth);
+  
+  let val = null;
+  let color = null;
+  
+  if (activeVariable === 'temperature') {
+    val = interp.temperatureC;
+    if (val != null) {
+      // 26 to 31+: cyan -> green -> yellow -> orange -> red -> dark red
+      if (val < 26) color = new THREE.Color(0x00ffff);
+      else if (val < 27) color = new THREE.Color(0x00ff00).lerp(new THREE.Color(0x00ffff), 1 - (val-26));
+      else if (val < 28) color = new THREE.Color(0xadff2f).lerp(new THREE.Color(0x00ff00), 1 - (val-27));
+      else if (val < 29) color = new THREE.Color(0xffa500).lerp(new THREE.Color(0xadff2f), 1 - (val-28));
+      else if (val < 30) color = new THREE.Color(0xff0000).lerp(new THREE.Color(0xffa500), 1 - (val-29));
+      else color = new THREE.Color(0x8b0000).lerp(new THREE.Color(0xff0000), Math.max(0, 1 - (val-30)));
+    }
+  } else if (activeVariable === 'salinity') {
+    val = interp.salinityPSU;
+    if (val != null) {
+      // 31 to 39: pink -> purple -> blue -> cyan -> green -> yellow -> orange -> red -> light red
+      if (val < 32) color = new THREE.Color(0x800080).lerp(new THREE.Color(0xffc0cb), 1 - (val-31));
+      else if (val < 33) color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0x800080), 1 - (val-32));
+      else if (val < 34) color = new THREE.Color(0x00ffff).lerp(new THREE.Color(0x0000ff), 1 - (val-33));
+      else if (val < 35) color = new THREE.Color(0x00ff00).lerp(new THREE.Color(0x00ffff), 1 - (val-34));
+      else if (val < 36) color = new THREE.Color(0xffff00).lerp(new THREE.Color(0x00ff00), 1 - (val-35));
+      else if (val < 37) color = new THREE.Color(0xffa500).lerp(new THREE.Color(0xffff00), 1 - (val-36));
+      else if (val < 38) color = new THREE.Color(0xff0000).lerp(new THREE.Color(0xffa500), 1 - (val-37));
+      else color = new THREE.Color(0xffb6c1).lerp(new THREE.Color(0xff0000), Math.max(0, 1 - (val-38)));
+    }
+  } else if (activeVariable === 'chlorophyll') {
+    val = interp.chlorophyllMgM3;
+    if (val != null) {
+      // 0.04 to 5: purple -> blue -> cyan -> green -> yellow -> orange -> red
+      if (val < 0.1) color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0x800080), 1 - (val-0.04)/0.06);
+      else if (val < 0.3) color = new THREE.Color(0x00ffff).lerp(new THREE.Color(0x0000ff), 1 - (val-0.1)/0.2);
+      else if (val < 1.0) color = new THREE.Color(0x00ff00).lerp(new THREE.Color(0x00ffff), 1 - (val-0.3)/0.7);
+      else if (val < 2.0) color = new THREE.Color(0xffff00).lerp(new THREE.Color(0x00ff00), 1 - (val-1.0)/1.0);
+      else if (val < 3.0) color = new THREE.Color(0xffa500).lerp(new THREE.Color(0xffff00), 1 - (val-2.0)/1.0);
+      else if (val < 4.0) color = new THREE.Color(0xff0000).lerp(new THREE.Color(0xffa500), 1 - (val-3.0)/1.0);
+      else color = new THREE.Color(0xff0000);
+    }
+  } else if (activeVariable === 'all') {
+    // Revert to solar preset colors
+    const preset = SOLAR_PRESETS[currentPresetIndex];
+    if (preset) {
+       waterMaterial.uniforms.uSurfaceColor.value.copy(preset.waterSurfaceColor);
+       waterMaterial.uniforms.uDepthColor.value.copy(preset.waterDepthColor);
+    }
+    return;
+  }
+  
+  if (color) {
+    waterMaterial.uniforms.uSurfaceColor.value.copy(color);
+    // make depth color a slightly darker version
+    const depthCol = color.clone().multiplyScalar(0.4);
+    waterMaterial.uniforms.uDepthColor.value.copy(depthCol);
+  }
+};
+
 // ============================================================================
 // DYNAMIC DEPTH TELEMETRY: REAL-TIME PHYSICAL OCEAN PROPERTY INTERPOLATION
 // As user dives down (0m -> 4000m), water temperature, salinity, oxygen, and
@@ -789,6 +852,128 @@ window.updateLiveDepthData = function (depthMeters) {
     const markerY = padTop + (Math.min(2000, depthMeters) / 2000) * plotH;
     marker.setAttribute("y1", markerY.toFixed(1));
     marker.setAttribute("y2", markerY.toFixed(1));
+  }
+  
+  if (window.OCEAN_STATE && window.OCEAN_STATE.variable && window.OCEAN_STATE.variable !== 'all') {
+    if (typeof window.updateVolumeVariable === 'function') {
+      window.updateVolumeVariable(window.OCEAN_STATE.variable);
+    }
+  }
+
+  // ─── QUERY BGC ARGO FASTAPI DEPTH-SLICE BACKEND ────────────────────────────
+  const rawPlatform = (window.OCEAN_STATE?.selectedInstrument?.floatId) ||
+                      (currentStation?.platformNumber) ||
+                      '2902251';
+  const timestamp = window.currentTemporalTimestamp || null;
+
+  fetchArgoDepthSlice(rawPlatform, depthMeters, timestamp)
+    .then((backendData) => {
+      if (backendData) {
+        window.updateBGCTelemetryFromBackend(backendData);
+      }
+    })
+    .catch((err) => {
+      // Backend errors handled gracefully with procedural fallback
+    });
+};
+
+/**
+ * Updates DOM telemetry elements and Zustand store with BGC Argo backend depth slice.
+ */
+window.updateBGCTelemetryFromBackend = function (data) {
+  if (!data) return;
+
+  const vars = data.primary_oceanographic_variables;
+  const optics = data.bgc_optics_and_diagnostics;
+  const hydraulics = data.hydraulics_telemetry;
+  const meta = data.metadata;
+
+  if (vars) {
+    const tempEl = document.getElementById("descTemp");
+    const salEl = document.getElementById("descSalinity");
+    const oxyEl = document.getElementById("descOxygen");
+    const chlEl = document.getElementById("descChlorophyll");
+    const currentEl = document.getElementById("descCurrent");
+
+    if (tempEl && vars.temperature_c != null) {
+      tempEl.textContent = `${vars.temperature_c.toFixed(1)} °C`;
+    }
+    if (salEl && vars.salinity_psu != null) {
+      salEl.textContent = `${vars.salinity_psu.toFixed(1)} PSU`;
+    }
+    if (oxyEl && vars.dissolved_oxygen_umol_kg != null) {
+      oxyEl.textContent = `${vars.dissolved_oxygen_umol_kg.toFixed(0)} μmol/kg`;
+    }
+    if (chlEl && vars.chlorophyll_a_mg_m3 != null) {
+      chlEl.textContent = `${vars.chlorophyll_a_mg_m3.toFixed(2)} mg/m³`;
+    }
+    if (currentEl && vars.current_speed_m_s != null) {
+      currentEl.textContent = `${vars.current_speed_m_s.toFixed(2)} m/s → NE`;
+    }
+  }
+
+  // Update Coordinates & Metadata
+  if (meta) {
+    const coordsEl = document.getElementById("descCoords");
+    if (coordsEl && meta.coordinates) {
+      coordsEl.textContent = `${meta.coordinates.latitude}, ${meta.coordinates.longitude}`;
+    }
+    const modelSourceEl = document.getElementById("descModelSource");
+    if (modelSourceEl && meta.data_source) {
+      modelSourceEl.textContent = meta.data_source;
+    }
+    const biasRatingEl = document.getElementById("descModelBiasRating");
+    if (biasRatingEl && meta.residual_bias) {
+      biasRatingEl.textContent = meta.residual_bias;
+    }
+  }
+
+  // Update BGC optics & diagnostics if DOM elements exist
+  if (optics) {
+    const densityEl = document.getElementById("descDensity");
+    if (densityEl && optics.potential_density_kg_m3 != null) {
+      densityEl.textContent = `${optics.potential_density_kg_m3.toFixed(2)} kg/m³`;
+    }
+    const soundSpeedEl = document.getElementById("descSoundSpeed");
+    if (soundSpeedEl && optics.sound_velocity_m_s != null) {
+      soundSpeedEl.textContent = `${optics.sound_velocity_m_s.toFixed(1)} m/s`;
+    }
+    const parEl = document.getElementById("descPar");
+    if (parEl && optics.downwelling_par_umol_m2_s != null) {
+      parEl.textContent = `${optics.downwelling_par_umol_m2_s.toFixed(1)} μmol/m²·s`;
+    }
+    const bbpEl = document.getElementById("descBbp");
+    if (bbpEl && optics.backscattering_bbp_m_inv != null) {
+      bbpEl.textContent = `${optics.backscattering_bbp_m_inv.toFixed(5)} m⁻¹`;
+    }
+    const cdomEl = document.getElementById("descCdom");
+    if (cdomEl && optics.cdom_fluorescence_ppb != null) {
+      cdomEl.textContent = `${optics.cdom_fluorescence_ppb.toFixed(2)} ppb`;
+    }
+    const oxySatEl = document.getElementById("descOxySat");
+    if (oxySatEl && optics.oxygen_saturation_pct != null) {
+      oxySatEl.textContent = `${optics.oxygen_saturation_pct.toFixed(1)}%`;
+    }
+  }
+
+  // Update Float Hydraulics if DOM elements exist
+  if (hydraulics) {
+    const bladderEl = document.getElementById("descBladder");
+    if (bladderEl && hydraulics.hydraulic_bladder_cc != null) {
+      bladderEl.textContent = `${hydraulics.hydraulic_bladder_cc.toFixed(1)} cc`;
+    }
+    const vacEl = document.getElementById("descVacuum");
+    if (vacEl && hydraulics.internal_vacuum_inhg != null) {
+      vacEl.textContent = `${hydraulics.internal_vacuum_inhg.toFixed(1)} inHg`;
+    }
+    const phaseEl = document.getElementById("descDivePhase");
+    if (phaseEl && hydraulics.dive_phase) {
+      phaseEl.textContent = hydraulics.dive_phase;
+    }
+    const linkEl = document.getElementById("descLinkMode");
+    if (linkEl && hydraulics.link_mode) {
+      linkEl.textContent = hydraulics.link_mode;
+    }
   }
 };
 
@@ -1266,6 +1451,15 @@ window.applyTemporalFilter = async function () {
   const dateVal = dateInput ? dateInput.value : "";
   const timeVal = timeInput ? timeInput.value : "12:00";
 
+  // Compute ISO timestamp for historical queries
+  const isLatest = document.getElementById("pill-latest")?.classList.contains("active");
+  const isoTimestamp = (!isLatest && dateVal) ? `${dateVal}T${timeVal}:00Z` : null;
+  window.currentTemporalTimestamp = isoTimestamp;
+
+  if (window.oceanStore?.getState) {
+    window.oceanStore.getState().setSelectedTimestamp(isoTimestamp || new Date().toISOString());
+  }
+
   if (spinner) spinner.style.display = "inline";
   if (queryBtn) queryBtn.style.opacity = "0.7";
 
@@ -1276,6 +1470,12 @@ window.applyTemporalFilter = async function () {
       time: timeVal,
     });
     populateUIWithFloatData(updatedData);
+
+    // Refresh live depth data with this new temporal context
+    const currentDepth = window.OCEAN_STATE?.depthMeters || 15;
+    if (typeof window.updateLiveDepthData === 'function') {
+      window.updateLiveDepthData(currentDepth);
+    }
 
     // Subtle pulse feedback on the active fix dot
     const pulseDot = document.getElementById("temporalPulseDot");
@@ -1310,6 +1510,40 @@ async function initFloatDescription() {
   currentStation = getStationById(buoyId);
   const floatData = await oceanDataService.getFloatDetails(currentStation);
   populateUIWithFloatData(floatData);
+
+  if (window.oceanStore) {
+    const fullInstrumentData = {
+      ...currentStation,
+      name: floatData.buoyName || currentStation?.name || currentStation?.id,
+      sea: floatData.locationPrimary || "Indian Ocean",
+      region: floatData.locationSecondary || "Central Basin",
+      type: floatData.platformType?.toLowerCase().includes("glider") ? "glider" : (floatData.platformType?.toLowerCase().includes("ctd") ? "ctd" : "argo"),
+      platform: floatData.platformType || "APEX Profiling Float",
+      lat: floatData.coordinates?.lat || currentStation?.lat,
+      lon: floatData.coordinates?.lon || currentStation?.lon,
+      depth: floatData.maxDepthMeters || 2000,
+      depthMeters: floatData.maxDepthMeters || 2000,
+      status: (floatData.status || "active").toLowerCase(),
+      telemetry: {
+        temperatureC: floatData.scientificData?.surfaceTempC,
+        salinityPSU: floatData.scientificData?.surfaceSalinityPSU,
+        dissolvedOxygen: floatData.scientificData?.dissolvedOxygenUmolKg,
+        chlorophyll: floatData.scientificData?.chlorophyllMgM3,
+        currentSpeed: floatData.scientificData?.currentSpeedMs,
+        currentDirection: floatData.scientificData?.currentDirection,
+        batteryPct: floatData.mission?.batteryPercent,
+        cycle: floatData.mission?.cycleNumber,
+        status: (floatData.status || "active").toLowerCase(),
+        missionWaypoint: floatData.locationSecondary,
+        vessel: floatData.locationSecondary
+      },
+      geoCoordinates: {
+        lat: floatData.coordinates?.lat || currentStation?.lat,
+        lon: floatData.coordinates?.lon || currentStation?.lon,
+      }
+    };
+    window.oceanStore.getState().setActiveInstrument(fullInstrumentData);
+  }
 
   // Apply the initial time of day preset
   applySolarPreset(initialPreset);
@@ -2620,21 +2854,15 @@ function updateTelemetryPanelWithInstrument(inst) {
   }
 
   if (locPrimaryEl) {
-    locPrimaryEl.textContent =
-      inst.type === "argo"
-        ? "Andaman Sea"
-        : inst.type === "glider"
-        ? "Hydrographic Transect"
-        : "Ocean Station Cast";
+    locPrimaryEl.textContent = inst.sea || inst.locationPrimary || "Indian Ocean";
   }
   if (locSecondaryEl) {
-    locSecondaryEl.textContent =
-      inst.telemetry.missionWaypoint ||
-      inst.telemetry.vessel ||
-      "Port Blair Sector";
+    locSecondaryEl.textContent = inst.region || inst.locationSecondary || inst.telemetry?.missionWaypoint || inst.telemetry?.vessel || "";
   }
   if (coordsEl && inst.geoCoordinates) {
-    coordsEl.textContent = `${inst.geoCoordinates.lat.toFixed(4)}° N, ${inst.geoCoordinates.lon.toFixed(4)}° E`;
+    coordsEl.textContent = `${Math.abs(inst.geoCoordinates.lat).toFixed(4)}° ${inst.geoCoordinates.lat >= 0 ? "N" : "S"}, ${Math.abs(inst.geoCoordinates.lon).toFixed(4)}° ${inst.geoCoordinates.lon >= 0 ? "E" : "W"}`;
+  } else if (coordsEl && inst.lat && inst.lon) {
+    coordsEl.textContent = `${Math.abs(inst.lat).toFixed(4)}° ${inst.lat >= 0 ? "N" : "S"}, ${Math.abs(inst.lon).toFixed(4)}° ${inst.lon >= 0 ? "E" : "W"}`;
   }
   if (tempEl) {
     tempEl.textContent = inst.telemetry.temperatureC
@@ -2932,6 +3160,11 @@ window.setOceanDepth = function (ratio) {
     store.setActiveInstrumentDepth(depthMeters);
   }
 
+  // Synchronize live depth telemetry HUD with BGC depth slice
+  if (typeof window.updateLiveDepthData === 'function') {
+    window.updateLiveDepthData(depthMeters);
+  }
+
   // 1. DIVE DYNAMICS FOR ACTIVE INSTRUMENT & CAMERA:
   // Move whichever instrument is currently selected (Slocum Glider, CTD Rosette, or Argo Float)
   const baseDepth = 95.0;
@@ -3187,6 +3420,25 @@ function animate() {
 
   // 1. Update Water Shader & Volumetric Slice Time Uniforms
   waterMaterial.uniforms.uTime.value = elapsedTime;
+  
+  // Dynamic Water Color based on Active Variable Checkbox
+  if (window.oceanStore?.getState) {
+    const activeVar = window.oceanStore.getState().activeVariable;
+    if (activeVar === 'temperature') {
+      waterMaterial.uniforms.uSurfaceColor.value.setHex(0xef476f); // Reddish for warm surface
+      waterMaterial.uniforms.uDepthColor.value.setHex(0x00b4d8);   // Teal for cold deep
+    } else if (activeVar === 'salinity') {
+      waterMaterial.uniforms.uSurfaceColor.value.setHex(0xf97316); // Orange for salty surface
+      waterMaterial.uniforms.uDepthColor.value.setHex(0x3b82f6);   // Blue for deeper salinity
+    } else if (activeVar === 'chlorophyll') {
+      waterMaterial.uniforms.uSurfaceColor.value.setHex(0x00ff00); // Green for high chl surface
+      waterMaterial.uniforms.uDepthColor.value.setHex(0x3b006b);   // Dark purple for deep
+    } else {
+      waterMaterial.uniforms.uSurfaceColor.value.setHex(0x00f0ff); // Default Cyan
+      waterMaterial.uniforms.uDepthColor.value.setHex(0x092d54);   // Default Deep Blue
+    }
+  }
+
   if (typeof sliceMat !== "undefined" && sliceMat.uniforms) {
     sliceMat.uniforms.uTime.value = elapsedTime;
   }

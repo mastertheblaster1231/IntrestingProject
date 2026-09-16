@@ -6,6 +6,7 @@ import earth8kCloudsUrl from "../Images/8k_earth_clouds.jpg";
 import { oceanDataService } from "./oceanDataService.js";
 import { createOrbitalDiveController } from "./orbitalDive.js";
 import { getRealArgoPoints, ARGO_FLEET_CONFIG } from "./argoFleetService.js";
+import { useOceanStore } from "./useOceanStore.js";
 
 // ============================================================================
 // ⚙️ ANCHOR & BADGE SIZE CONFIGURATION (User Configurable)
@@ -1349,8 +1350,8 @@ function updateArgoFloatUI(data) {
   // 3. Latest Observation cards (Surface Temp & Salinity)
   const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
   const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
-  if (elSurfaceTemp) elSurfaceTemp.textContent = `${data.latestObservation.temperatureC} °C`;
-  if (elSurfaceSal) elSurfaceSal.textContent = `${data.latestObservation.salinityPSU} PSU`;
+  if (elSurfaceTemp) elSurfaceTemp.textContent = `${data.scientificData?.surfaceTempC ?? "--"} °C`;
+  if (elSurfaceSal) elSurfaceSal.textContent = `${data.scientificData?.surfaceSalinityPSU ?? "--"} PSU`;
 
   // 4. Vertical Profile Chart
   renderVerticalProfileChart(data.verticalProfile);
@@ -1375,19 +1376,19 @@ function updateArgoFloatUI(data) {
   const elCycleNum = document.getElementById("argoCycleNum");
   const elBattery = document.getElementById("argoBattery");
   const elTrans = document.getElementById("argoTransmission");
-  if (elCycleNum) elCycleNum.textContent = `Cycle #${data.cycleNumber}`;
-  if (elBattery) elBattery.textContent = data.batteryVoltage;
-  if (elTrans) elTrans.textContent = data.transmissionStatus;
+  if (elCycleNum) elCycleNum.textContent = `Cycle #${data.mission?.cycleNumber ?? "--"}`;
+  if (elBattery) elBattery.textContent = `${data.mission?.batteryPercent ?? "--"}%`;
+  if (elTrans) elTrans.textContent = data.status || "OK";
 
   // 6. Location Tab
   const elBasin = document.getElementById("argoSeaBasin");
   const elCoords = document.getElementById("argoExactCoords");
   const elDrift = document.getElementById("argoDriftSpeed");
   const elDistance = document.getElementById("argoDistance24h");
-  if (elBasin) elBasin.textContent = data.coordinates.seaBasin;
-  if (elCoords) elCoords.textContent = `${data.coordinates.lat.toFixed(4)}°N, ${data.coordinates.lon.toFixed(4)}°E`;
-  if (elDrift) elDrift.textContent = `${data.drift.speedKnots} kts @ ${data.drift.bearingDegrees}°`;
-  if (elDistance) elDistance.textContent = `${data.drift.estimatedDistance24hKm} km / 24h`;
+  if (elBasin) elBasin.textContent = data.coordinates?.seaBasin || data.locationPrimary || "Indian Ocean";
+  if (elCoords) elCoords.textContent = `${(data.coordinates?.lat || 0).toFixed(4)}°N, ${(data.coordinates?.lon || 0).toFixed(4)}°E`;
+  if (elDrift) elDrift.textContent = `${data.scientificData?.currentSpeedMs ?? 0} m/s @ ${data.scientificData?.currentDirection ?? "N"}`;
+  if (elDistance) elDistance.textContent = `Active Drift`;
 
   // 7. Raw Data Tab (JSON View & API Info)
   const elRawJson = document.getElementById("argoRawJsonView");
@@ -1396,7 +1397,7 @@ function updateArgoFloatUI(data) {
     elRawJson.textContent = JSON.stringify(data, null, 2);
   }
   if (elApiEndpoint) {
-    elApiEndpoint.textContent = data.apiMetadata.apiEndpointTemplate;
+    elApiEndpoint.textContent = `/api/v1/float/${data.floatId || data.stationId}`;
   }
 
   // Ensure panel is visible
@@ -1452,6 +1453,41 @@ export async function selectStation(id) {
   // Fetch procedural (or API) data asynchronously
   const floatData = await oceanDataService.getFloatDetails(point);
   updateArgoFloatUI(floatData);
+
+  // Sync with Zustand store so React components (like OceanDashboard) update their location badges
+  if (window.oceanStore) {
+    const fullInstrumentData = {
+      ...point,
+      name: floatData.buoyName || point.name || point.id,
+      sea: floatData.locationPrimary || "Indian Ocean",
+      region: floatData.locationSecondary || "Central Basin",
+      type: floatData.platformType?.toLowerCase().includes("glider") ? "glider" : (floatData.platformType?.toLowerCase().includes("ctd") ? "ctd" : "argo"),
+      platform: floatData.platformType || "APEX Profiling Float",
+      lat: floatData.coordinates?.lat || point.lat,
+      lon: floatData.coordinates?.lon || point.lon,
+      depth: floatData.maxDepthMeters || 2000,
+      depthMeters: floatData.maxDepthMeters || 2000,
+      status: (floatData.status || "active").toLowerCase(),
+      telemetry: {
+        temperatureC: floatData.scientificData?.surfaceTempC,
+        salinityPSU: floatData.scientificData?.surfaceSalinityPSU,
+        dissolvedOxygen: floatData.scientificData?.dissolvedOxygenUmolKg,
+        chlorophyll: floatData.scientificData?.chlorophyllMgM3,
+        currentSpeed: floatData.scientificData?.currentSpeedMs,
+        currentDirection: floatData.scientificData?.currentDirection,
+        batteryPct: floatData.mission?.batteryPercent,
+        cycle: floatData.mission?.cycleNumber,
+        status: (floatData.status || "active").toLowerCase(),
+        missionWaypoint: floatData.locationSecondary,
+        vessel: floatData.locationSecondary
+      },
+      geoCoordinates: {
+        lat: floatData.coordinates?.lat || point.lat,
+        lon: floatData.coordinates?.lon || point.lon,
+      }
+    };
+    window.oceanStore.getState().setActiveInstrument(fullInstrumentData);
+  }
 }
 
 // ============================================================================

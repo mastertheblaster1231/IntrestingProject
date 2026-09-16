@@ -4,6 +4,7 @@
   "outputDirectory": "MainProjectFiles/dist",
   "cleanUrls": false,
   "rewrites": [
-    { "source": "/ocean", "destination": "/ocean.html" }
+    { "source": "/ocean", "destination": "/ocean.html" },
+    { "source": "/erddap-proxy/(.*)", "destination": "https://erddap.ifremer.fr/$1" }
   ]
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DEMO_INSTRUMENTS } from './instruments.js';
 import { fetchLiveArgoProfile, getProfileAtDepth } from '../services/argoService.js';
+import { fetchArgoDepthSlice } from '../services/argoBackendService.js';
 import {
   calculateDelta,
   getComparisonStatus,
@@ -255,48 +256,7 @@ export const useOceanStore = create((set, get) => ({
    */
   fleet: DEMO_INSTRUMENTS,
 
-  /**
-   * Default Selection Safeguard:
-   * Defaults immediately to "argo-2902351" on initial load to prevent undefined
-   * telemetry errors in 3D camera, RightPanel, and AnalyticsDock.
-   */
-  activeInstrument: {
-    id:               'argo-2902351',
-    floatId:          '2902351',
-    name:             'Argo 2902351',
-    type:             'argo',
-    platform:         'APEX Profiling Float (Coastal Buoy)',
-    lat:              11.6000,
-    lon:              92.5000,
-    x:                0.0,
-    y:                -0.2,
-    z:                1.5,
-    position:         [0.0, -0.2, 1.5],
-    depth:            15,
-    depthMeters:      15,
-    status:           'active',
-    colorTag:         'orange',
-    temp:             28.3,
-    salinity:         34.3,
-    dissolvedOxygen:  198,
-    chlorophyll:      0.42,
-    currentSpeed:     0.42,
-    currentDirection: 'NE (42°)',
-    cycle:            147,
-    battery:          82,
-    timestamp:        '09 Sep 2026 17:42 UTC',
-    source:           'INCOIS / ARGO GDAC',
-    profileId:        '2902351 / 147',
-    qcStatus:         'GOOD',
-    telemetry: {
-      temperatureC: 28.3,
-      salinityPSU: 34.3,
-      dissolvedOxygen: 198,
-      batteryPct: 82,
-      cycle: 147,
-      status: 'active',
-    },
-  },
+  activeInstrument: null,
 
   isLoadingInstrument: false,
   instrumentError:     null,
@@ -689,6 +649,34 @@ export const useOceanStore = create((set, get) => ({
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // 5b. BGC ARGO & FLOAT HYDRAULICS TELEMETRY (FastAPI /api/argo/depth-slice)
+  // ═══════════════════════════════════════════════════════════════════════════
+  argoTelemetry: null,
+  bgcOptics: null,
+  hydraulicsTelemetry: null,
+  isFetchingArgoTelemetry: false,
+
+  fetchArgoBGCTelemetry: async (depthMeters = 15, timestamp = null, platformNumber = '2902251') => {
+    set({ isFetchingArgoTelemetry: true });
+    try {
+      const data = await fetchArgoDepthSlice(platformNumber, depthMeters, timestamp);
+      if (data) {
+        set({
+          argoTelemetry: data,
+          bgcOptics: data.bgc_optics_and_diagnostics || null,
+          hydraulicsTelemetry: data.hydraulics_telemetry || null,
+          isFetchingArgoTelemetry: false,
+        });
+        return data;
+      }
+    } catch (err) {
+      console.warn('[useOceanStore] fetchArgoBGCTelemetry failed:', err);
+    }
+    set({ isFetchingArgoTelemetry: false });
+    return null;
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // 6. ASYNC ACTIONS — PHASE 3 CORE
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -953,6 +941,10 @@ export const useOceanStore = create((set, get) => ({
         obsSource:        profile?.source || (instrument?.type === 'glider' ? 'glider-telemetry' : 'shipboard-ctd'),
       },
     });
+
+    // Simultaneously fetch full BGC optics and float hydraulics depth-slice
+    const rawPlatform = instrument?.floatId || instrument?.id?.replace(/^argo-/i, '') || '2902251';
+    get().fetchArgoBGCTelemetry(depthM, timestamp, rawPlatform);
   },
 
   /**

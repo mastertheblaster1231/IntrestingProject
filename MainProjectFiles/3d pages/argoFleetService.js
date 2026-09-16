@@ -20,21 +20,21 @@
 // Change these values to control the fleet display
 
 export const ARGO_FLEET_CONFIG = {
-  targetCount: 30,       // ← How many Argo floats to show on the globe
-  regionLatMin: 0,       // Southern latitude bound
-  regionLatMax: 25,      // Northern latitude bound
-  regionLonMin: 55,      // Western longitude bound
-  regionLonMax: 98,      // Eastern longitude bound
-  timeWindowDays: 45,    // How far back to search for recent profiles
+  targetCount: 30, // ← How many Argo floats to show on the globe
+  regionLatMin: 0, // Southern latitude bound
+  regionLatMax: 25, // Northern latitude bound
+  regionLonMin: 55, // Western longitude bound
+  regionLonMax: 98, // Eastern longitude bound
+  timeWindowDays: 45, // How far back to search for recent profiles
   fetchTimeoutMs: 15000, // ERDDAP fetch timeout in milliseconds (15s guard for international API)
 };
 
 // Expose config on window for console access
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   window.ARGO_FLEET_CONFIG = ARGO_FLEET_CONFIG;
   window.argoFleetStatus = {
     isRealTime: false,
-    source: 'Initializing...',
+    source: "Initializing...",
     totalFloatsFound: 0,
     activeCount: 0,
     latestFetchTime: null,
@@ -45,7 +45,8 @@ if (typeof window !== 'undefined') {
 
 function getCandidateErddapUrls() {
   const cfg = ARGO_FLEET_CONFIG;
-  const query = `?platform_number,time,latitude,longitude,pres,temp,psal` +
+  const query =
+    `?platform_number,time,latitude,longitude,pres,temp,psal` +
     `&time>=${encodeURIComponent(`now-${cfg.timeWindowDays}d`)}` +
     `&latitude>=${cfg.regionLatMin}&latitude<=${cfg.regionLatMax}` +
     `&longitude>=${cfg.regionLonMin}&longitude<=${cfg.regionLonMax}` +
@@ -59,7 +60,7 @@ function getCandidateErddapUrls() {
   // 2. High-speed public CORS proxy (corsproxy.io) — for static/production preview
   // 3. Secondary CORS proxy (allorigins.win) — redundant fallback
   // 4. Direct URL — for Node.js environments
-  const isBrowser = typeof window !== 'undefined';
+  const isBrowser = typeof window !== "undefined";
   if (isBrowser) {
     return [
       `/erddap-proxy/erddap/tabledap/ArgoFloats.json${query}`,
@@ -93,39 +94,54 @@ export async function getRealArgoPoints(targetCount) {
     for (const url of candidateUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), ARGO_FLEET_CONFIG.fetchTimeoutMs);
+        const timeoutId = setTimeout(
+          () => controller.abort(),
+          ARGO_FLEET_CONFIG.fetchTimeoutMs,
+        );
 
-        console.info(`[ArgoFleet] 🛰️ Fetching live ERDDAP from: ${url.slice(0, 60)}...`);
+        console.info(
+          `[ArgoFleet] 🛰️ Fetching live ERDDAP from: ${url.slice(0, 60)}...`,
+        );
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
           const parsed = await response.json();
-          if (parsed && parsed.table && parsed.table.rows && parsed.table.rows.length > 0) {
+          if (
+            parsed &&
+            parsed.table &&
+            parsed.table.rows &&
+            parsed.table.rows.length > 0
+          ) {
             data = parsed;
             successUrl = url;
-            console.info(`[ArgoFleet] ✓ ERDDAP response received via: ${url.slice(0, 50)}... (${data.table.rows.length} rows)`);
+            console.info(
+              `[ArgoFleet] ✓ ERDDAP response received via: ${url.slice(0, 50)}... (${data.table.rows.length} rows)`,
+            );
             break;
           }
         }
       } catch (endpointErr) {
-        console.warn(`[ArgoFleet] Endpoint attempt failed (${url.slice(0, 45)}...):`, endpointErr.message);
+        console.warn(
+          `[ArgoFleet] Endpoint attempt failed (${url.slice(0, 45)}...):`,
+          endpointErr.message,
+        );
       }
     }
 
     if (!data || !data.table || !data.table.rows) {
-      throw new Error('All ERDDAP endpoints failed or were blocked');
+      throw new Error("All ERDDAP endpoints failed or were blocked");
     }
 
     const colNames = data.table.columnNames;
     const rows = data.table.rows;
 
-    const pIdx = colNames.indexOf('platform_number');
-    const timeIdx = colNames.indexOf('time');
-    const latIdx = colNames.indexOf('latitude');
-    const lonIdx = colNames.indexOf('longitude');
-    const tempIdx = colNames.indexOf('temp');
-    const psalIdx = colNames.indexOf('psal');
+    const pIdx = colNames.indexOf("platform_number");
+    const timeIdx = colNames.indexOf("time");
+    const latIdx = colNames.indexOf("latitude");
+    const lonIdx = colNames.indexOf("longitude");
+    const tempIdx = colNames.indexOf("temp");
+    const psalIdx = colNames.indexOf("psal");
 
     // Deduplicate: keep only the latest profile record per unique platform ID
     const latestFloatsMap = new Map();
@@ -138,14 +154,19 @@ export async function getRealArgoPoints(targetCount) {
       // Skip invalid or NaN coordinates
       if (isNaN(lat) || isNaN(lon)) continue;
 
-      if (!latestFloatsMap.has(id) || latestFloatsMap.get(id).rawTime < timestamp) {
-        const surfaceTemp = (r[tempIdx] !== null && !isNaN(r[tempIdx]))
-          ? Number(Number(r[tempIdx]).toFixed(1))
-          : 28.2;
-        const surfaceSalinity = (r[psalIdx] !== null && !isNaN(r[psalIdx]))
-          ? Number(Number(r[psalIdx]).toFixed(2))
-          : 34.45;
-        const region = lon > 78 ? 'Bay of Bengal' : 'Arabian Sea';
+      if (
+        !latestFloatsMap.has(id) ||
+        latestFloatsMap.get(id).rawTime < timestamp
+      ) {
+        const surfaceTemp =
+          r[tempIdx] !== null && !isNaN(r[tempIdx])
+            ? Number(Number(r[tempIdx]).toFixed(1))
+            : 28.2;
+        const surfaceSalinity =
+          r[psalIdx] !== null && !isNaN(r[psalIdx])
+            ? Number(Number(r[psalIdx]).toFixed(2))
+            : 34.45;
+        const region = lon > 78 ? "Bay of Bengal" : "Arabian Sea";
 
         latestFloatsMap.set(id, {
           // Shape compatible with existing argoPoints consumers
@@ -160,33 +181,37 @@ export async function getRealArgoPoints(targetCount) {
           lat: Number(lat.toFixed(4)),
           lon: Number(lon.toFixed(4)),
           sea: region,
-          type: 'Argo Profiling Float',
-          markerType: 'buoy-yellow',
-          beaconColor: 0x00f0ff,   // Default cyan; temperature toggle changes this
+          type: "Argo Profiling Float",
+          markerType: "buoy-yellow",
+          beaconColor: 0x00f0ff, // Default cyan; temperature toggle changes this
           surfaceTemp: surfaceTemp,
           surfaceSalinity: surfaceSalinity,
           maxDepth: 2000,
-          status: 'Active',
+          status: "Active",
           region: region,
           isRealTime: true,
-          dataSource: 'IFREMER ERDDAP (Live)',
+          dataSource: "IFREMER ERDDAP (Live)",
         });
       }
     }
 
     const uniqueFloats = Array.from(latestFloatsMap.values());
-    console.info(`[ArgoFleet] 🟢 REAL-TIME DATA CONFIRMED: ERDDAP returned ${rows.length} rows → ${uniqueFloats.length} unique live floats in Indian Ocean basin.`);
+    console.info(
+      `[ArgoFleet] 🟢 REAL-TIME DATA CONFIRMED: ERDDAP returned ${rows.length} rows → ${uniqueFloats.length} unique live floats in Indian Ocean basin.`,
+    );
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.argoFleetStatus = {
         isRealTime: true,
-        source: 'IFREMER ERDDAP (Live Real-Time)',
+        source: "IFREMER ERDDAP (Live Real-Time)",
         totalFloatsFound: uniqueFloats.length,
         activeCount: Math.min(count, uniqueFloats.length),
         latestFetchTime: new Date().toISOString(),
       };
       window.argoAllBasinFloats = uniqueFloats;
-      window.dispatchEvent(new CustomEvent('argoFleetLoaded', { detail: window.argoFleetStatus }));
+      window.dispatchEvent(
+        new CustomEvent("argoFleetLoaded", { detail: window.argoFleetStatus }),
+      );
     }
 
     // Return exactly targetCount floats
@@ -195,26 +220,32 @@ export async function getRealArgoPoints(targetCount) {
     }
 
     // If too few from ERDDAP, supplement with fallback data
-    console.warn(`[ArgoFleet] Only ${uniqueFloats.length} live floats — supplementing with fallback`);
+    console.warn(
+      `[ArgoFleet] Only ${uniqueFloats.length} live floats — supplementing with fallback`,
+    );
     const fallback = getIndianOceanFallback();
-    const existingIds = new Set(uniqueFloats.map(f => f.id));
-    const supplement = fallback.filter(f => !existingIds.has(f.id));
+    const existingIds = new Set(uniqueFloats.map((f) => f.id));
+    const supplement = fallback.filter((f) => !existingIds.has(f.id));
     return [...uniqueFloats, ...supplement].slice(0, count);
-
   } catch (err) {
-    console.warn('[ArgoFleet] ⚠️ ERDDAP live fetch unavailable — serving authentic Indian Ocean fallback:', err.message);
+    console.warn(
+      "[ArgoFleet] ⚠️ ERDDAP live fetch unavailable — serving authentic Indian Ocean fallback:",
+      err.message,
+    );
     const fallback = getIndianOceanFallback();
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.argoFleetStatus = {
         isRealTime: false,
-        source: 'Authentic Indian Ocean Fallback',
+        source: "Authentic Indian Ocean Fallback",
         totalFloatsFound: 30,
         activeCount: count,
         latestFetchTime: new Date().toISOString(),
         error: err.message,
       };
       window.argoAllBasinFloats = fallback;
-      window.dispatchEvent(new CustomEvent('argoFleetLoaded', { detail: window.argoFleetStatus }));
+      window.dispatchEvent(
+        new CustomEvent("argoFleetLoaded", { detail: window.argoFleetStatus }),
+      );
     }
     return fallback.slice(0, count);
   }
@@ -226,40 +257,40 @@ export async function getRealArgoPoints(targetCount) {
 
 export function getIndianOceanFallback() {
   const seeds = [
-    { id: "2902251", lat: 11.50, lon: 92.50, temp: 28.5, psal: 34.20 },
-    { id: "2902273", lat: 15.30, lon: 82.10, temp: 28.7, psal: 33.80 },
-    { id: "2300008", lat: 12.00, lon: 68.50, temp: 27.5, psal: 35.80 },
-    { id: "2902094", lat: 8.50,  lon: 72.30, temp: 29.1, psal: 35.10 },
-    { id: "2902187", lat: 18.20, lon: 88.40, temp: 28.1, psal: 32.90 },
-    { id: "2902210", lat: 14.10, lon: 69.80, temp: 27.8, psal: 36.10 },
-    { id: "2902240", lat: 6.20,  lon: 79.50, temp: 29.3, psal: 34.60 },
-    { id: "2902262", lat: 19.80, lon: 86.20, temp: 27.9, psal: 31.80 },
-    { id: "2902301", lat: 16.50, lon: 71.20, temp: 28.0, psal: 35.90 },
-    { id: "2902315", lat: 10.10, lon: 84.70, temp: 28.8, psal: 34.10 },
-    { id: "2902330", lat: 4.50,  lon: 90.00, temp: 29.5, psal: 34.40 },
-    { id: "2902344", lat: 21.00, lon: 66.00, temp: 26.8, psal: 36.50 },
-    { id: "2902358", lat: 13.40, lon: 94.10, temp: 28.4, psal: 33.50 },
-    { id: "2902372", lat: 9.00,  lon: 76.00, temp: 28.9, psal: 35.00 },
-    { id: "2902386", lat: 17.00, lon: 84.00, temp: 28.3, psal: 33.70 },
-    { id: "2902400", lat: 11.20, lon: 64.00, temp: 27.6, psal: 35.70 },
-    { id: "2902414", lat: 7.80,  lon: 87.50, temp: 29.0, psal: 34.30 },
-    { id: "2902428", lat: 22.50, lon: 68.00, temp: 26.2, psal: 36.80 },
-    { id: "2902442", lat: 12.80, lon: 89.20, temp: 28.6, psal: 33.90 },
-    { id: "2902456", lat: 5.80,  lon: 67.00, temp: 28.7, psal: 35.20 },
-    { id: "2902470", lat: 16.10, lon: 91.50, temp: 28.2, psal: 33.10 },
-    { id: "2902484", lat: 8.90,  lon: 70.50, temp: 28.9, psal: 35.50 },
-    { id: "2902498", lat: 14.80, lon: 86.80, temp: 28.5, psal: 33.60 },
-    { id: "2902512", lat: 18.90, lon: 67.50, temp: 27.2, psal: 36.30 },
-    { id: "2902526", lat: 3.20,  lon: 82.00, temp: 29.6, psal: 34.70 },
-    { id: "2902540", lat: 10.50, lon: 95.80, temp: 28.6, psal: 33.20 },
-    { id: "2902554", lat: 15.70, lon: 73.50, temp: 28.1, psal: 35.80 },
-    { id: "2902568", lat: 20.20, lon: 89.90, temp: 27.7, psal: 32.10 },
-    { id: "2902582", lat: 6.90,  lon: 74.50, temp: 29.2, psal: 35.10 },
-    { id: "2902596", lat: 13.90, lon: 81.00, temp: 28.7, psal: 34.00 },
+    { id: "2902251", lat: 11.5, lon: 92.5, temp: 28.5, psal: 34.2 },
+    { id: "2902273", lat: 15.3, lon: 82.1, temp: 28.7, psal: 33.8 },
+    { id: "2300008", lat: 12.0, lon: 68.5, temp: 27.5, psal: 35.8 },
+    { id: "2902094", lat: 8.5, lon: 72.3, temp: 29.1, psal: 35.1 },
+    { id: "2902187", lat: 18.2, lon: 88.4, temp: 28.1, psal: 32.9 },
+    { id: "2902210", lat: 14.1, lon: 69.8, temp: 27.8, psal: 36.1 },
+    { id: "2902240", lat: 6.2, lon: 79.5, temp: 29.3, psal: 34.6 },
+    { id: "2902262", lat: 19.8, lon: 86.2, temp: 27.9, psal: 31.8 },
+    { id: "2902301", lat: 16.5, lon: 71.2, temp: 28.0, psal: 35.9 },
+    { id: "2902315", lat: 10.1, lon: 84.7, temp: 28.8, psal: 34.1 },
+    { id: "2902330", lat: 4.5, lon: 90.0, temp: 29.5, psal: 34.4 },
+    { id: "2902344", lat: 21.0, lon: 66.0, temp: 26.8, psal: 36.5 },
+    { id: "2902358", lat: 13.4, lon: 94.1, temp: 28.4, psal: 33.5 },
+    { id: "2902372", lat: 9.0, lon: 76.0, temp: 28.9, psal: 35.0 },
+    { id: "2902386", lat: 17.0, lon: 84.0, temp: 28.3, psal: 33.7 },
+    { id: "2902400", lat: 11.2, lon: 64.0, temp: 27.6, psal: 35.7 },
+    { id: "2902414", lat: 7.8, lon: 87.5, temp: 29.0, psal: 34.3 },
+    { id: "2902428", lat: 22.5, lon: 68.0, temp: 26.2, psal: 36.8 },
+    { id: "2902442", lat: 12.8, lon: 89.2, temp: 28.6, psal: 33.9 },
+    { id: "2902456", lat: 5.8, lon: 67.0, temp: 28.7, psal: 35.2 },
+    { id: "2902470", lat: 16.1, lon: 91.5, temp: 28.2, psal: 33.1 },
+    { id: "2902484", lat: 8.9, lon: 70.5, temp: 28.9, psal: 35.5 },
+    { id: "2902498", lat: 14.8, lon: 86.8, temp: 28.5, psal: 33.6 },
+    { id: "2902512", lat: 18.9, lon: 67.5, temp: 27.2, psal: 36.3 },
+    { id: "2902526", lat: 3.2, lon: 82.0, temp: 29.6, psal: 34.7 },
+    { id: "2902540", lat: 10.5, lon: 95.8, temp: 28.6, psal: 33.2 },
+    { id: "2902554", lat: 15.7, lon: 73.5, temp: 28.1, psal: 35.8 },
+    { id: "2902568", lat: 20.2, lon: 89.9, temp: 27.7, psal: 32.1 },
+    { id: "2902582", lat: 6.9, lon: 74.5, temp: 29.2, psal: 35.1 },
+    { id: "2902596", lat: 13.9, lon: 81.0, temp: 28.7, psal: 34.0 },
   ];
 
-  return seeds.map(s => {
-    const region = s.lon > 78 ? 'Bay of Bengal' : 'Arabian Sea';
+  return seeds.map((s) => {
+    const region = s.lon > 78 ? "Bay of Bengal" : "Arabian Sea";
     return {
       id: s.id,
       code: s.id,
@@ -271,16 +302,16 @@ export function getIndianOceanFallback() {
       lat: s.lat,
       lon: s.lon,
       sea: region,
-      type: 'Argo Profiling Float',
-      markerType: 'buoy-yellow',
+      type: "Argo Profiling Float",
+      markerType: "buoy-yellow",
       beaconColor: 0x00f0ff,
       surfaceTemp: s.temp,
       surfaceSalinity: s.psal,
       maxDepth: 2000,
-      status: 'Active',
+      status: "Active",
       region: region,
       isRealTime: false,
-      dataSource: 'Authentic Indian Ocean Fallback',
+      dataSource: "Authentic Indian Ocean Fallback",
     };
   });
 }

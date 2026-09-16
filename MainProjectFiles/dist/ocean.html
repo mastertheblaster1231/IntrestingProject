@@ -2351,8 +2351,8 @@
         to { opacity: 1; transform: translate(-50%, 0); }
       }
     </style>
-    <script type="module" crossorigin src="/assets/ocean-BzrC_aRk.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/oceanDataService-CgFaHZ1x.js">
+    <script type="module" crossorigin src="/assets/ocean-BlLg230C.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/oceanDataService-BzkSsRAt.js">
     <link rel="stylesheet" crossorigin href="/assets/ocean-BoD31SZG.css">
   </head>
   <body>
@@ -2701,6 +2701,44 @@
           </span>
           <span class="desc-val quality-badge" id="descQuality">GOOD</span>
         </div>
+
+        <div class="desc-sub-divider"></div>
+
+        <!-- 🌊 UNESCO Potential Density -->
+        <div class="desc-metric-row" data-param="density">
+          <span class="desc-lbl">
+            <span>🌊 Potential Density</span>
+            <span class="info-circle-btn" data-glossary="density" title="UNESCO EOS-80 Seawater Density">ⓘ</span>
+          </span>
+          <span class="desc-val" id="descDensity" style="color: #38bdf8;">1026.4 kg/m³</span>
+        </div>
+
+        <!-- 🔊 Sound Speed -->
+        <div class="desc-metric-row" data-param="sound_speed">
+          <span class="desc-lbl">
+            <span>🔊 Sound Speed</span>
+            <span class="info-circle-btn" data-glossary="sound_speed" title="Chen & Millero Seawater Sound Speed">ⓘ</span>
+          </span>
+          <span class="desc-val" id="descSoundSpeed" style="color: #38bdf8;">1540.2 m/s</span>
+        </div>
+
+        <!-- ☀️ Downwelling PAR -->
+        <div class="desc-metric-row" data-param="par">
+          <span class="desc-lbl">
+            <span>☀️ Downwelling PAR</span>
+            <span class="info-circle-btn" data-glossary="par" title="Photosynthetically Active Radiation">ⓘ</span>
+          </span>
+          <span class="desc-val" id="descPar" style="color: #fbbf24;">1420 μmol/m²·s</span>
+        </div>
+
+        <!-- 🧪 CDOM -->
+        <div class="desc-metric-row" data-param="cdom">
+          <span class="desc-lbl">
+            <span>🧪 CDOM</span>
+            <span class="info-circle-btn" data-glossary="cdom" title="Chromophoric Dissolved Organic Matter">ⓘ</span>
+          </span>
+          <span class="desc-val" id="descCdom" style="color: #c084fc;">1.45 ppb</span>
+        </div>
       </div>
 
       <div class="desc-divider"></div>
@@ -2722,6 +2760,18 @@
           <div class="mission-item">
             <span class="mission-lbl">Battery</span>
             <span class="mission-val battery-val" id="descBattery">82%</span>
+          </div>
+          <div class="mission-item">
+            <span class="mission-lbl">Bladder</span>
+            <span class="mission-val" id="descBladder" style="color: #4ade80;">450 cc</span>
+          </div>
+          <div class="mission-item">
+            <span class="mission-lbl">Vacuum</span>
+            <span class="mission-val" id="descVacuum" style="color: #38bdf8;">8.5 inHg</span>
+          </div>
+          <div class="mission-item">
+            <span class="mission-lbl">Phase</span>
+            <span class="mission-val" id="descDivePhase" style="color: #a78bfa; font-size: 0.65rem;">Surface</span>
           </div>
         </div>
       </div>

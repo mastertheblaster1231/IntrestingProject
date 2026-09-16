@@ -146,6 +146,7 @@ export function ComparisonTable({ compact = false }) {
           <thead>
             <tr>
               <th style={styles.th}>Variable</th>
+              <th style={{ ...styles.th, textAlign: 'center' }}>view</th>
               <th style={{ ...styles.th, textAlign: 'right' }}>
                 <span style={{ color: '#ff9436' }}>● In-Situ</span>
                 <span style={styles.subHeader}> ({instrumentName})</span>
@@ -191,6 +192,16 @@ export function ComparisonTable({ compact = false }) {
                         <div style={styles.varUnit}>{v.unit}</div>
                       </div>
                     </div>
+                  </td>
+
+                  {/* 1.5. View Checkbox */}
+                  <td style={{ ...styles.td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => setActiveVariable(isSelected ? 'all' : varKey)}
+                      style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
+                    />
                   </td>
 
                   {/* 2. In-Situ Observation Value */}
