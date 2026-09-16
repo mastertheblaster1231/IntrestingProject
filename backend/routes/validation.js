@@ -57,58 +57,106 @@ function interpolateProfile(points, targetDepth) {
   return { depth: Math.round(targetDepth * 10) / 10, temp: Math.round((lower.temp + t * (upper.temp - lower.temp)) * 100) / 100, salinity: Math.round((lower.salinity + t * (upper.salinity - lower.salinity)) * 100) / 100 };
 }
 
-async function fetchVerticalProfile(platformNumber, timestamp) {
-  try {
-    let timeConstraint = '&time%3E=now-90d';
-    if (timestamp) {
+// In-memory cache and de-duplication for ERDDAP profile fetches
+const profileCache = new Map(); // key -> { data, expiry }
+const pendingFetches = new Map(); // key -> Promise
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function fetchVerticalProfile(platformNumber, timestamp, _opts = {}) {
+  const retries = _opts.retries ?? 1;
+  const cacheKey = `${platformNumber}:${timestamp || 'latest'}`;
+  const cached = profileCache.get(cacheKey);
+  if (cached && Date.now() < cached.expiry) return cached.data;
+  if (pendingFetches.has(cacheKey)) return pendingFetches.get(cacheKey);
+
+  const fetchPromise = (async () => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      let controller;
+      let timeoutId;
       try {
-        const dt = new Date(timestamp);
-        if (!isNaN(dt.getTime())) {
-          const start = new Date(dt.getTime() - 5 * 86400000).toISOString();
-          const end = new Date(dt.getTime() + 5 * 86400000).toISOString();
-          timeConstraint = `&time%3E=%22${encodeURIComponent(start)}%22&time%3C=%22${encodeURIComponent(end)}%22`;
+        let timeConstraint = '&time%3E=now-90d';
+        if (timestamp) {
+          try {
+            const dt = new Date(timestamp);
+            if (!isNaN(dt.getTime())) {
+              const start = new Date(dt.getTime() - 5 * 86400000).toISOString();
+              const end = new Date(dt.getTime() + 5 * 86400000).toISOString();
+              timeConstraint = `&time%3E=%22${encodeURIComponent(start)}%22&time%3C=%22${encodeURIComponent(end)}%22`;
+            }
+          } catch {}
         }
-      } catch {}
+        const quoted = encodeURIComponent(`"${platformNumber}"`);
+        const url = `${ERDDAP_BASE}?time,pres,temp,psal&platform_number=${quoted}${timeConstraint}&orderByMax%28%22time%22%29`;
+        controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), ERDDAP_TIMEOUT_MS);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          if (res.status === 429 && attempt < retries) {
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            continue;
+          }
+          return null;
+        }
+        const json = await res.json();
+        const table = json?.table;
+        if (!table || !table.rows || table.rows.length === 0) return null;
+        const cols = table.columnNames;
+        const rows = table.rows;
+        const presIdx = cols.indexOf('pres');
+        const tempIdx = cols.indexOf('temp');
+        const psalIdx = cols.indexOf('psal');
+        const timeIdx = cols.indexOf('time');
+        const latIdx = cols.indexOf('latitude');
+        const lonIdx = cols.indexOf('longitude');
+        if (presIdx === -1 || tempIdx === -1) return null;
+        const profile = [];
+        let latestTime = null, lat = null, lon = null;
+        for (const r of rows) {
+          if (r[presIdx] == null || r[tempIdx] == null) continue;
+          const pres = Number(r[presIdx]);
+          const temp = Number(r[tempIdx]);
+          const psal = r[psalIdx] != null ? Number(r[psalIdx]) : 34.4;
+          if (isNaN(pres) || isNaN(temp)) continue;
+          profile.push({ depth: Math.round(pres * 10) / 10, temp: Math.round(temp * 100) / 100, salinity: Math.round(psal * 100) / 100 });
+          if (timeIdx !== -1 && r[timeIdx]) latestTime = r[timeIdx];
+          if (latIdx !== -1 && r[latIdx] != null) lat = Number(r[latIdx]);
+          if (lonIdx !== -1 && r[lonIdx] != null) lon = Number(r[lonIdx]);
+        }
+        if (profile.length === 0) return null;
+        profile.sort((a, b) => a.depth - b.depth);
+        const data = { profile, time: latestTime, lat, lon };
+        return data;
+      } catch (e) {
+        if (timeoutId) clearTimeout(timeoutId);
+        const isAbort = e.name === 'AbortError' || /aborted/i.test(e.message);
+        if (isAbort && attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        // Only log final failure or non-abort errors to avoid spam
+        if (!isAbort || attempt === retries) {
+          console.warn(`[validation] fetchVerticalProfile ${platformNumber} failed (attempt ${attempt + 1}/${retries + 1}): ${e.message}`);
+        } else {
+          console.warn(`[validation] fetchVerticalProfile ${platformNumber} timeout, retrying...`);
+        }
+        if (attempt === retries) return null;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
     }
-    const quoted = encodeURIComponent(`"${platformNumber}"`);
-    const url = `${ERDDAP_BASE}?time,pres,temp,psal&platform_number=${quoted}${timeConstraint}&orderByMax%28%22time%22%29`;
-    const controller = new AbortController();
-    const to = setTimeout(() => controller.abort(), ERDDAP_TIMEOUT_MS);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(to);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const table = json?.table;
-    if (!table || !table.rows || table.rows.length === 0) return null;
-    const cols = table.columnNames;
-    const rows = table.rows;
-    const presIdx = cols.indexOf('pres');
-    const tempIdx = cols.indexOf('temp');
-    const psalIdx = cols.indexOf('psal');
-    const timeIdx = cols.indexOf('time');
-    const latIdx = cols.indexOf('latitude');
-    const lonIdx = cols.indexOf('longitude');
-    if (presIdx === -1 || tempIdx === -1) return null;
-    const profile = [];
-    let latestTime = null, lat = null, lon = null;
-    for (const r of rows) {
-      if (r[presIdx] == null || r[tempIdx] == null) continue;
-      const pres = Number(r[presIdx]);
-      const temp = Number(r[tempIdx]);
-      const psal = r[psalIdx] != null ? Number(r[psalIdx]) : 34.4;
-      if (isNaN(pres) || isNaN(temp)) continue;
-      profile.push({ depth: Math.round(pres * 10) / 10, temp: Math.round(temp * 100) / 100, salinity: Math.round(psal * 100) / 100 });
-      if (timeIdx !== -1 && r[timeIdx]) latestTime = r[timeIdx];
-      if (latIdx !== -1 && r[latIdx] != null) lat = Number(r[latIdx]);
-      if (lonIdx !== -1 && r[lonIdx] != null) lon = Number(r[lonIdx]);
-    }
-    if (profile.length === 0) return null;
-    profile.sort((a, b) => a.depth - b.depth);
-    return { profile, time: latestTime, lat, lon };
-  } catch (e) {
-    console.warn('[validation] fetchVerticalProfile error', e.message);
     return null;
+  })();
+
+  pendingFetches.set(cacheKey, fetchPromise);
+  let result;
+  try {
+    result = await fetchPromise;
+  } finally {
+    pendingFetches.delete(cacheKey);
   }
+  if (result) profileCache.set(cacheKey, { data: result, expiry: Date.now() + PROFILE_CACHE_TTL_MS });
+  return result;
 }
 
 // ---- 1. FLEET -------------------------------------------------------------
