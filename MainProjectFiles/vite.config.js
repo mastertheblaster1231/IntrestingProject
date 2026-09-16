@@ -8,12 +8,27 @@ export default defineConfig({
     alias: {
       '@react-three/fiber': resolve(import.meta.dirname, 'shims/react-three-fiber.js'),
     },
+    // Force a single copy of React across the entire bundle.
+    // This prevents the "Cannot read properties of null (reading 'useCallback')"
+    // error caused by Vite code-splitting creating separate React instances
+    // in different chunks (e.g. useOceanStore chunk vs ocean chunk).
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     rollupOptions: {
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         ocean: resolve(import.meta.dirname, 'ocean.html'),
+      },
+      output: {
+        // Force React + React-DOM into a single shared "vendor" chunk
+        // so every module in the app references the exact same React instance.
+        // Vite 8 (Rolldown) requires manualChunks to be a function.
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+            return 'react-vendor';
+          }
+        },
       },
     },
   },
