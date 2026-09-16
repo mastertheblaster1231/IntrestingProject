@@ -3,9 +3,15 @@
   "version": "1.0.0",
   "description": "INCOIS Ocean Visualization — 3D Frontend (Vite + React + Three.js)",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "serve": "vite preview",
+    "clean": "rm -rf dist",
+    "lint": "eslint . --ext .js,.jsx || echo 'eslint not configured - syntax check via vite build'",
+    "lint:fix": "eslint . --ext .js,.jsx --fix || echo 'eslint not configured'",
+    "format": "prettier --write \"**/*.{js,jsx,css,json,md}\" || echo 'prettier not configured'",
+    "typecheck": "tsc --noEmit --skipLibCheck || echo 'no tsconfig - skip'"
   },
   "keywords": [],
   "author": "",

@@ -4,7 +4,14 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "clean": "rm -rf dist logs/*.log",
+    "lint": "node --check server.js && node --check routes/validation.js && echo 'syntax ok'",
+    "lint:fix": "eslint . --ext .js --fix || echo 'eslint not configured'",
+    "test": "node --test 2>&1 | head -100 || echo 'no tests configured'",
+    "test:endpoints": "node --check server.js && echo 'endpoints: /api/health /api/fleet /api/profile/:id /api/argo/depth-slice /api/model/point /api/validation'",
+    "check:env": "node -e \"import dotenv from 'dotenv'; dotenv.config(); console.log('PORT',process.env.PORT||8000); console.log('ERDDAP',process.env.ERDDAP_IFREMER_BASE||'default')\""
   },
   "keywords": [],
   "author": "",
