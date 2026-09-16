@@ -987,8 +987,11 @@ export class ErddapOceanService {
     const envIfremer = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_IFREMER_BASE) || null;
     // envIfremer is full ArgoFloats.json URL; derive base if needed
     const ifremerBaseFromEnv = envIfremer ? envIfremer.replace(/\/tabledap\/ArgoFloats\.json.*$/, '') : null;
+    const isBrowser = typeof window !== 'undefined';
+    const proxyPath = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_PROXY_PATH) || '/erddap-proxy';
     this.incoisBaseUrl = endpoints.incois || envIncois || "https://erddap.incois.gov.in/erddap";
-    this.ifremerBaseUrl = endpoints.ifremer || ifremerBaseFromEnv || "https://www.ifremer.fr/erddap";
+    // In browser, use Vite proxy to avoid CORS (same-origin); in Node, use direct
+    this.ifremerBaseUrl = endpoints.ifremer || (isBrowser ? proxyPath : (ifremerBaseFromEnv || "https://erddap.ifremer.fr/erddap"));
     this.requestTimeoutMs = 20000; // public ERDDAP (was 7000)
   }
 
