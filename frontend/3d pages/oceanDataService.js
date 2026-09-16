@@ -650,9 +650,14 @@ class OceanDataServiceManager {
   constructor() {
     this.proceduralProvider = new ProceduralArgoProvider();
     this.apiProvider = null;
-    this.erddapService = new ErddapOceanService();
+    this.erddapService = null; // lazy init after ErddapOceanService is defined
     this.activeSource = "erddap"; // 'erddap' | 'api' | 'procedural' (procedural deprecated, real-data only)
     this.glossary = { ...PARAMETER_GLOSSARY };
+  }
+
+  _getErddapService() {
+    if (!this.erddapService) this.erddapService = new ErddapOceanService();
+    return this.erddapService;
   }
 
   /**
@@ -689,7 +694,7 @@ class OceanDataServiceManager {
         console.warn("[OceanDataService] API provider failed, trying ERDDAP live:", e.message);
         // Fall through to ERDDAP live
         const wmo = typeof stationOrId === 'string' ? stationOrId : (stationOrId.wmoId || stationOrId.id);
-        const erddap = await this.erddapService.fetchFloatProfile(wmo, { surfaceTemp: stationOrId.surfaceTemp, surfaceSal: stationOrId.surfaceSalinity });
+        const erddap = await this._getErddapService().fetchFloatProfile(wmo, { surfaceTemp: stationOrId.surfaceTemp, surfaceSal: stationOrId.surfaceSalinity });
         // Convert ERDDAP table to OceanDataService shape via procedural interpolation helpers is not needed; return raw with glossary
         data = { success: true, source: erddap.source, wmoId: wmo, erddapData: erddap, parameterGlossary: this.glossary };
       }
@@ -698,7 +703,7 @@ class OceanDataServiceManager {
       const wmo = typeof stationOrId === 'string' ? stationOrId : (stationOrId.wmoId || stationOrId.code || stationOrId.id);
       const cleanWmo = String(wmo || '2902351').replace(/\D/g, '') || '2902351';
       try {
-        const erddap = await this.erddapService.fetchFloatProfile(cleanWmo, { surfaceTemp: stationOrId.surfaceTemp, surfaceSal: stationOrId.surfaceSalinity });
+        const erddap = await this._getErddapService().fetchFloatProfile(cleanWmo, { surfaceTemp: stationOrId.surfaceTemp, surfaceSal: stationOrId.surfaceSalinity });
         if (erddap && erddap.rows && erddap.rows.length > 0) {
           // ERDDAP succeeded — synthesize OceanDataService shape from real rows for backward-compat consumers
           // We delegate to procedural interpolation only for derived profile shape but seeded from real surfaceTemp
