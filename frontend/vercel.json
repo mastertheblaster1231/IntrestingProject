@@ -1,0 +1,8 @@
+{
+  "framework": "vite",
+  "cleanUrls": false,
+  "rewrites": [
+    { "source": "/ocean", "destination": "/ocean.html" },
+    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" }
+  ]
+}

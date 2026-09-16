@@ -1,7 +1,0 @@
-{
-  "framework": "vite",
-  "cleanUrls": false,
-  "rewrites": [
-    { "source": "/ocean", "destination": "/ocean.html" }
-  ]
-}

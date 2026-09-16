@@ -1,7 +1,13 @@
 node_modules/
-.vercel
-dist/
-.env
-.env.local
-.DS_Store
-Thumbs.db
+ frontend/node_modules/
+ backend/node_modules/
+ frontend/dist/
+ backend/dist/
+ .vercel
+ dist/
+ .env
+ .env.local
+ frontend/.env
+ backend/.env
+ .DS_Store
+ Thumbs.db

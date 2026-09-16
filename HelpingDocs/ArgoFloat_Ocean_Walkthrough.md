@@ -6,15 +6,15 @@ This documentation provides a comprehensive guide to the **3D APEX Argo Profilin
 
 ## 1. File Locations
 
-- **3D Ocean & Argo Float Logic**: [`MainProjectFiles/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js)
-- **Ocean Web View Page**: [`MainProjectFiles/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/ocean.html) and [`MainProjectFiles/html viewer/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/html%20viewer/ocean.html)
+- **3D Ocean & Argo Float Logic**: [`frontend/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js)
+- **Ocean Web View Page**: [`frontend/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/ocean.html) and [`frontend/html viewer/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/html%20viewer/ocean.html)
 - **Local Dev Server**: `http://localhost:5173/ocean.html`
 
 ---
 
 ## 2. Where to Change the 3D Argo Float Position & Size
 
-In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L464-L472), locate the configuration block:
+In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L464-L472), locate the configuration block:
 
 ```javascript
 // ----------------------------------------------------------------------------
@@ -64,7 +64,7 @@ The float is procedurally modeled using Three.js standard materials (`MeshStanda
 
 ## 4. Ocean Surface Floating & Wave Physics
 
-In `animate()` inside [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js):
+In `animate()` inside [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js):
 
 1. **Wave Elevation Calculation**:
    The float evaluates the exact GLSL wave equation at its current `(x, z)` position:

@@ -29,15 +29,15 @@ Built completely 100% browser-native using **Three.js, WebGL, React, and GSAP**,
 
 | Purpose | File Path | Key Responsibilities |
 | :--- | :--- | :--- |
-| **Core 3D Ocean Scene & Shaders** | [`MainProjectFiles/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js) | Three.js scene, ACES tone mapping, sun/sky shaders, volumetric depth-slice mesh, 20°C isotherm isosurface, particle vector flow, depth syncing, and public window API. |
-| **Data Services & CF Conventions** | [`MainProjectFiles/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/oceanDataService.js) | CF-1.8 variable dictionary, `ErddapOceanService`, `NetCDFParserService` (xarray-style 4D slicer), `AsciiBuoyParser`, `MarineHeatwaveService`, `ShareableStateService`. |
-| **Multi-Window Command Center** | [`MainProjectFiles/3d pages/WorkspaceManager.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/WorkspaceManager.jsx) | Draggable & resizable floating windows, side-by-side comparison snapping, DepthProfileGraph with ROMS numerical model curve and delta envelope ($\Delta T, \Delta S$). |
-| **3D Instrument Geometries & Ribbons** | [`MainProjectFiles/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js) | APEX Argo float, Slocum/Spray Gliders with swept wings, CTD rosette cage, and 3D sawtooth trajectory ribbons. |
-| **Bottom Navigation FleetBar** | [`MainProjectFiles/3d pages/FleetBar.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/FleetBar.jsx) | Sector fleet indicator, `+ Add Instrument` menu, layout tiling tools (side-by-side snap, grid tiling, minimize all). |
-| **Cinematic Orbital Dive** | [`MainProjectFiles/3d pages/orbitalDive.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/orbitalDive.js) | GSAP two-phase camera plunge controller sweeping from planetary orbit to micro-level waterline. |
-| **3D World Globe View** | [`MainProjectFiles/3d pages/World.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/World.js) | 3D interactive Earth globe, cloud layers, station beacon sprites, and orbital dive launcher. |
-| **Main Ocean Simulation HTML** | [`MainProjectFiles/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/ocean.html) | Glassmorphic HUD, Role mode switcher, 4D playback bar, volumetric control panel, action tools, and modals. |
-| **Main Globe HTML** | [`MainProjectFiles/index.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/index.html) | Globe HUD, collapsible station sidebar, SIH Problem ID 26067 header. |
+| **Core 3D Ocean Scene & Shaders** | [`frontend/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js) | Three.js scene, ACES tone mapping, sun/sky shaders, volumetric depth-slice mesh, 20°C isotherm isosurface, particle vector flow, depth syncing, and public window API. |
+| **Data Services & CF Conventions** | [`frontend/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/oceanDataService.js) | CF-1.8 variable dictionary, `ErddapOceanService`, `NetCDFParserService` (xarray-style 4D slicer), `AsciiBuoyParser`, `MarineHeatwaveService`, `ShareableStateService`. |
+| **Multi-Window Command Center** | [`frontend/3d pages/WorkspaceManager.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/WorkspaceManager.jsx) | Draggable & resizable floating windows, side-by-side comparison snapping, DepthProfileGraph with ROMS numerical model curve and delta envelope ($\Delta T, \Delta S$). |
+| **3D Instrument Geometries & Ribbons** | [`frontend/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js) | APEX Argo float, Slocum/Spray Gliders with swept wings, CTD rosette cage, and 3D sawtooth trajectory ribbons. |
+| **Bottom Navigation FleetBar** | [`frontend/3d pages/FleetBar.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/FleetBar.jsx) | Sector fleet indicator, `+ Add Instrument` menu, layout tiling tools (side-by-side snap, grid tiling, minimize all). |
+| **Cinematic Orbital Dive** | [`frontend/3d pages/orbitalDive.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/orbitalDive.js) | GSAP two-phase camera plunge controller sweeping from planetary orbit to micro-level waterline. |
+| **3D World Globe View** | [`frontend/3d pages/World.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/World.js) | 3D interactive Earth globe, cloud layers, station beacon sprites, and orbital dive launcher. |
+| **Main Ocean Simulation HTML** | [`frontend/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/ocean.html) | Glassmorphic HUD, Role mode switcher, 4D playback bar, volumetric control panel, action tools, and modals. |
+| **Main Globe HTML** | [`frontend/index.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/index.html) | Globe HUD, collapsible station sidebar, SIH Problem ID 26067 header. |
 
 ---
 
@@ -117,7 +117,7 @@ Built completely 100% browser-native using **Three.js, WebGL, React, and GSAP**,
 ## 4. Developer Tweak Guide (How to Change Specific Things)
 
 ### A. How to Change 3D Instrument Positions, Depths & Status
-In [`MainProjectFiles/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js#L20-L100), locate `DEMO_INSTRUMENTS`:
+In [`frontend/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js#L20-L100), locate `DEMO_INSTRUMENTS`:
 ```javascript
 {
   id: "argo-2902351",
@@ -169,7 +169,7 @@ To add a new profiling float or glider, simply add a new object to the `DEMO_INS
 It will automatically appear in the 3D scene, the bottom `FleetBar`, the multi-window picker, and the telemetry dashboard!
 
 ### C. How to Change or Add Colormaps
-In [`MainProjectFiles/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js), locate `sliceFragmentShader`. You can customize the gradient functions or add a new colormap function:
+In [`frontend/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js), locate `sliceFragmentShader`. You can customize the gradient functions or add a new colormap function:
 ```glsl
 vec3 colormapCustom(float t) {
   return mix(vec3(0.1, 0.2, 0.8), vec3(1.0, 0.9, 0.2), t);
@@ -181,7 +181,7 @@ const colormaps = ['thermal', 'haline', 'turbo', 'viridis', 'chlorophyll', 'cust
 ```
 
 ### D. How to Tweak the 20°C Isotherm Formulas
-In [`MainProjectFiles/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/oceanDataService.js), locate `compute20DegIsothermMatrix()`:
+In [`frontend/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/oceanDataService.js), locate `compute20DegIsothermMatrix()`:
 ```javascript
 // Change baseline mean D20 depth (default is 135m):
 const meanD20 = 135.0; // meters
