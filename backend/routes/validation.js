@@ -40,6 +40,12 @@ function deriveBGC(depth, temp, sal) {
 function interpolateProfile(points, targetDepth) {
   if (!points || points.length === 0) return null;
   const pts = [...points].sort((a, b) => a.depth - b.depth);
+  // Single deep parking point should not be used for shallow depths — fall back to analytical surface
+  if (pts.length === 1) {
+    const diff = Math.abs(targetDepth - pts[0].depth);
+    if (diff > 200) return null;
+    return pts[0];
+  }
   if (targetDepth <= pts[0].depth) return pts[0];
   if (targetDepth >= pts[pts.length - 1].depth) return pts[pts.length - 1];
   let lower = pts[0], upper = pts[pts.length - 1];
@@ -53,19 +59,19 @@ function interpolateProfile(points, targetDepth) {
 
 async function fetchVerticalProfile(platformNumber, timestamp) {
   try {
-    let timeConstraint = '&time>=now-90d';
+    let timeConstraint = '&time%3E=now-90d';
     if (timestamp) {
       try {
         const dt = new Date(timestamp);
         if (!isNaN(dt.getTime())) {
           const start = new Date(dt.getTime() - 5 * 86400000).toISOString();
           const end = new Date(dt.getTime() + 5 * 86400000).toISOString();
-          timeConstraint = `&time>="${start}"&time<="${end}"`;
+          timeConstraint = `&time%3E=%22${encodeURIComponent(start)}%22&time%3C=%22${encodeURIComponent(end)}%22`;
         }
       } catch {}
     }
     const quoted = encodeURIComponent(`"${platformNumber}"`);
-    const url = `${ERDDAP_BASE}?time,pres,temp,psal&platform_number=${quoted}${timeConstraint}&orderByMax(%22time%22)`;
+    const url = `${ERDDAP_BASE}?time,pres,temp,psal&platform_number=${quoted}${timeConstraint}&orderByMax%28%22time%22%29`;
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), ERDDAP_TIMEOUT_MS);
     const res = await fetch(url, { signal: controller.signal });
@@ -113,7 +119,7 @@ router.get('/fleet', async (req, res) => {
   const lonMax = parseFloat(req.query.lon_max) || 98;
   const days = parseInt(req.query.days) || 45;
   try {
-    const url = `${ERDDAP_BASE}?platform_number,time,latitude,longitude,pres,temp,psal&time>=now-${days}d&latitude>=${latMin}&latitude<=${latMax}&longitude>=${lonMin}&longitude<=${lonMax}&pres<=10&distinct()`;
+    const url = `${ERDDAP_BASE}?platform_number,time,latitude,longitude,pres,temp,psal&time%3E=now-${days}d&latitude%3E=${latMin}&latitude%3C=${latMax}&longitude%3E=${lonMin}&longitude%3C=${lonMax}&pres%3C=10&distinct%28%29`;
     const response = await fetch(url, { signal: AbortSignal.timeout(ERDDAP_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`ERDDAP ${response.status}`);
     const json = await response.json();
@@ -268,10 +274,10 @@ router.get('/validate', async (req, res) => {
   const { platform_number, depth, time } = req.query;
   const targetDepth = parseFloat(depth) || 4000;
   const pid = String(platform_number || '2902351').replace(/^argo-/i, '');
-  let timeQuery = time ? `&time="${time}"` : '&time>=now-30d';
+  let timeQuery = time ? `&time%3D%22${encodeURIComponent(time)}%22` : '&time%3E=now-30d';
   try {
     const baseForValidate = ERDDAP_BASE.replace('ArgoFloats.json', 'ArgoFloats.json');
-    const erddapUrl = `${baseForValidate}?pres,temp,psal,doxy&platform_number="${pid}"${timeQuery}&orderByClosest("pres,${targetDepth}")&limit=1`;
+    const erddapUrl = `${baseForValidate}?pres,temp,psal,doxy&platform_number=%22${encodeURIComponent(pid)}%22${timeQuery}&orderByClosest%28%22pres%2C${targetDepth}%22%29&limit=1`;
     let row;
     try {
       const response = await fetch(erddapUrl, { signal: AbortSignal.timeout(Math.min(ERDDAP_TIMEOUT_MS, 8000)) });

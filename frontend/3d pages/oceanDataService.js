@@ -1010,8 +1010,8 @@ export class ErddapOceanService {
   async fetchFloatProfile(wmoId = 2902351, options = {}) {
     const cleanWmo = String(wmoId).replace(/\D/g, "") || "2902351";
 
-    // Target query URL for IFREMER GDAC Argo ERDDAP
-    const liveUrl = `${this.ifremerBaseUrl}/tabledap/ArgoFloats.json?platform_number,time,latitude,longitude,pres,temp,psal&platform_number=%22${cleanWmo}%22&orderByMax(%22time%22)&distinct()`;
+    // Target query URL for IFREMER GDAC Argo ERDDAP (properly encoded for Tomcat RFC3986)
+    const liveUrl = `${this.ifremerBaseUrl}/tabledap/ArgoFloats.json?platform_number,time,latitude,longitude,pres,temp,psal&platform_number=%22${cleanWmo}%22&orderByMax%28%22time%22%29&distinct%28%29`;
 
     try {
       const controller = new AbortController();

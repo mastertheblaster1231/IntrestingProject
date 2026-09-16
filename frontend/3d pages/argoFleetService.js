@@ -47,10 +47,10 @@ function getCandidateErddapUrls() {
   const cfg = ARGO_FLEET_CONFIG;
   const query =
     `?platform_number,time,latitude,longitude,pres,temp,psal` +
-    `&time>=${encodeURIComponent(`now-${cfg.timeWindowDays}d`)}` +
-    `&latitude>=${cfg.regionLatMin}&latitude<=${cfg.regionLatMax}` +
-    `&longitude>=${cfg.regionLonMin}&longitude<=${cfg.regionLonMax}` +
-    `&pres<=10&distinct()`;
+    `&time%3E=${encodeURIComponent(`now-${cfg.timeWindowDays}d`)}` +
+    `&latitude%3E=${cfg.regionLatMin}&latitude%3C=${cfg.regionLatMax}` +
+    `&longitude%3E=${cfg.regionLonMin}&longitude%3C=${cfg.regionLonMax}` +
+    `&pres%3C=10&distinct%28%29`;
 
   const envBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_IFREMER_BASE) || 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json';
   const directUrl = `${envBase}${query}`;

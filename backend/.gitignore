@@ -2,14 +2,12 @@
 node_modules/
 .pnp/
 .pnp.js
-.pnp.loose/
+jspm_packages/
 
 # Build outputs
 dist/
 build/
-.vite/
-dist-ssr/
-.output/
+lib/
 
 # Environment variables - keep .env.example
 .env
@@ -17,10 +15,6 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
-
-# Vercel
-.vercel/
-vercel.log
 
 # Logs
 logs/
@@ -31,6 +25,22 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+.coverage/
+lcov.info
+
+# Dependency directories
+.npm/
+.eslintcache
+
 # OS
 .DS_Store
 .DS_Store?
@@ -38,6 +48,10 @@ lerna-debug.log*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Vercel
+.vercel/
+vercel.log
 
 # Editor
 .vscode/
@@ -49,15 +63,8 @@ Desktop.ini
 *.sw?
 *~
 
-# Coverage
-coverage/
-.nyc_output/
-.coverage/
-
-# Cache
-.eslintcache
-.stylelintcache
-.parcel-cache/
+# Optional npm cache
+.npmrc
 
 # Misc
 *.tsbuildinfo

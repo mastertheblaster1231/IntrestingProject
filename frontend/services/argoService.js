@@ -147,7 +147,7 @@ async function _fetchFromERDDAP(id) {
   const url =
     `${ERDDAP_BASE}?platform_number,time,latitude,longitude,pres,temp,psal` +
     `&platform_number=%22${encodeURIComponent(id)}%22` +
-    `&orderByMax(%22time%22)`;
+    `&orderByMax%28%22time%22%29`;
 
   // AbortController lets us cancel the fetch if it stalls on slow hackathon Wi-Fi
   const controller   = new AbortController();
