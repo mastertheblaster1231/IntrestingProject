@@ -874,7 +874,7 @@ function ModelVsObsTopSection({ telemetry }) {
         borderBottom: '1px solid rgba(0, 229, 255, 0.1)',
         gap: '8px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
           <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>🕰️ TIME:</span>
           <input 
             type="datetime-local" 
@@ -888,29 +888,48 @@ function ModelVsObsTopSection({ telemetry }) {
               padding: '2px 6px',
               fontSize: '0.65rem',
               fontFamily: 'var(--ws-font-mono, monospace)',
-              outline: 'none'
+              outline: 'none',
+              flex: 1
             }}
           />
         </div>
         
-        <button
-          onClick={() => setSelectedDate('')}
-          style={{
-            background: 'rgba(74, 222, 128, 0.15)',
-            border: '1px solid rgba(74, 222, 128, 0.4)',
-            color: '#4ade80',
-            borderRadius: '15px',
-            padding: '2px 8px',
-            fontSize: '0.6rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            opacity: selectedDate ? 1 : 0.5,
-            pointerEvents: selectedDate ? 'auto' : 'none',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          ● Real-Time
-        </button>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            onClick={() => { /* fetching triggers automatically via useEffect */ }}
+            style={{
+              background: 'rgba(0, 229, 255, 0.15)',
+              border: '1px solid rgba(0, 229, 255, 0.4)',
+              color: '#00f0ff',
+              borderRadius: '4px',
+              padding: '2px 8px',
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Get data
+          </button>
+          <button
+            onClick={() => setSelectedDate('')}
+            style={{
+              background: 'rgba(74, 222, 128, 0.15)',
+              border: '1px solid rgba(74, 222, 128, 0.4)',
+              color: '#4ade80',
+              borderRadius: '4px',
+              padding: '2px 8px',
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              opacity: selectedDate ? 1 : 0.5,
+              pointerEvents: selectedDate ? 'auto' : 'none',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            ● Real-Time
+          </button>
+        </div>
       </div>
 
       {/* Header Strip */}

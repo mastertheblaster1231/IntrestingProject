@@ -33,10 +33,11 @@ export function useThree() {
   };
 }
 
-export const Canvas = ({ children, ...props }) => (
-  <div className="r3f-canvas-container" style={{ width: '100%', height: '100%', position: 'relative' }} {...props}>
-    {children}
-  </div>
-);
+export const Canvas = ({ children, ...props }) =>
+  React.createElement('div', {
+    className: 'r3f-canvas-container',
+    style: { width: '100%', height: '100%', position: 'relative' },
+    ...props,
+  }, children);
 
 export default { useFrame, useThree, Canvas };

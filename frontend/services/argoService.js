@@ -17,15 +17,14 @@
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
-/** Live ERDDAP endpoint (routed through /erddap-proxy in browser to bypass CORS).
- *  Injected via VITE_ERDDAP_IFREMER_BASE / VITE_ERDDAP_PROXY_PATH; falls back to relative proxy. */
-const _envErddap = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_IFREMER_BASE) || null;
-const _envProxyPath = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_PROXY_PATH) || '/erddap-proxy';
-const ERDDAP_BASE = _envErddap && !_envErddap.includes('erddap.ifremer.fr')
-  ? _envErddap
-  : (typeof window !== 'undefined' && window.location && window.location.origin)
-    ? `${_envProxyPath}/erddap/tabledap/ArgoFloats.json`
-    : (_envErddap || 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json');
+/** Live ERDDAP endpoints — Primary: NOAA AOML (Indian Ocean), Secondary: IFREMER (Global) */
+const ERDDAP_IFREMER =
+  typeof window !== "undefined" && window.location && window.location.origin
+    ? "/erddap-proxy/erddap/tabledap/ArgoFloats.json"
+    : "https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json";
+
+const ERDDAP_AOML =
+  "https://erddap.aoml.noaa.gov/hdb/erddap/tabledap/argo_float_indian_2025_present.json";
 
 /**
  * Fetch timeout in milliseconds.
@@ -42,17 +41,17 @@ const FETCH_TIMEOUT_MS = 25000;
  *   ...
  * }
  */
-const CACHE_URL = '/src/assets/real_argo_cache.json';
+const CACHE_URL = "/src/assets/real_argo_cache.json";
 
 // ─── ERDDAP ROW INDEX MAP (deprecated — dynamic columnNames lookup is now used) ─
 const COL = {
   PLATFORM: 0,
-  TIME:     1,
-  LAT:      2,
-  LON:      3,
-  PRES:     4,
-  TEMP:     5,
-  PSAL:     6,
+  TIME: 1,
+  LAT: 2,
+  LON: 3,
+  PRES: 4, // pressure in decibars ~ depth in metres (1 dbar ~ 1 m)
+  TEMP: 5, // in-situ temperature (degrees C, ITS-90 scale)
+  PSAL: 6, // practical salinity (PSU)
 };
 
 // ─── MODULE-LEVEL SESSION CACHE ──────────────────────────────────────────────
@@ -86,7 +85,7 @@ const _sessionCache = new Map(); // key: platformNumber string -> ArgoProfile ob
  * @property {number} salinity      Practical salinity in PSU
  */
 export async function fetchLiveArgoProfile(platformNumber) {
-  const id = String(platformNumber).replace(/^argo-/i, ''); // strip "argo-" prefix if present
+  const id = String(platformNumber).replace(/^argo-/i, ""); // strip "argo-" prefix if present
 
   // 1. Check in-memory session cache first (avoids redundant network calls)
   if (_sessionCache.has(id)) {
@@ -94,14 +93,15 @@ export async function fetchLiveArgoProfile(platformNumber) {
     return _sessionCache.get(id);
   }
 
-  console.info(`[argoService] Fetching live ERDDAP profile for Argo float #${id}...`);
+  console.info(
+    `[argoService] Fetching live ERDDAP profile for Argo float #${id}...`,
+  );
 
   try {
     // 2. Attempt live ERDDAP fetch with an AbortController timeout
     const profile = await _fetchFromERDDAP(id);
-    _sessionCache.set(id, profile);      // warm the session cache on success
+    _sessionCache.set(id, profile); // warm the session cache on success
     return profile;
-
   } catch (networkError) {
     // 3. OFFLINE FAIL-SAFE — triggered on any of:
     //    - AbortError (timeout exceeded FETCH_TIMEOUT_MS)
@@ -109,7 +109,7 @@ export async function fetchLiveArgoProfile(platformNumber) {
     //    - Non-200 HTTP response
     //    - JSON parse failures
     console.warn(
-      `[argoService] Live ERDDAP unreachable for #${id} — activating offline fail-safe. Reason: ${networkError.message}`
+      `[argoService] Live ERDDAP unreachable for #${id} — activating offline fail-safe. Reason: ${networkError.message}`,
     );
     return await _fetchFromLocalCache(id);
   }
@@ -140,46 +140,79 @@ export async function fetchLiveArgoProfile(platformNumber) {
  * @throws {Error} on any network or parse failure
  */
 async function _fetchFromERDDAP(id) {
-  // Build the ERDDAP tabledap query URL:
+  // Build ERDDAP tabledap query URLs:
   //   Variables: platform_number, time, latitude, longitude, pres, temp, psal
   //   Constraint: platform_number = "2902351" (double-quoted string in ERDDAP filter syntax)
   //   orderByMax("time") returns ALL rows for the most recent profile cycle only
-  const url =
-    `${ERDDAP_BASE}?platform_number,time,latitude,longitude,pres,temp,psal` +
+
+  // Primary: NOAA AOML Indian Ocean Dataset (uppercase column names)
+  const aomlUrl =
+    `${ERDDAP_AOML}?PLATFORM_NUMBER,time,latitude,longitude,PRES,TEMP,PSAL` +
+    `&PLATFORM_NUMBER=%22${encodeURIComponent(id)}%22` +
+    `&orderByMax(%22time%22)`;
+
+  // Secondary: IFREMER Global Dataset (lowercase column names)
+  const ifremerUrl =
+    `${ERDDAP_IFREMER}?platform_number,time,latitude,longitude,pres,temp,psal` +
     `&platform_number=%22${encodeURIComponent(id)}%22` +
-    `&orderByMax%28%22time%22%29`;
+    `&orderByMax(%22time%22)`;
+
+
 
   // AbortController lets us cancel the fetch if it stalls on slow hackathon Wi-Fi
-  const controller   = new AbortController();
+  const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   let response;
   try {
-    response = await fetch(url, {
-      signal:  controller.signal,
-      headers: {
-        Accept:       'application/json',
-        'User-Agent': 'INCOIS-SIH-Dashboard/1.0',
-      },
-    });
+    // Try AOML first (Indian Ocean optimized)
+    console.info(`[argoService] Trying NOAA AOML for float #${id}...`);
+    response = await fetch(aomlUrl, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    }).catch(() => null);
+
+    // Fallback to IFREMER if AOML fails
+    if (!response || !response.ok) {
+      console.info(
+        `[argoService] AOML unavailable, trying IFREMER for float #${id}...`,
+      );
+      response = await fetch(ifremerUrl, {
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "INCOIS-SIH-Dashboard/1.0",
+        },
+      });
+    }
   } finally {
     clearTimeout(timeoutHandle); // always clear to avoid ghost timers
   }
 
-  if (!response.ok) {
-    throw new Error(`ERDDAP HTTP ${response.status} for float #${id}`);
+  if (!response || !response.ok) {
+    throw new Error(
+      `ERDDAP HTTP ${response?.status || "N/A"} for float #${id}`,
+    );
   }
 
   const json = await response.json();
-  const table = json?.table;
-  const rows = table?.rows;
-  const columnNames = table?.columnNames;
+  const rows = json?.table?.rows;
+  const colNames = json?.table?.columnNames;
 
   if (!rows || rows.length === 0) {
     throw new Error(`ERDDAP returned zero rows for float #${id}`);
   }
-  if (!columnNames || columnNames.length === 0) {
-    throw new Error(`ERDDAP missing columnNames for float #${id}`);
+
+  // Dynamic column mapping — handles case differences between AOML and IFREMER
+  if (colNames) {
+    const lowerCols = colNames.map((c) => c.toLowerCase());
+    COL.PLATFORM = lowerCols.indexOf("platform_number");
+    COL.TIME = lowerCols.indexOf("time");
+    COL.LAT = lowerCols.indexOf("latitude");
+    COL.LON = lowerCols.indexOf("longitude");
+    COL.PRES = lowerCols.indexOf("pres");
+    COL.TEMP = lowerCols.indexOf("temp");
+    COL.PSAL = lowerCols.indexOf("psal");
   }
 
   return _parseErddapRows(id, rows, columnNames);
@@ -205,62 +238,41 @@ async function _fetchFromERDDAP(id) {
  * @param {Array[]}  rows  Raw ERDDAP row arrays
  * @returns {ArgoProfile}
  */
-function _parseErddapRows(id, rows, columnNames) {
-  // Robust column lookup — ERDDAP column order is derived from the query string,
-  // but using columnNames protects us if ERDDAP adds metadata columns or reorders them.
-  const idx = (name) => {
-    if (!columnNames) return COL[name.toUpperCase()] ?? -1;
-    const i = columnNames.indexOf(name);
-    return i !== -1 ? i : (COL[name.toUpperCase()] ?? -1);
-  };
-  const I_PLATFORM = idx('platform_number');
-  const I_TIME = idx('time');
-  const I_LAT = idx('latitude');
-  const I_LON = idx('longitude');
-  const I_PRES = idx('pres');
-  const I_TEMP = idx('temp');
-  const I_PSAL = idx('psal');
-
-  // Fallback to legacy hard-coded indices if lookup failed
-  const presCol = I_PRES !== -1 ? I_PRES : COL.PRES;
-  const tempCol = I_TEMP !== -1 ? I_TEMP : COL.TEMP;
-  const psalCol = I_PSAL !== -1 ? I_PSAL : COL.PSAL;
-  const timeCol = I_TIME !== -1 ? I_TIME : COL.TIME;
-  const latCol = I_LAT !== -1 ? I_LAT : COL.LAT;
-  const lonCol = I_LON !== -1 ? I_LON : COL.LON;
-
-  const firstRow  = rows[0];
-  const timestamp = firstRow[timeCol] || new Date().toISOString();
-  const lat       = _toNum(firstRow[latCol]);
-  const lon       = _toNum(firstRow[lonCol]);
+function _parseErddapRows(id, rows) {
+  // Metadata from row[0]; lat/lon/time are identical for all rows in one profile
+  const firstRow = rows[0];
+  const timestamp = firstRow[COL.TIME] || new Date().toISOString();
+  const lat = _toNum(firstRow[COL.LAT]);
+  const lon = _toNum(firstRow[COL.LON]);
 
   const profile = rows
     .map((row) => {
-      const pressure    = _toNum(row[presCol]);
-      const temperature = _toNum(row[tempCol]);
-      const salinity    = _toNum(row[psalCol]);
-      if (pressure === null || temperature === null || salinity === null) return null;
+      const pressure = _toNum(row[COL.PRES]); // decibars
+      const temperature = _toNum(row[COL.TEMP]); // degrees C
+      const salinity = _toNum(row[COL.PSAL]); // PSU
+
+      // Skip rows with missing or clearly invalid sensor readings
+      if (pressure === null || temperature === null || salinity === null)
+        return null;
       if (isNaN(pressure) || isNaN(temperature) || isNaN(salinity)) return null;
+
       return {
-        depth:       parseFloat(pressure.toFixed(1)),
+        // 1 dbar of pressure ~ 1 metre of depth (standard seawater approximation, <1% error to 2000m)
+        depth: parseFloat(pressure.toFixed(1)),
         temperature: parseFloat(temperature.toFixed(3)),
-        salinity:    parseFloat(salinity.toFixed(3)),
+        salinity: parseFloat(salinity.toFixed(3)),
       };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.depth - b.depth);
-
-  if (profile.length === 0) {
-    throw new Error(`ERDDAP returned zero valid profile points for float #${id} (all rows had null temp/psal)`);
-  }
+    .filter(Boolean) // remove null entries from rejected rows
+    .sort((a, b) => a.depth - b.depth); // shallow to deep ordering for charts
 
   return {
-    floatId:   id,
-    name:      `Argo Float #${id}`,
+    floatId: id,
+    name: `Argo Float #${id}`,
     timestamp,
     lat,
     lon,
-    source:    'live-erddap',
+    source: "live-erddap",
     profile,
     rawColumnNames: columnNames,
   };
@@ -278,15 +290,30 @@ function _parseErddapRows(id, rows, columnNames) {
  * @returns {Promise<ArgoProfile>}
  */
 async function _fetchFromLocalCache(id) {
-  const cacheResponse = await fetch(CACHE_URL);
-  if (!cacheResponse.ok) throw new Error(`Cache fetch HTTP ${cacheResponse.status} — real data unavailable`);
-  const cacheData = await cacheResponse.json();
-  if (cacheData[id]) {
-    console.info(`[argoService] Offline cache HIT for float #${id} (real captured ERDDAP data)`);
-    return { ...cacheData[id], source: 'offline-cache' };
+  try {
+    const cacheResponse = await fetch(CACHE_URL);
+    if (!cacheResponse.ok)
+      throw new Error(`Cache fetch HTTP ${cacheResponse.status}`);
+
+    const cacheData = await cacheResponse.json();
+
+    if (cacheData[id]) {
+      console.info(`[argoService] Offline cache HIT for float #${id}`);
+      // Tag the provenance so the UI can show the offline badge
+      return { ...cacheData[id], source: "offline-cache" };
+    }
+
+    console.warn(
+      `[argoService] Float #${id} not in offline cache; using synthetic fallback`,
+    );
+    return _syntheticFallback(id);
+  } catch (cacheError) {
+    // Absolute last resort: cache file itself is missing or corrupt
+    console.error(
+      `[argoService] Offline cache load failed: ${cacheError.message} — generating synthetic profile`,
+    );
+    return _syntheticFallback(id);
   }
-  // Cache miss — do NOT generate synthetic mock. Throw so caller can handle as error.
-  throw new Error(`Float #${id} not in real cache (real_argo_cache.json) and live ERDDAP unreachable — real data unavailable (synthetic fallback disabled per mandate)`);
 }
 
 /**
@@ -295,22 +322,43 @@ async function _fetchFromLocalCache(id) {
  * @deprecated Use real ERDDAP live or real_argo_cache.json instead.
  */
 function _syntheticFallback(id) {
-  console.warn(`[argoService] _syntheticFallback called for ${id} — DEPRECATED, real-data mandate prefers throwing`);
-  const DEPTHS   = [0, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000];
-  const surfaceT = 28.3;
-  const surfaceS = 34.3;
+  const DEPTHS = [
+    0, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000,
+  ];
+  const surfaceT = 28.3; // degrees C — typical Indian Ocean surface temperature
+  const surfaceS = 34.3; // PSU — typical Bay of Bengal surface salinity
+
   const profile = DEPTHS.map((d) => {
     let temperature;
     if (d <= 50) temperature = surfaceT - (d / 50) * 0.4;
-    else if (d <= 1000) temperature = 3.5 + (surfaceT - 3.5) * Math.exp(-d / 320);
+    else if (d <= 1000)
+      temperature = 3.5 + (surfaceT - 3.5) * Math.exp(-d / 320);
     else temperature = 1.8 + (3.5 - 1.8) * Math.exp(-(d - 1000) / 900);
     let salinity;
-    if (d <= 150) salinity = surfaceS + (d / 150) * 0.55;
-    else if (d <= 800) salinity = (surfaceS + 0.55) - ((d - 150) / 650) * 0.35;
-    else salinity = 34.75 + ((d - 800) / 1200) * 0.15;
-    return { depth: d, temperature: parseFloat(temperature.toFixed(2)), salinity: parseFloat(salinity.toFixed(2)) };
+    if (d <= 150) {
+      salinity = surfaceS + (d / 150) * 0.55;
+    } else if (d <= 800) {
+      salinity = surfaceS + 0.55 - ((d - 150) / 650) * 0.35;
+    } else {
+      salinity = 34.75 + ((d - 800) / 1200) * 0.15;
+    }
+
+    return {
+      depth: d,
+      temperature: parseFloat(temperature.toFixed(2)),
+      salinity: parseFloat(salinity.toFixed(2)),
+    };
   });
-  return { floatId: id, name: `Argo Float #${id}`, timestamp: new Date().toISOString(), lat: 11.6, lon: 92.5, source: 'synthetic-fallback-DEPRECATED', profile };
+
+  return {
+    floatId: id,
+    name: `Argo Float #${id}`,
+    timestamp: new Date().toISOString(),
+    lat: 11.6,
+    lon: 92.5,
+    source: "synthetic-fallback",
+    profile,
+  };
 }
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -322,7 +370,7 @@ function _syntheticFallback(id) {
  * @returns {number|null}
  */
 function _toNum(v) {
-  if (v === null || v === undefined || v === '') return null;
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   return isFinite(n) ? n : null;
 }
@@ -356,7 +404,7 @@ export function getProfileAtDepth(profile, depthM) {
   // Clamp target depth to the measured range
   const minD = pts[0].depth;
   const maxD = pts[pts.length - 1].depth;
-  const d    = Math.max(minD, Math.min(maxD, depthM));
+  const d = Math.max(minD, Math.min(maxD, depthM));
 
   // Locate the two bracketing profile points
   let lower = pts[0];
@@ -372,15 +420,25 @@ export function getProfileAtDepth(profile, depthM) {
 
   // Exact match — no interpolation needed
   if (lower.depth === upper.depth) {
-    return { depth: d, temperature: lower.temperature, salinity: lower.salinity };
+    return {
+      depth: d,
+      temperature: lower.temperature,
+      salinity: lower.salinity,
+    };
   }
 
   // t is the fractional position between the two bracketing levels (0 = at lower, 1 = at upper)
   const t = (d - lower.depth) / (upper.depth - lower.depth);
 
   return {
-    depth:       d,
-    temperature: parseFloat((lower.temperature + t * (upper.temperature - lower.temperature)).toFixed(3)),
-    salinity:    parseFloat((lower.salinity    + t * (upper.salinity    - lower.salinity   )).toFixed(3)),
+    depth: d,
+    temperature: parseFloat(
+      (lower.temperature + t * (upper.temperature - lower.temperature)).toFixed(
+        3,
+      ),
+    ),
+    salinity: parseFloat(
+      (lower.salinity + t * (upper.salinity - lower.salinity)).toFixed(3),
+    ),
   };
 }

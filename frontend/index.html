@@ -1373,6 +1373,69 @@
         background: rgba(255, 255, 255, 0.12);
         color: #ffffff;
       }
+      /* Custom UI Toggles */
+      .top-left-search {
+        position: absolute;
+        top: 24px;
+        left: 24px;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(9, 19, 36, 0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 12px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 229, 255, 0.1);
+      }
+      .search-bar-container {
+        display: flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 4px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .search-bar-container input[type="text"] {
+        background: transparent;
+        border: none;
+        color: #cbd5e1;
+        outline: none;
+        font-family: inherit;
+        font-size: 0.85rem;
+        width: 150px;
+      }
+      .search-bar-container svg {
+        width: 14px;
+        height: 14px;
+        fill: #cbd5e1;
+        margin-right: 6px;
+      }
+      .all-points-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #cbd5e1;
+        font-size: 0.85rem;
+        cursor: pointer;
+        user-select: none;
+      }
+      .all-points-checkbox input[type="checkbox"] {
+        accent-color: #00f0ff;
+        cursor: pointer;
+      }
+
+      .bottom-left-toggles {
+        position: absolute;
+        bottom: 24px;
+        left: 24px;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
     </style>
   </head>
   <body>
@@ -1384,17 +1447,37 @@
       <span>🌊 3D Ocean Waves</span>
     </a>
 
-    <!-- Top Right Cluster: Real-Time Status Pill + Temperature Toggle -->
-    <div class="top-right-bar">
-      <!-- 🛰️ Real-Time Status Pill -->
-      <div id="argoLiveIndicator" class="argo-live-pill" title="Live Argo observation status">
-        <span class="argo-live-dot"></span>
-        <span id="argoLiveText">🛰️ ERDDAP Live</span>
+    <!-- Top Left Search and Filter -->
+    <div class="top-left-search">
+      <div class="search-bar-container">
+        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input type="text" id="regionSearchInput" placeholder="Search Region..." oninput="handleRegionSearch(this.value)">
       </div>
+      <label class="all-points-checkbox">
+        <input type="checkbox" id="allPointsCheckbox" checked onchange="handleAllPointsToggle(this.checked)"> All points
+      </label>
+    </div>
 
+    <!-- Bottom Left Toggles -->
+    <div class="bottom-left-toggles">
       <!-- 🌡️ Temperature Color Toggle -->
       <div id="tempToggle" class="temp-toggle-container" onclick="toggleTemperatureMode()" title="Toggle temperature-based beacon colors (warm red >28°C, cool cyan ≤28°C)">
         <span class="temp-toggle-label">🌡️ Temperature</span>
+        <div class="temp-toggle-switch"></div>
+      </div>
+      <!-- Salinity Toggle -->
+      <div id="salinityToggle" class="temp-toggle-container" onclick="toggleSalinityMode()" title="Toggle Salinity Layer">
+        <span class="temp-toggle-label">🧂 Salinity</span>
+        <div class="temp-toggle-switch"></div>
+      </div>
+      <!-- Ocean Vectors Toggle -->
+      <div id="vectorsToggle" class="temp-toggle-container" onclick="toggleVectorsMode()" title="Toggle Ocean Vectors Layer">
+        <span class="temp-toggle-label">↗️ Ocean Vectors</span>
+        <div class="temp-toggle-switch"></div>
+      </div>
+      <!-- Chlorophyll - a Toggle -->
+      <div id="chloroToggle" class="temp-toggle-container" onclick="toggleChloroMode()" title="Toggle Chlorophyll - a Layer">
+        <span class="temp-toggle-label">🌿 Chlorophyll - a</span>
         <div class="temp-toggle-switch"></div>
       </div>
     </div>
@@ -2024,6 +2107,60 @@
         const isActive = toggle.classList.toggle('active');
         if (window.applyTemperatureColors) {
           window.applyTemperatureColors(isActive);
+        }
+      }
+
+      let showSalinity = false;
+      function toggleSalinityMode() {
+        const toggle = document.getElementById('salinityToggle');
+        if (!toggle) return;
+        showSalinity = toggle.classList.toggle('active');
+        if (window.applySalinityLayer) window.applySalinityLayer(showSalinity);
+      }
+
+      let showVectors = false;
+      function toggleVectorsMode() {
+        const toggle = document.getElementById('vectorsToggle');
+        if (!toggle) return;
+        showVectors = toggle.classList.toggle('active');
+        if (window.applyVectorsLayer) window.applyVectorsLayer(showVectors);
+      }
+
+      let showChloro = false;
+      function toggleChloroMode() {
+        const toggle = document.getElementById('chloroToggle');
+        if (!toggle) return;
+        showChloro = toggle.classList.toggle('active');
+        if (window.applyChloroLayer) window.applyChloroLayer(showChloro);
+      }
+
+      let searchQuery = "";
+      let showAllPoints = true;
+
+      function handleRegionSearch(query) {
+        searchQuery = query.trim().toLowerCase();
+        const checkbox = document.getElementById('allPointsCheckbox');
+        if (searchQuery.length > 0) {
+          showAllPoints = false;
+          if (checkbox) checkbox.checked = false;
+        } else {
+          showAllPoints = true;
+          if (checkbox) checkbox.checked = true;
+        }
+        if (window.filterArgoPoints) {
+          window.filterArgoPoints(searchQuery, showAllPoints);
+        }
+      }
+
+      function handleAllPointsToggle(checked) {
+        showAllPoints = checked;
+        const input = document.getElementById('regionSearchInput');
+        if (showAllPoints) {
+          searchQuery = "";
+          if (input) input.value = "";
+        }
+        if (window.filterArgoPoints) {
+          window.filterArgoPoints(searchQuery, showAllPoints);
         }
       }
 

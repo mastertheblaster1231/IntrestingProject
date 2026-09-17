@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLiveTime } from '../hooks/useLiveTime.js';
 import { useOceanStore } from '../useOceanStore.js';
-
+import { useComparisonStore, REGION_NAMES } from '../useComparisonStore.js';
 /**
  * TopNavbar — React version of the ocean top navigation bar.
  * Contains: Back to Globe, Zone indicator, Role switcher,
@@ -17,6 +17,28 @@ export function TopNavbar() {
 
   const selectedTimestamp = useOceanStore((state) => state.selectedTimestamp);
 
+  // Comparison Store
+  const toggleSearch = useComparisonStore((s) => s.toggleSearch);
+  const isSearchOpen = useComparisonStore((s) => s.isSearchOpen);
+  const addRegion = useComparisonStore((s) => s.addRegion);
+  const [searchInput, setSearchInput] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const filteredRegions = REGION_NAMES.filter(
+    (name) => name.toLowerCase().includes(searchInput.toLowerCase())
+  );
+
+  const handleSelectRegion = (name) => {
+    addRegion(name);
+    setSearchInput('');
+    setShowDropdown(false);
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && filteredRegions.length > 0) {
+      handleSelectRegion(filteredRegions[0]);
+    }
+  };
   // Live ticking IST clock for the timeline date display
   const liveTime = useLiveTime();
 
@@ -123,6 +145,45 @@ export function TopNavbar() {
 
       {/* Right cluster: Timeline & Environment Controls */}
       <div className="navbar-cluster">
+        {/* Compare Button & Search */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '16px' }}>
+          <button className="nav-compare-btn" onClick={toggleSearch} title="Compare Regions">
+            <span>+ Compare</span>
+          </button>
+          
+          {isSearchOpen && (
+            <div className="nav-search-container">
+              <input
+                type="text"
+                className="nav-search-input"
+                placeholder="Search region..."
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  setShowDropdown(e.target.value.length > 0);
+                }}
+                onFocus={() => setShowDropdown(searchInput.length > 0)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                onKeyDown={handleSearchKeyDown}
+                autoFocus
+              />
+              {showDropdown && filteredRegions.length > 0 && (
+                <div className="nav-search-dropdown">
+                  {filteredRegions.map((name) => (
+                    <div
+                      key={name}
+                      className="nav-search-option"
+                      onClick={() => handleSelectRegion(name)}
+                    >
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Play/Pause */}
         <button className="nav-play-circle" onClick={handlePlayToggle} title={isPlaying ? 'Pause' : 'Play Timeline'}>
           {isPlaying ? '⏸' : '▶'}
