@@ -1148,9 +1148,10 @@ async function loadLiveArgoFleet(count) {
         : argoPoints;
     updateSstHeatmap(allFloats);
 
-    // Select the first float
+    // Pre-select the first float silently — the sidebar only appears
+    // when the user single-clicks an Argo on the globe.
     if (argoPoints.length > 0) {
-      selectStation(argoPoints[0].id);
+      selectStation(argoPoints[0].id, { showPanel: false });
     }
 
     console.info(
@@ -1758,6 +1759,10 @@ function animateCameraTo(
 function renderVerticalProfileChart(profileData) {
   const svg = document.getElementById("profileChartSvg");
   if (!svg) return;
+  if (!Array.isArray(profileData) || profileData.length === 0) {
+    svg.innerHTML = `<text x="155" y="90" fill="#7b8fa7" font-size="11" text-anchor="middle" font-family="'Space Mono', monospace">No profile data — live ERDDAP unreachable</text>`;
+    return;
+  }
 
   const width = 310;
   const height = 180;
@@ -1866,96 +1871,144 @@ function renderVerticalProfileChart(profileData) {
   });
 }
 
-// Populates all tabs inside the Argo Float Data Panel
-function updateArgoFloatUI(data) {
-  currentLoadedData = data;
+// Populates all tabs inside the Argo Float Data Panel.
+// Guarantees the sidebar appears on every explicit click: the panel opens
+// FIRST, every section is guarded, and a failure in one section can never
+// block the others (or hide the panel).
+function updateArgoFloatUI(data, showPanel = true) {
+  try {
+    currentLoadedData = data || {};
+    const d = currentLoadedData;
 
-  // 1. Header & ID
-  const elFloatId = document.getElementById("argoFloatId");
-  const elStatusPill = document.getElementById("argoStatusPill");
-  if (elFloatId) elFloatId.textContent = data.floatId;
-  if (elStatusPill) elStatusPill.textContent = data.status;
+    // 0. Open the panel immediately so it appears even while slow fetches land
+    if (showPanel) {
+      const panel = document.getElementById("argoFloatPanel");
+      if (panel) panel.classList.add("visible");
+    }
 
-  // 2. Overview tab properties
-  const elLocation = document.getElementById("argoValLocation");
-  const elLastObs = document.getElementById("argoValLastObs");
-  const elMaxDepth = document.getElementById("argoValMaxDepth");
-  const elMeasurements = document.getElementById("argoValMeasurements");
-  if (elLocation) elLocation.textContent = data.locationFormatted;
-  if (elLastObs) elLastObs.textContent = data.lastObservation;
-  if (elMaxDepth) elMaxDepth.textContent = `${data.maxDepthMeters} m`;
-  if (elMeasurements) elMeasurements.textContent = data.measurements;
+    // 1. Header & ID
+    const elFloatId = document.getElementById("argoFloatId");
+    const elStatusPill = document.getElementById("argoStatusPill");
+    if (elFloatId) elFloatId.textContent = d.floatId ?? d.stationId ?? d.id ?? "—";
+    if (elStatusPill) elStatusPill.textContent = d.status ?? "—";
 
-  // 3. Latest Observation cards (Surface Temp & Salinity)
-  const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
-  const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
-  if (elSurfaceTemp)
-    elSurfaceTemp.textContent = `${data.scientificData?.surfaceTempC ?? "--"} °C`;
-  if (elSurfaceSal)
-    elSurfaceSal.textContent = `${data.scientificData?.surfaceSalinityPSU ?? "--"} PSU`;
+    // 2. Overview tab properties
+    const elLocation = document.getElementById("argoValLocation");
+    const elLastObs = document.getElementById("argoValLastObs");
+    const elMaxDepth = document.getElementById("argoValMaxDepth");
+    const elMeasurements = document.getElementById("argoValMeasurements");
+    if (elLocation) elLocation.textContent = d.locationFormatted ?? "—";
+    if (elLastObs) elLastObs.textContent = d.lastObservation ?? "—";
+    if (elMaxDepth) elMaxDepth.textContent = d.maxDepthMeters != null ? `${d.maxDepthMeters} m` : "—";
+    if (elMeasurements) elMeasurements.textContent = d.measurements ?? "—";
 
-  // 4. Vertical Profile Chart
-  renderVerticalProfileChart(data.verticalProfile);
+    // 3. Latest Observation cards (Surface Temp & Salinity)
+    const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
+    const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
+    if (elSurfaceTemp)
+      elSurfaceTemp.textContent = `${d.scientificData?.surfaceTempC ?? "—"} °C`;
+    if (elSurfaceSal)
+      elSurfaceSal.textContent = `${d.scientificData?.surfaceSalinityPSU ?? "—"} PSU`;
 
-  // 5. Profile Tab (Table & CTD details)
-  const elProfileTable = document.getElementById("argoProfileTableBody");
-  if (elProfileTable) {
-    elProfileTable.innerHTML = data.verticalProfile
-      .map(
-        (row) => `
+    // 4. Vertical Profile Chart (guarded — renders a notice when empty)
+    try {
+      renderVerticalProfileChart(d.verticalProfile);
+    } catch (_e) { /* chart must never block the panel */ }
+
+    // 5. Profile Tab (Table & CTD details)
+    const elProfileTable = document.getElementById("argoProfileTableBody");
+    if (elProfileTable) {
+      if (Array.isArray(d.verticalProfile) && d.verticalProfile.length > 0) {
+        elProfileTable.innerHTML = d.verticalProfile
+          .map(
+            (row) => `
         <tr>
-          <td>${row.depthMeters} m</td>
-          <td style="color:#ff9436;">${row.temperatureC.toFixed(2)} °C</td>
-          <td style="color:#38bdf8;">${row.salinityPSU.toFixed(2)}</td>
-          <td>${row.pressureDbar} dbar</td>
-          <td>${row.densitySigmaTheta}</td>
+          <td>${row.depthMeters ?? "—"} m</td>
+          <td style="color:#ff9436;">${row.temperatureC != null ? row.temperatureC.toFixed(2) : "—"} °C</td>
+          <td style="color:#38bdf8;">${row.salinityPSU != null ? row.salinityPSU.toFixed(2) : "—"} PSU</td>
+          <td>${row.pressureDbar ?? "—"} dbar</td>
+          <td>${row.densitySigmaTheta ?? "—"}</td>
         </tr>
       `,
-      )
-      .join("");
-  }
-  const elCycleNum = document.getElementById("argoCycleNum");
-  const elBattery = document.getElementById("argoBattery");
-  const elTrans = document.getElementById("argoTransmission");
-  if (elCycleNum)
-    elCycleNum.textContent = `Cycle #${data.mission?.cycleNumber ?? "--"}`;
-  if (elBattery)
-    elBattery.textContent = `${data.mission?.batteryPercent ?? "--"}%`;
-  if (elTrans) elTrans.textContent = data.status || "OK";
+          )
+          .join("");
+      } else {
+        elProfileTable.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#7b8fa7;">No profile rows — live source unreachable</td></tr>`;
+      }
+    }
+    const elCycleNum = document.getElementById("argoCycleNum");
+    const elBattery = document.getElementById("argoBattery");
+    const elTrans = document.getElementById("argoTransmission");
+    if (elCycleNum)
+      elCycleNum.textContent = `Cycle #${d.mission?.cycleNumber ?? "—"}`;
+    if (elBattery)
+      elBattery.textContent = d.mission?.batteryPercent != null ? `${d.mission.batteryPercent}%` : "—";
+    if (elTrans) elTrans.textContent = d.status || "OK";
 
-  // 6. Location Tab
-  const elBasin = document.getElementById("argoSeaBasin");
-  const elCoords = document.getElementById("argoExactCoords");
-  const elDrift = document.getElementById("argoDriftSpeed");
-  const elDistance = document.getElementById("argoDistance24h");
-  if (elBasin)
-    elBasin.textContent =
-      data.coordinates?.seaBasin || data.locationPrimary || "Indian Ocean";
-  if (elCoords)
-    elCoords.textContent = `${(data.coordinates?.lat || 0).toFixed(4)}°N, ${(data.coordinates?.lon || 0).toFixed(4)}°E`;
-  if (elDrift)
-    elDrift.textContent = `${data.scientificData?.currentSpeedMs ?? 0} m/s @ ${data.scientificData?.currentDirection ?? "N"}`;
-  if (elDistance) elDistance.textContent = `Active Drift`;
+    // 6. Location Tab
+    const elBasin = document.getElementById("argoSeaBasin");
+    const elCoords = document.getElementById("argoExactCoords");
+    const elDrift = document.getElementById("argoDriftSpeed");
+    const elDistance = document.getElementById("argoDistance24h");
+    if (elBasin)
+      elBasin.textContent =
+        d.coordinates?.seaBasin || d.locationPrimary || "Indian Ocean";
+    if (elCoords)
+      elCoords.textContent = `${(d.coordinates?.lat || 0).toFixed(4)}°N, ${(d.coordinates?.lon || 0).toFixed(4)}°E`;
+    if (elDrift)
+      elDrift.textContent = `${d.scientificData?.currentSpeedMs ?? 0} m/s @ ${d.scientificData?.currentDirection ?? "N"}`;
+    if (elDistance) elDistance.textContent = `Active Drift`;
 
-  // 7. Raw Data Tab (JSON View & API Info)
-  const elRawJson = document.getElementById("argoRawJsonView");
-  const elApiEndpoint = document.getElementById("argoApiEndpoint");
-  if (elRawJson) {
-    elRawJson.textContent = JSON.stringify(data, null, 2);
-  }
-  if (elApiEndpoint) {
-    elApiEndpoint.textContent = `/api/v1/float/${data.floatId || data.stationId}`;
-  }
-
-  // Ensure panel is visible
-  const panel = document.getElementById("argoFloatPanel");
-  if (panel) {
-    panel.classList.add("visible");
+    // 7. Raw Data Tab (JSON View & API Info)
+    const elRawJson = document.getElementById("argoRawJsonView");
+    const elApiEndpoint = document.getElementById("argoApiEndpoint");
+    if (elRawJson) {
+      try {
+        elRawJson.textContent = JSON.stringify(d, null, 2);
+      } catch (_e) {
+        elRawJson.textContent = "Unable to serialize live payload.";
+      }
+    }
+    if (elApiEndpoint) {
+      elApiEndpoint.textContent = `/api/v1/float/${d.floatId || d.stationId || d.id || "—"}`;
+    }
+  } catch (err) {
+    console.error("[ArgoPanel] populate failed, forcing panel visible:", err?.message);
+    try {
+      if (showPanel) document.getElementById("argoFloatPanel")?.classList.add("visible");
+    } catch (_e) { /* ignore */ }
   }
 }
 
+// Builds instant panel data from a clicked globe marker (no network needed)
+function buildMarkerFallbackData(point, lastObservationNote) {
+  const lat = Number(point?.lat) || 0;
+  const lon = Number(point?.lon) || 0;
+  return {
+    floatId: point?.id ?? "—",
+    stationId: (point?.code || point?.id) ?? "—",
+    wmoId: point?.wmoId,
+    status: point?.status || "UNKNOWN",
+    locationPrimary: point?.sea || point?.region || "Indian Ocean",
+    locationFormatted: `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`,
+    lastObservation: lastObservationNote || point?.time || "—",
+    maxDepthMeters: 2000,
+    measurements: "Temperature, Salinity",
+    scientificData: {
+      surfaceTempC: point?.surfaceTemp,
+      surfaceSalinityPSU: point?.surfaceSalinity,
+    },
+    coordinates: { lat, lon },
+    mission: {},
+    verticalProfile: [],
+    trajectoryHistory: [],
+    source: "marker-instant",
+  };
+}
+
 // Selection function: Turns clicked station's dot to GREEN (#00ff66) & fetches data
-export async function selectStation(id) {
+export async function selectStation(id, opts = {}) {
+  const showPanel = opts.showPanel !== false;
   const defaultId = argoPoints.length > 0 ? argoPoints[0].id : "";
   const cleanId = String(id || defaultId)
     .trim()
@@ -1968,6 +2021,11 @@ export async function selectStation(id) {
         (p.altId && p.altId.toUpperCase() === cleanId) ||
         String(p.wmoId) === cleanId,
     ) || argoPoints[0];
+
+  if (!point) {
+    console.warn(`[ArgoPanel] selectStation(${id}) ignored — fleet not loaded yet`);
+    return;
+  }
 
   const targetId = point.id;
   selectedStationId = targetId;
@@ -2000,9 +2058,18 @@ export async function selectStation(id) {
     }
   });
 
-  // Fetch procedural (or API) data asynchronously
-  const floatData = await oceanDataService.getFloatDetails(point);
-  updateArgoFloatUI(floatData);
+  // 1. Open the sidebar INSTANTLY with the clicked marker's known metadata,
+  // so a click always shows something even while the live fetch is in flight.
+  updateArgoFloatUI(buildMarkerFallbackData(point, "loading live ERDDAP…"), showPanel);
+
+  // 2. Upgrade the panel with live (ERDDAP-first) data when it resolves.
+  try {
+    const floatData = await oceanDataService.getFloatDetails(point);
+    if (floatData) updateArgoFloatUI(floatData, showPanel);
+  } catch (err) {
+    console.warn(`[ArgoPanel] live fetch failed for ${targetId}, keeping marker metadata:`, err?.message);
+    updateArgoFloatUI(buildMarkerFallbackData(point, "unavailable (backend unreachable)"), showPanel);
+  }
 
   // Sync with Zustand store so React components (like OceanDashboard) update their location badges
   if (window.oceanStore) {
@@ -2317,6 +2384,7 @@ function onPointerClick(event) {
       startOrbitalDiveTransition(sprite);
     } else {
       // SINGLE-CLICK: Select station & inspect data panel
+      console.info(`[Globe] marker single-clicked: ${data.id}`);
       selectStation(data.id);
     }
     return;

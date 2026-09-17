@@ -108,7 +108,7 @@
       /* Sidebar Toggle Floating Button */
       .sidebar-toggle-btn {
         position: absolute;
-        top: 86px;
+        top: 156px;
         left: 24px;
         z-index: 20;
         background: rgba(6, 20, 44, 0.85);
@@ -146,7 +146,7 @@
       /* Glassmorphic Sidebar */
       .hud-sidebar {
         position: absolute;
-        top: 136px;
+        top: 204px;
         left: 24px;
         bottom: 24px;
         width: 320px;
@@ -1376,7 +1376,7 @@
       /* Custom UI Toggles */
       .top-left-search {
         position: absolute;
-        top: 24px;
+        top: 64px;
         left: 24px;
         z-index: 50;
         display: flex;
@@ -1763,9 +1763,9 @@
       <div class="argo-id-row">
         <div>
           <div class="argo-id-lbl">Float ID</div>
-          <div class="argo-id-val" id="argoFloatId">2902345</div>
+          <div class="argo-id-val" id="argoFloatId">—</div>
         </div>
-        <div class="argo-status-badge" id="argoStatusPill">Active</div>
+        <div class="argo-status-badge" id="argoStatusPill">—</div>
       </div>
 
       <!-- Cinematic Orbital Dive Button -->
@@ -1793,7 +1793,7 @@
               </span>
               <span>Location</span>
             </div>
-            <div class="prop-val" id="argoValLocation">12.35° S, 78.62° E</div>
+            <div class="prop-val" id="argoValLocation">—</div>
           </div>
 
           <div class="prop-row">
@@ -1803,7 +1803,7 @@
               </span>
               <span>Last Observation</span>
             </div>
-            <div class="prop-val" id="argoValLastObs">12 Aug 2025, 10:30 UTC</div>
+            <div class="prop-val" id="argoValLastObs">—</div>
           </div>
 
           <div class="prop-row">
@@ -1813,7 +1813,7 @@
               </span>
               <span>Max Depth</span>
             </div>
-            <div class="prop-val" id="argoValMaxDepth">2000 m</div>
+            <div class="prop-val" id="argoValMaxDepth">—</div>
           </div>
 
           <div class="prop-row">
@@ -1823,7 +1823,7 @@
               </span>
               <span>Measurements</span>
             </div>
-            <div class="prop-val" id="argoValMeasurements">Temperature, Salinity</div>
+            <div class="prop-val" id="argoValMeasurements">—</div>
           </div>
 
           <!-- Section: Latest Observation (at surface) -->
@@ -1837,7 +1837,7 @@
               </div>
               <div class="metric-info">
                 <span class="metric-label">Temperature</span>
-                <span class="metric-num temp-num" id="argoSurfaceTemp">28.4 °C</span>
+                <span class="metric-num temp-num" id="argoSurfaceTemp">—</span>
               </div>
             </div>
 
@@ -1848,7 +1848,7 @@
               </div>
               <div class="metric-info">
                 <span class="metric-label">Salinity</span>
-                <span class="metric-num sal-num" id="argoSurfaceSalinity">34.8 PSU</span>
+                <span class="metric-num sal-num" id="argoSurfaceSalinity">—</span>
               </div>
             </div>
           </div>
@@ -1891,15 +1891,15 @@
           <div class="details-list">
             <div class="prop-row">
               <span style="color:#8295a9;">Cycle Number</span>
-              <span class="prop-val" id="argoCycleNum" style="color:#00f0ff;">Cycle #84</span>
+              <span class="prop-val" id="argoCycleNum" style="color:#00f0ff;">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">Battery Voltage</span>
-              <span class="prop-val" id="argoBattery">14.1 V</span>
+              <span class="prop-val" id="argoBattery">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">Telemetry</span>
-              <span class="prop-val" id="argoTransmission" style="color:#10b981;">Iridium SBD - 100% OK</span>
+              <span class="prop-val" id="argoTransmission" style="color:#10b981;">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">CTD Sensor</span>
@@ -1931,19 +1931,19 @@
           <div class="details-list">
             <div class="prop-row">
               <span style="color:#8295a9;">Ocean Basin</span>
-              <span class="prop-val" id="argoSeaBasin">Indian Ocean</span>
+              <span class="prop-val" id="argoSeaBasin">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">Coordinates</span>
-              <span class="prop-val" id="argoExactCoords" style="font-family:'Space Mono', monospace;">12.3500°N, 78.6200°E</span>
+              <span class="prop-val" id="argoExactCoords" style="font-family:'Space Mono', monospace;">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">Current Drift</span>
-              <span class="prop-val" id="argoDriftSpeed">0.45 kts @ 114°</span>
+              <span class="prop-val" id="argoDriftSpeed">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">Est. 24h Drift</span>
-              <span class="prop-val" id="argoDistance24h">20.0 km / 24h</span>
+              <span class="prop-val" id="argoDistance24h">—</span>
             </div>
             <div class="prop-row">
               <span style="color:#8295a9;">GDAC Center</span>
@@ -1964,12 +1964,12 @@
           </div>
 
           <div class="raw-json-box" id="argoRawJsonView">
-            Loading data schema...
+            Click an Argo float on the globe to load live data…
           </div>
 
           <div class="api-note-box">
             🌐 <strong>Future API Endpoint:</strong><br>
-            <code id="argoApiEndpoint" style="color:#00e5ff; font-size:0.7rem;">/api/v1/argo/floats/2902345</code><br>
+            <code id="argoApiEndpoint" style="color:#00e5ff; font-size:0.7rem;">—</code><br>
             Switch to live backend anytime with <code>oceanDataService.setProvider('api', { baseUrl })</code>.
           </div>
         </div>

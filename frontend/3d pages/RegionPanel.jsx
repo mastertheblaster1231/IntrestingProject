@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useComparisonStore } from './useComparisonStore.js';
+import { ComparisonOceanSurface } from './ComparisonOceanSurface.jsx';
 import './ComparisonWindow.css';
 
 /**
@@ -17,34 +18,16 @@ function DeltaBadge({ delta }) {
 
 export function RegionPanel({ region }) {
   const data = useComparisonStore((s) => s.regionData[region.id]);
-  const setRegionDepth = useComparisonStore((s) => s.setRegionDepth);
   const selectFloat = useComparisonStore((s) => s.selectFloat);
-  const fetchDepthSlice = useComparisonStore((s) => s.fetchDepthSlice);
-  const fetchValidation = useComparisonStore((s) => s.fetchValidation);
 
-  const [localDepth, setLocalDepth] = useState(data?.depth || 0);
   const [hoveredFloat, setHoveredFloat] = useState(null);
-
-  // Sync local depth state when store changes externally
-  useEffect(() => {
-    if (data && data.depth !== localDepth) {
-      setLocalDepth(data.depth);
-    }
-  }, [data?.depth]);
-
-  // Debounced API calls on depth change
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (data && localDepth !== data.depth) {
-        setRegionDepth(region.id, localDepth);
-        fetchDepthSlice(region.id);
-        fetchValidation(region.id);
-      }
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [localDepth, region.id]);
+  const [isInfoMaximized, setIsInfoMaximized] = useState(true);
 
   if (!data) return null;
+
+  // Depth is owned by the central RegionDepthDock (per-region slider column);
+  // the 3D view follows the store value directly — no local slider state here.
+  const panelDepth = data.depth ?? 0;
 
   const {
     fleet,
@@ -56,28 +39,9 @@ export function RegionPanel({ region }) {
     isLoadingValidation,
   } = data;
 
-  const handleSliderChange = (e) => {
-    setLocalDepth(Number(e.target.value));
-  };
-
-  const handleDepthInput = (e) => {
-    if (e.key === 'Enter') {
-      const val = parseInt(e.target.value);
-      if (!isNaN(val)) setLocalDepth(Math.max(0, Math.min(4000, val)));
-    }
-  };
-
   const handleFloatChange = (e) => {
     const float = fleet.find((f) => String(f.id) === String(e.target.value));
     selectFloat(region.id, float || null);
-  };
-
-  // Find float near hovered depth
-  const handleSliderHover = (e) => {
-    // Basic approximation: assuming slider covers 0-4000 uniformly
-    // We could calculate exact depth from clientY, but for now we'll just check if fleet is populated
-    // To do an exact hover, we need geometry. A simpler approach is to find a float that matches the current depth.
-    // Let's just use the selected float for info, or nearest to current depth.
   };
 
   // Safe accessors for data
@@ -104,53 +68,56 @@ export function RegionPanel({ region }) {
         </div>
       </div>
 
-      <div className="region-depth-section">
-        <div className="depth-slider-container">
-          <div className="depth-input-group">
-            <input
-              type="number"
-              className="depth-input"
-              value={localDepth}
-              onChange={(e) => setLocalDepth(Number(e.target.value))}
-              onKeyDown={handleDepthInput}
-              min="0" max="4000"
-            />
-            <span className="depth-unit">m</span>
-          </div>
-          <input
-            type="range"
-            className="vertical-slider"
-            min="0"
-            max="4000"
-            step="5"
-            value={localDepth}
-            onChange={handleSliderChange}
-            onMouseMove={handleSliderHover}
-            style={{ direction: 'rtl' }} // Hack to make bottom=0
-          />
-        </div>
+      <div className="region-depth-section" style={{ position: 'relative', height: '300px', minHeight: '300px', width: '100%', overflow: 'hidden', padding: '16px', display: 'flex', flexDirection: 'row', gap: '16px' }}>
+        <ComparisonOceanSurface
+          panelId={region.id}
+          depth={panelDepth}
+          platformId={selectedFloat?.platform_number || selectedFloat?.id || null}
+        />
 
-        <div className="float-info-card">
-          <div className="float-info-label">Active Float</div>
-          <select value={selectedFloat?.id || ''} onChange={handleFloatChange}>
-            {fleet?.map((f) => (
-              <option key={f.id} value={f.id}>
-                Argo #{f.platform_number || f.id}
-              </option>
-            ))}
-          </select>
-          {selectedFloat && (
-            <>
-              <div className="float-info-label" style={{ marginTop: '8px' }}>Coordinates</div>
-              <div className="float-info-val">
-                {selectedFloat.lat?.toFixed(4)}°N, {selectedFloat.lon?.toFixed(4)}°E
-              </div>
-              <div className="float-info-label" style={{ marginTop: '8px' }}>Last Telemetry</div>
-              <div className="float-info-val" style={{ fontSize: '0.8rem' }}>
-                {selectedFloat.time ? new Date(selectedFloat.time).toLocaleString() : '--'}
-              </div>
-            </>
-          )}
+        {/* Depth is driven by the central RegionDepthDock slider column;
+            the live depth is mirrored on the 3D badge overlay. */}
+
+        {/* Top-left edge: Active Float dropdown card, pinned over the 3D viewport */}
+        <div style={{ position: 'absolute', top: '12px', left: '52px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '230px' }}>
+          <div className="float-info-card" style={{ transition: 'all 0.3s ease', padding: '12px', background: 'rgba(5, 12, 26, 0.85)', border: '1px solid rgba(0, 240, 255, 0.2)', borderRadius: '8px', backdropFilter: 'blur(4px)' }}>
+            
+            {/* Header with Toggle */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isInfoMaximized ? '8px' : '0' }}>
+              <div className="float-info-label" style={{ margin: 0 }}>Active Float Icon</div>
+              <button 
+                onClick={() => setIsInfoMaximized(!isInfoMaximized)}
+                style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', fontSize: '10px' }}
+              >
+                {isInfoMaximized ? '-' : '+'}
+              </button>
+            </div>
+
+            {/* Collapsible Content */}
+            {isInfoMaximized && (
+              <>
+                <select value={selectedFloat?.id || ''} onChange={handleFloatChange} style={{ width: '100%', background: 'rgba(0,0,0,0.5)', color: '#00f0ff', border: '1px solid rgba(0,240,255,0.2)', padding: '4px', borderRadius: '4px', fontSize: '12px' }}>
+                  {fleet?.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      Argo #{f.platform_number || f.id}
+                    </option>
+                  ))}
+                </select>
+                {selectedFloat && (
+                  <div style={{ marginTop: '12px' }}>
+                    <div className="float-info-label">Coordinates</div>
+                    <div className="float-info-val" style={{ fontSize: '12px' }}>
+                      {selectedFloat.lat?.toFixed(4)}°N, {selectedFloat.lon?.toFixed(4)}°E
+                    </div>
+                    <div className="float-info-label" style={{ marginTop: '8px' }}>Last Telemetry</div>
+                    <div className="float-info-val" style={{ fontSize: '11px' }}>
+                      {selectedFloat.time ? new Date(selectedFloat.time).toLocaleString() : '--'}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

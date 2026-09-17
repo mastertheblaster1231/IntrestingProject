@@ -35,12 +35,14 @@ export function OceanDashboard({ instruments = [] }) {
   const activeInstrument = useOceanStore((state) => state.activeInstrument);
   const activeDepth =
     useOceanStore((state) => state.activeInstrumentDepth) ?? 15;
-  const { isLive, telemetryStatus } = useOceanData(
+  const { isLive, telemetryStatus, validationData } = useOceanData(
     activeInstrument?.id || "2902351",
     activeDepth,
   );
   const backendStatus =
-    isLive || telemetryStatus === "LIVE STREAM" ? "connected" : "fallback";
+    isLive || telemetryStatus === "LIVE STREAM" || (validationData && validationData.ok !== false && validationData !== null)
+      ? "connected"
+      : "fallback";
 
   // Expose the canvas container ref for Ocean.js to attach the Three.js renderer
   useEffect(() => {

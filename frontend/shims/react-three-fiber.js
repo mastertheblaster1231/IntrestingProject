@@ -24,13 +24,23 @@ export function useFrame(callback) {
   }, [callback]);
 }
 
-export function useThree() {
-  return {
-    camera: typeof window !== 'undefined' ? window.camera : null,
+export function useThree(selector) {
+  const state = {
+    camera: typeof window !== 'undefined' ? (window.__oceanCamera || window.camera) : null,
     scene: typeof window !== 'undefined' ? window.scene : null,
     gl: typeof window !== 'undefined' ? window.__oceanRenderer : null,
     size: { width: typeof window !== 'undefined' ? window.innerWidth : 1920, height: typeof window !== 'undefined' ? window.innerHeight : 1080 },
   };
+  // Real R3F supports selector form useThree((s) => s.gl) — honor it so
+  // shim consumers don't crash on undefined property access.
+  if (typeof selector === 'function') {
+    try {
+      return selector(state);
+    } catch (_err) {
+      return undefined;
+    }
+  }
+  return state;
 }
 
 export const Canvas = ({ children, ...props }) =>
@@ -40,4 +50,23 @@ export const Canvas = ({ children, ...props }) =>
     ...props,
   }, children);
 
-export default { useFrame, useThree, Canvas };
+// No-op catalogue registration (real R3F `extend` maps three classes to JSX
+// intrinsic elements). The comparison view only needs the symbol to exist at
+// build time; rendering is handled by the vanilla Three.js scenes.
+export function extend(_catalogue) {
+  return undefined;
+}
+
+export function useLoader() {
+  return null;
+}
+
+export function useGraph() {
+  return { nodes: {}, materials: {} };
+}
+
+export function createPortal() {
+  return null;
+}
+
+export default { useFrame, useThree, Canvas, extend, useLoader, useGraph, createPortal };

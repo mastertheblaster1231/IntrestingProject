@@ -419,3 +419,90 @@
   background: rgba(0, 229, 255, 0.15);
   color: #00f0ff;
 }
+
+/* ── CENTRAL DEPTH-SLIDER DOCK (one reference-style slider per region) ─── */
+.depth-dock {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  padding: 14px 18px;
+  align-items: stretch;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(0, 229, 255, 0.15);
+  background: rgba(3, 10, 24, 0.65);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.dock-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+
+.dock-readout {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e2f5ff;
+  background: rgba(2, 8, 20, 0.9);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  border-radius: 8px;
+  padding: 3px 8px;
+  min-width: 66px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.dock-track {
+  position: relative;
+  width: 8px;
+  height: 220px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.dock-track:focus-visible {
+  border-color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.dock-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-radius: 6px;
+  background: linear-gradient(to bottom, #00e5ff, #0284c7);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.7);
+  pointer-events: none;
+}
+
+.dock-thumb {
+  position: absolute;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #38bdf8;
+  border: 2px solid #e0f7ff;
+  box-shadow: 0 0 12px #00e5ff, 0 0 4px #ffffff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.dock-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #8bb2db;
+  text-transform: uppercase;
+  text-align: center;
+  max-width: 72px;
+  line-height: 1.35;
+}

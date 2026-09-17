@@ -2359,6 +2359,28 @@
     <!-- React Multi-Window Workspace & Fleet Bar Mount Point -->
     <div id="ocean-react-root"></div>
 
+    <!-- Boot / error overlay: replaces black screen with a diagnostic message -->
+    <div id="ocean-error-overlay" style="display:none; position:fixed; inset:0; z-index:100000; align-items:center; justify-content:center; background:rgba(2,7,19,0.92); padding:24px;">
+      <div style="max-width:520px; background:rgba(6,18,38,0.95); border:1.5px solid rgba(0,229,255,0.5); border-radius:16px; padding:22px 24px; font-family:'Outfit',sans-serif; color:#e2e8f0;">
+        <div data-err-title style="font-weight:700; font-size:1rem; margin-bottom:8px;">⚠️ Ocean 3D failed to start</div>
+        <div data-err-msg style="font-family:'Space Mono',monospace; font-size:0.75rem; color:#fda4af; margin-bottom:12px; word-break:break-word;">Unknown error</div>
+        <div data-err-hint style="font-size:0.8rem; color:#8bb2db; line-height:1.5;">The 3D scene did not boot. Check that the backend (<code>/api/health</code>) and network are reachable, then <a href="/index.html" style="color:#00e5ff;">return to the globe</a> or reload.</div>
+      </div>
+    </div>
+    <script>
+      // Watchdog: if the Ocean.jsx module never sets __oceanBooted (e.g. import
+      // failure), show the overlay instead of leaving a black canvas.
+      setTimeout(function () {
+        if (!window.__oceanBooted) {
+          var overlay = document.getElementById('ocean-error-overlay');
+          // Only show if there is genuinely no canvas rendering yet
+          if (overlay && !document.querySelector('body > canvas') && !document.querySelector('#ocean-react-root canvas')) {
+            overlay.style.display = 'flex';
+          }
+        }
+      }, 9000);
+    </script>
+
     <!-- ======================================================================
          TOP NAVIGATION BAR (Structured & Responsive Header)
          ====================================================================== -->

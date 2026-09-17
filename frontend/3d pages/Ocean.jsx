@@ -20,6 +20,38 @@ import {
   createGliderSawtoothTrail,
 } from "./instruments.js";
 import { fetchArgoDepthSlice } from "../services/argoBackendService.js";
+import { useOceanStore } from "./useOceanStore.js";
+
+// ─── BOOT SAFETY: guarantee the 3D render loop starts even if data init fails ───
+// Any top-level data error before animate() would leave a black canvas, so we
+// (a) bind the zustand store explicitly instead of relying on transitive import
+// side-effects, and (b) surface errors on a DOM overlay instead of black screen.
+if (typeof window !== "undefined" && !window.oceanStore) {
+  window.oceanStore = useOceanStore;
+}
+if (typeof window !== "undefined") {
+  window.__oceanBooted = false;
+  window.addEventListener("error", (e) => {
+    try {
+      const overlay = document.getElementById("ocean-error-overlay");
+      if (overlay && e && e.message) {
+        const title = overlay.querySelector("[data-err-title]");
+        const hint = overlay.querySelector("[data-err-hint]");
+        if (window.__oceanBooted) {
+          // Main 3D scene is alive — a panel/widget failed. Dismissible.
+          if (title) title.textContent = "⚠️ A panel failed to load";
+          if (hint) hint.innerHTML = "The 3D ocean scene is still running. Click anywhere to dismiss and continue, or <a href=\"/index.html\" style=\"color:#00e5ff;\">return to the globe</a>.";
+          overlay.style.display = "flex";
+          overlay.onclick = () => { overlay.style.display = "none"; };
+        } else {
+          overlay.style.display = "flex";
+        }
+        const msg = overlay.querySelector("[data-err-msg]");
+        if (msg) msg.textContent = String(e.message).slice(0, 300);
+      }
+    } catch (_err) { /* never break render loop for overlay errors */ }
+  });
+}
 
 
 // ============================================================================
@@ -161,7 +193,7 @@ controls.maxDistance = 35;
 // ============================================================================
 // 2. SUN & SKY SETUP
 // ============================================================================
-const vertexSkyShader = `
+export const vertexSkyShader = `
   varying vec3 vLocalPosition;
   void main() {
     vLocalPosition = position;
@@ -169,7 +201,7 @@ const vertexSkyShader = `
   }
 `;
 
-const fragmentSkyShader = `
+export const fragmentSkyShader = `
   varying vec3 vLocalPosition;
   uniform vec3 uTopColor;
   uniform vec3 uHorizonColor;
@@ -272,26 +304,29 @@ const sunGeo = new THREE.SphereGeometry(12, 32, 32);
 const sunMat = new THREE.MeshBasicMaterial({
   color: initialPreset.sunColor.clone(),
   fog: false,
+  transparent: true,
 });
 const sunMesh = new THREE.Mesh(sunGeo, sunMat);
 sunGroup.add(sunMesh);
 
-// Soft Outer Sun Corona
+// Soft Outer Sun Corona (shaders exported so panel scenes reuse the same sun)
+export const sunGlowVertexShader = `
+  varying vec3 vNormal;
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+export const sunGlowFragmentShader = `
+  varying vec3 vNormal;
+  void main() {
+    float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+    gl_FragColor = vec4(1.0, 0.9, 0.4, intensity * 0.7);
+  }
+`;
 const sunGlowMat = new THREE.ShaderMaterial({
-  vertexShader: `
-    varying vec3 vNormal;
-    void main() {
-      vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec3 vNormal;
-    void main() {
-      float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
-      gl_FragColor = vec4(1.0, 0.9, 0.4, intensity * 0.7);
-    }
-  `,
+  vertexShader: sunGlowVertexShader,
+  fragmentShader: sunGlowFragmentShader,
   transparent: true,
   blending: THREE.AdditiveBlending,
   side: THREE.BackSide,
@@ -324,7 +359,7 @@ scene.add(ambientLight);
 const cloudsGroup = new THREE.Group();
 scene.add(cloudsGroup);
 
-function createFluffyCloud(x, y, z, scale) {
+export function createFluffyCloud(x, y, z, scale, targetGroup) {
   const cloud = new THREE.Group();
   const puffMat = new THREE.MeshStandardMaterial({
     color: 0xfffae6, // Lightish warm white-yellow
@@ -356,11 +391,12 @@ function createFluffyCloud(x, y, z, scale) {
 
   cloud.position.set(x, y, z);
   cloud.userData = { speed: 0.02 + Math.random() * 0.025, initialX: x };
-  cloudsGroup.add(cloud);
+  (targetGroup || cloudsGroup).add(cloud);
+  return cloud;
 }
 
 // Generate scattered cloud banks in the upper 60% sky
-const cloudConfigs = [
+export const cloudConfigs = [
   { x: -50, y: 28, z: -140, scale: 1.8 },
   { x: 35, y: 34, z: -130, scale: 1.5 },
   { x: -80, y: 22, z: -110, scale: 2.0 },
@@ -378,7 +414,7 @@ cloudConfigs.forEach((c) => createFluffyCloud(c.x, c.y, c.z, c.scale));
 // ============================================================================
 // 4. CUSTOM WATER SHADERS (GLSL Ocean Waves with Specular Sun Glint)
 // ============================================================================
-const waterVertexShader = `
+export const waterVertexShader = `
   uniform float uTime;
   uniform float uBigWavesElevation;
   uniform vec2 uBigWavesFrequency;
@@ -504,7 +540,7 @@ const waterVertexShader = `
   }
 `;
 
-const waterFragmentShader = `
+export const waterFragmentShader = `
   uniform vec3 uDepthColor;
   uniform vec3 uSurfaceColor;
   uniform vec3 uFoamColor;
@@ -1505,28 +1541,54 @@ window.queryOceanDataByDateTime = async function (dateStr, timeStr = "12:00") {
 
 // Asynchronously load float metadata & populate right-hand description bar
 async function initFloatDescription() {
+  try {
   const urlParams = new URLSearchParams(window.location.search);
   const buoyId = urlParams.get("id") || "A7";
   const urlLat = urlParams.get("lat");
   const urlLon = urlParams.get("lon");
   const urlSea = urlParams.get("sea");
 
-  let stationFallback = getStationById(buoyId);
-  
+  let stationFallback = getStationById(buoyId) || getStationById("A7");
+
+  // Numeric WMO ids arrive from the globe orbital-dive (e.g. ?id=2902251).
+  // getStationById() falls back to AD07 for unknown ids, so preserve the real
+  // WMO + coordinates explicitly instead of inheriting the fallback's wmoId.
+  const numericWmo = String(buoyId || "").replace(/\D/g, "");
+  const isNumericWmo = numericWmo.length >= 5;
+
   if (urlLat && urlLon) {
+    const lat = parseFloat(urlLat);
+    const lon = parseFloat(urlLon);
     currentStation = {
       ...stationFallback,
-      id: buoyId,
-      code: buoyId,
-      lat: parseFloat(urlLat),
-      lon: parseFloat(urlLon),
+      id: isNumericWmo ? numericWmo : buoyId,
+      code: isNumericWmo ? numericWmo : buoyId,
+      wmoId: isNumericWmo ? numericWmo : (stationFallback.wmoId || numericWmo || "2902351"),
+      lat: Number.isFinite(lat) ? lat : stationFallback.lat,
+      lon: Number.isFinite(lon) ? lon : stationFallback.lon,
       sea: urlSea || stationFallback.sea,
       name: `Argo Float ${buoyId}`
+    };
+  } else if (isNumericWmo) {
+    // Direct ?id=<wmo> link without coordinates — keep the WMO, use fallback position
+    currentStation = {
+      ...stationFallback,
+      id: numericWmo,
+      code: numericWmo,
+      wmoId: numericWmo,
+      name: `Argo Float ${numericWmo}`,
     };
   } else {
     currentStation = stationFallback;
   }
-  const floatData = await oceanDataService.getFloatDetails(currentStation);
+  let floatData = null;
+  try {
+    floatData = await oceanDataService.getFloatDetails(currentStation);
+  } catch (dataErr) {
+    console.warn("[Ocean] getFloatDetails failed, retrying with default station:", dataErr?.message);
+    currentStation = getStationById("A7");
+    floatData = await oceanDataService.getFloatDetails(currentStation);
+  }
   populateUIWithFloatData(floatData);
 
   if (window.oceanStore) {
@@ -1565,9 +1627,19 @@ async function initFloatDescription() {
 
   // Apply the initial time of day preset
   applySolarPreset(initialPreset);
+  } catch (bootErr) {
+    // NEVER let a data failure kill the 3D scene — fall back to default station
+    console.error("[Ocean] initFloatDescription failed, using fallback station:", bootErr);
+    try {
+      currentStation = getStationById("A7");
+      const fallbackData = await oceanDataService.getFloatDetails(currentStation);
+      populateUIWithFloatData(fallbackData);
+      applySolarPreset(initialPreset);
+    } catch (_fatal) { /* scene + animate() below still run */ }
+  }
 }
 
-initFloatDescription();
+initFloatDescription().catch((e) => console.error("[Ocean] initFloatDescription unhandled:", e));
 
 // ============================================================================
 // 5. VOLUMETRIC CAUSTIC SUNLIGHT SHAFTS (GOD RAYS)
@@ -1819,7 +1891,7 @@ window.ARGO_FLOAT_CONFIG = ARGO_FLOAT_CONFIG;
 let argoDiveY = 0.0;
 let argoDiveRatio = 0.0;
 
-function createArgoFloatModel() {
+export function createArgoFloatModel() {
   const floatGroup = new THREE.Group();
 
   // Materials matching the real APEX Argo float
@@ -3651,10 +3723,21 @@ function animate() {
   }
   controls.update();
 
-  renderer.render(scene, camera);
+  try {
+    renderer.render(scene, camera);
+  } catch (renderErr) {
+    console.error("[Ocean] render failed (loop survives):", renderErr?.message);
+  }
+  if (typeof window !== "undefined") window.__oceanBooted = true;
 }
 
-animate();
+try {
+  animate();
+} catch (bootErr) {
+  console.error("[Ocean] animate() failed to start:", bootErr);
+  // Last-resort retry: the canvas exists, so schedule one more attempt
+  try { requestAnimationFrame(animate); } catch (_e) {}
+}
 
 // ============================================================================
 // 9. REACT MULTI-WINDOW WORKSPACE & FLEET BAR MOUNT

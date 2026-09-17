@@ -62,9 +62,9 @@ export const REGION_DICTIONARY = {
 /** All region names sorted alphabetically for autocomplete */
 export const REGION_NAMES = Object.keys(REGION_DICTIONARY).sort();
 
-/** Generate a stable ID from a region name */
-function regionId(name) {
-  return name.toLowerCase().replace(/\s+/g, '-');
+/** Generate a unique ID for a panel */
+function generatePanelId(name) {
+  return `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
 }
 
 // ─── STORE ───────────────────────────────────────────────────────────────────
@@ -92,14 +92,8 @@ export const useComparisonStore = create((set, get) => ({
     const bbox = REGION_DICTIONARY[name];
     if (!bbox) return;
 
-    const id = regionId(name);
+    const id = generatePanelId(name);
     const state = get();
-
-    // Don't add duplicates
-    if (state.regions.some((r) => r.id === id)) {
-      set({ activeRegionId: id, isComparisonOpen: true, isSearchOpen: false });
-      return;
-    }
 
     const newRegion = { id, name, bbox };
 

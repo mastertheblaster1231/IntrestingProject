@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useComparisonStore, REGION_NAMES } from './useComparisonStore.js';
 import { RegionPanel } from './RegionPanel.jsx';
+import { RegionDepthDock } from './PanelDepthSlider.jsx';
 import './ComparisonWindow.css';
 
 export function ComparisonWindow() {
@@ -111,10 +112,13 @@ export function ComparisonWindow() {
         )}
       </div>
 
-      <div className="comparison-body">
-        {regions.map((r) => (
-          <RegionPanel key={r.id} region={r} />
-        ))}
+      <div className="comparison-content-wrapper" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="comparison-body" style={{ flex: 1, overflowY: 'auto' }}>
+          {regions.map((r) => (
+            <RegionPanel key={r.id} region={r} />
+          ))}
+        </div>
+        <RegionDepthDock />
       </div>
     </div>
   );
