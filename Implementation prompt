@@ -1,0 +1,171 @@
+# Multi-Region Ocean Data Comparison Tool — Implementation Plan
+
+Build a polished, glassmorphism-styled overlay that allows side-by-side comparison of live Argo telemetry across multiple ocean regions. All data flows through the existing Node/Express backend endpoints (`/api/fleet`, `/api/argo/depth-slice`, `/api/validation`).
+
+## Proposed Changes
+
+### 1. Zustand Comparison Store Slice
+
+#### [NEW] [useComparisonStore.js](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/useComparisonStore.js)
+
+A **standalone Zustand store** (not merged into the 1,700-line `useOceanStore.js`) to keep comparison state isolated and avoid conflicts.
+
+**State shape:**
+```js
+{
+  isComparisonOpen: false,       // toggle overlay
+  isSearchOpen: false,           // inline search bar visible
+  regions: [],                   // array of { id, name, bbox: {lat_min, lat_max, lon_min, lon_max} }
+  activeRegionId: null,          // currently selected tab
+  regionData: {                  // keyed by region id
+    [id]: {
+      depth: 0,                  // slider position
+      fleet: [],                 // from /api/fleet
+      selectedFloat: null,       // chosen platform from fleet
+      depthSlice: null,          // from /api/argo/depth-slice
+      validation: null,          // from /api/validation
+      isLoadingFleet: false,
+      isLoadingSlice: false,
+      isLoadingValidation: false,
+    }
+  }
+}
+```
+
+**Actions:**
+- `openComparison()` / `closeComparison()`
+- `toggleSearch()`
+- `addRegion(name)` — maps name → bounding box using a dictionary, adds to `regions[]`, auto-opens overlay
+- `removeRegion(id)` — removes region tab/panel
+- `setRegionDepth(id, depth)` — updates the depth slider for a panel
+- `selectFloat(id, platform)` — picks an argo float from the fleet list
+- `fetchFleet(id)` — calls `GET /api/fleet?lat_min=&lat_max=&lon_min=&lon_max=`
+- `fetchDepthSlice(id)` — calls `GET /api/argo/depth-slice?platform_number=${selectedFloat}&depth=${depth}`
+- `fetchValidation(id)` — calls `GET /api/validation?platform_number=${selectedFloat}&depth=${depth}`
+
+**Region bounding box dictionary** (built-in, extensible):
+
+| Region | lat_min | lat_max | lon_min | lon_max |
+|--------|---------|---------|---------|---------|
+| Arabian Sea | 5 | 25 | 55 | 78 |
+| Bay of Bengal | 5 | 22 | 78 | 98 |
+| Lakshadweep Sea | 8 | 14 | 70 | 77 |
+| Andaman Sea | 5 | 18 | 92 | 100 |
+| Indian Ocean | 0 | 25 | 55 | 98 |
+| South China Sea | 0 | 23 | 100 | 121 |
+| Red Sea | 12 | 30 | 32 | 44 |
+| Persian Gulf | 24 | 30 | 48 | 56 |
+
+---
+
+### 2. TopNavbar Integration (Phase 1: Trigger & Search)
+
+#### [MODIFY] [TopNavbar.jsx](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/panels/TopNavbar.jsx)
+
+- Add a **`+ Compare`** button between the left brand cluster and right timeline cluster.
+- Clicking it toggles `isSearchOpen` in the comparison store.
+- When search is open, render an inline `<input>` with autocomplete dropdown of region names.
+- On Enter or selection: call `addRegion(name)`, which auto-opens the comparison overlay.
+
+**Design**: The button uses the existing `nav-back-btn` style with neon cyan accent. The search input slides in with a CSS transition.
+
+---
+
+### 3. Comparison Window Overlay (Phase 2)
+
+#### [NEW] [ComparisonWindow.jsx](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/ComparisonWindow.jsx)
+
+Full-screen modal overlay (`position: fixed; inset: 0; z-index: 100`) with:
+
+- **Header**: 
+  - Title "Comparison Window" 
+  - Inline search bar to add more regions (reuses the same autocomplete logic)
+  - Close (×) button
+- **Region Tabs Row**: Horizontal tab pills for each active region with × to remove
+- **Split-Pane Body**: A CSS flexbox layout that dynamically adjusts column count (2 regions → 2 columns, 3 → 3, etc.). Includes draggable dividers between panels using `mousedown/mousemove/mouseup` events (pure JS, no extra library needed — the project already has `react-resizable-panels` but we'll use a lightweight custom approach to stay self-contained).
+
+**Glassmorphism Design Tokens** (matching existing system in `PanelStyles.css`):
+- Background: `rgba(10, 18, 36, 0.92)` with `backdrop-filter: blur(28px)`
+- Borders: `rgba(0, 229, 255, 0.25)`
+- Accent glow: `#00e5ff` / `#00f0ff`
+- Cards: `rgba(8, 22, 46, 0.78)`
+
+---
+
+### 4. Per-Region Ocean Panel (Phase 3)
+
+#### [NEW] [RegionPanel.jsx](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/RegionPanel.jsx)
+
+Each vertical column inside the comparison overlay contains:
+
+1. **Header**: Region name + status badge (loading / live / fallback)
+
+2. **Depth Slider (top ~50%)**:
+   - Vertical range input (0m → 4000m) styled with neon cyan track
+   - Numeric input box above with "GO" button to jump to typed depth
+   - **Hover tooltip**: On hover over slider track, shows closest Argo float at that depth (Argo ID, Lat/Lon, location name). This uses the `fleet` data fetched for the region.
+   - Depth changes are **debounced (300ms)** before triggering API calls
+
+3. **Data Table (bottom ~50%)**:
+   - Two columns: **Real Argo Data** | **Model vs Observation**
+   - Rows: Temp (°C), Salinity (PSU), O₂ Diss (µmol/kg), Speed (m/s), Chl-a (mg/m³), Coordinates, Observation Time
+   - Real data populates from `GET /api/argo/depth-slice`
+   - Model vs Observation populates from `GET /api/validation`
+   - Delta values shown with color coding (green = small residual, amber = moderate, red = large)
+
+**Data Flow per panel**:
+1. On region add → `fetchFleet(regionId)` using the region's bounding box
+2. Fleet response → auto-select the first platform (`selectedFloat`)
+3. On depth change (debounced) → parallel calls to `fetchDepthSlice` + `fetchValidation`
+4. Results populate the data table reactively
+
+---
+
+### 5. CSS Styling
+
+#### [NEW] [ComparisonWindow.css](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/ComparisonWindow.css)
+
+Dedicated CSS file for all comparison window styles. Follows the existing design token system from `PanelStyles.css`:
+- Dark glassmorphism backgrounds
+- Neon cyan/blue borders and accents (`#00e5ff`)
+- `backdrop-filter: blur(24px) saturate(180%)`
+- Smooth transitions and micro-animations
+- Vertical depth slider styled to match the existing ocean depth bar
+- Responsive grid layout for 2–4 region panels
+
+---
+
+### 6. OceanDashboard Integration
+
+#### [MODIFY] [OceanDashboard.jsx](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/OceanDashboard.jsx)
+
+- Import and render `<ComparisonWindow />` inside the dashboard (conditionally based on `isComparisonOpen`)
+- Positioned as a sibling to the canvas overlay, at a higher z-index
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Region dictionary completeness**: The 8 built-in regions listed above cover the Indian Ocean, Arabian Sea, Bay of Bengal, Lakshadweep, Andaman, South China Sea, Red Sea, and Persian Gulf. Should I add more regions (e.g., Pacific, Atlantic sub-basins)?
+
+> [!NOTE]
+> **Maximum panels**: The layout supports up to 4 side-by-side panels comfortably. Beyond 4, panels become too narrow. Should I cap at 4 regions max, or allow scrolling?
+
+---
+
+## Verification Plan
+
+### Manual Verification
+1. Click `+ Compare` in the navbar → search bar appears with slide animation
+2. Type "Arabian Sea" + Enter → Comparison overlay opens with 1 panel
+3. Add "Bay of Bengal" → 2 side-by-side panels with draggable divider
+4. Verify each panel fetches fleet data from `/api/fleet` (check Network tab)
+5. Move depth slider → verify debounced calls to `/api/argo/depth-slice` and `/api/validation`
+6. Verify data table populates with real API response values
+7. Hover over depth slider track → verify tooltip shows closest Argo float info
+8. Close overlay → verify globe canvas is interactive again
+
+### Automated Verification
+- `npm run dev` — confirm no build errors
+- Browser DevTools Network tab — confirm all 3 API endpoints are called with correct query params
