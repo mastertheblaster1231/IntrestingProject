@@ -86,6 +86,11 @@ export async function fetchErddapJson(url, { retries = 1, timeoutMs = ERDDAP_TIM
         // data" — surface the body, it explains which.
         const body = await res.text().catch(() => '');
         const detail = body.slice(0, 300).replace(/\s+/g, ' ').trim();
+        
+        if (res.status === 404 && detail.includes('no matching results')) {
+          return { table: { columnNames: [], columnTypes: [], rows: [] } };
+        }
+
         lastError = new Error(`ERDDAP ${res.status} for ${url} :: ${detail}`);
 
         if (res.status === 429 && attempt < retries) {
@@ -135,6 +140,55 @@ export function parseTable(json) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Argo floats dive in discrete cycles roughly 10 days apart, not continuously.
+ * "Historical data at timestamp X" cannot mean "the exact reading at X" — it
+ * means "the nearest real cycle to X". This builds an absolute ERDDAP time
+ * window around a requested timestamp so a nearby cycle can be found, rather
+ * than pretending a continuous time series exists.
+ *
+ * When atTime is omitted, falls back to the existing relative-days behaviour
+ * used for live views.
+ */
+export function buildTimeConstraints(atTime, days, windowDays) {
+  if (!atTime) return [C.ge('time', relativeDays(days))];
+
+  const center = new Date(atTime);
+  if (Number.isNaN(center.getTime())) {
+    throw Object.assign(new Error(`Invalid time value: ${atTime}`), { code: 'BAD_INPUT' });
+  }
+  const start = new Date(center.getTime() - windowDays * 86400000).toISOString();
+  const end = new Date(center.getTime() + windowDays * 86400000).toISOString();
+  return [C.ge('time', start), C.le('time', end)];
+}
+
+/**
+ * Picks a cycle_number from a set of rows.
+ * atTime omitted -> the latest cycle (live view).
+ * atTime given    -> the cycle whose own time is nearest atTime.
+ */
+export function pickCycle(rows, atTime) {
+  if (!atTime) {
+    return Math.max(...rows.map((r) => Number(r.cycle_number) || 0));
+  }
+  const target = new Date(atTime).getTime();
+  const timeByCycle = new Map();
+  for (const r of rows) {
+    const c = Number(r.cycle_number) || 0;
+    if (!timeByCycle.has(c)) timeByCycle.set(c, r.time);
+  }
+  let best = null;
+  let bestDiff = Infinity;
+  for (const [cycle, t] of timeByCycle) {
+    const diff = Math.abs(new Date(t).getTime() - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = cycle;
+    }
+  }
+  return best;
+}
 
 /**
  * Small in-memory TTL cache with request de-duplication, so ten browser tabs

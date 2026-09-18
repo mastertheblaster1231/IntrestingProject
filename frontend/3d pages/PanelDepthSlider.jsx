@@ -53,9 +53,57 @@ export function PanelDepthSlider({ value = 0, max = DOCK_MAX_DEPTH, onChange, la
     else if (e.key === 'End') { e.preventDefault(); onChange(max); }
   };
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+
+  const handleFocus = () => {
+    setIsEditing(true);
+    setInputValue(String(Math.round(clamped)));
+  };
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    const parsed = parseInt(inputValue, 10);
+    if (!isNaN(parsed)) {
+      onChange(Math.max(0, Math.min(max, parsed)));
+    }
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+
   return (
     <div className="dock-slider">
-      <div className="dock-readout">{String(Math.round(clamped)).padStart(4, '0')} m</div>
+      <div className="dock-readout" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        {isEditing ? (
+          <input
+            type="number"
+            value={inputValue}
+            autoFocus
+            onChange={(e) => setInputValue(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={handleInputKeyDown}
+            style={{
+              width: '40px',
+              background: 'rgba(0,0,0,0.5)',
+              color: '#00f0ff',
+              border: '1px solid rgba(0,240,255,0.5)',
+              borderRadius: '4px',
+              textAlign: 'center',
+              fontSize: '11px',
+              fontFamily: 'inherit',
+              padding: '2px',
+              outline: 'none',
+              MozAppearance: 'textfield'
+            }}
+          />
+        ) : (
+          <div style={{ cursor: 'text' }} onClick={handleFocus}>
+            {String(Math.round(clamped)).padStart(4, '0')} m
+          </div>
+        )}
+      </div>
       <div
         ref={trackRef}
         className="dock-track"

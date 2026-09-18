@@ -1,9 +1,11 @@
 import {
   C,
   buildTableUrl,
+  buildTimeConstraints,
   createCache,
   fetchErddapJson,
   parseTable,
+  pickCycle,
   relativeDays,
 } from './erddap.js';
 import { availability, round, sanitize, sanitizeWithQc } from './sanitize.js';
@@ -90,17 +92,34 @@ export async function fetchFleet({
 }
 
 /**
- * Vertical physics profile for one float: the most recent complete cycle.
+ * Vertical physics profile for one float.
+ *
+ * Two modes:
+ *   atTime omitted -> most recent cycle within `days` (live view)
+ *   atTime given    -> the cycle whose own time is closest to atTime, searched
+ *                       within +/- windowDays. Position and time in the
+ *                       response reflect that CYCLE's actual timestamp and
+ *                       location (floats drift), not the requested one.
+ *
+ * Throws with .code === 'EMPTY_RESULT' when the float genuinely has nothing
+ * in the searched window — that is a normal, expected outcome for historical
+ * queries (Argo floats aren't always active, and windows can miss every
+ * cycle), not a failure. Callers that want silent "--" cells rather than an
+ * error page should catch that code specifically and render nulls.
  *
  * The previous implementation used orderByMax("time") while also requesting
  * pres, which groups by pressure level and returns the newest reading at each
  * depth — a profile stitched from different dives. Here we request
- * cycle_number, then keep only the highest cycle. One dive, one profile.
+ * cycle_number and keep only one dive's rows together.
  */
-export async function fetchCoreProfile(platformNumber, { days = 120, maxPres = 2100 } = {}) {
+export async function fetchCoreProfile(
+  platformNumber,
+  { days = 120, maxPres = 2100, atTime = null, windowDays = 45 } = {}
+) {
   const pid = String(platformNumber).replace(/^argo-/i, '').trim();
+  const cacheKey = `core:${pid}:${days}:${maxPres}:${atTime || 'latest'}:${windowDays}`;
 
-  return profileCache.wrap(`core:${pid}:${days}:${maxPres}`, async () => {
+  return profileCache.wrap(cacheKey, async () => {
     const url = buildTableUrl(
       CORE_BASE,
       [
@@ -118,19 +137,24 @@ export async function fetchCoreProfile(platformNumber, { days = 120, maxPres = 2
       ],
       [
         C.eqStr('platform_number', pid),
-        C.ge('time', relativeDays(days)),
+        ...buildTimeConstraints(atTime, days, windowDays),
         C.le('pres', maxPres),
       ]
     );
 
     const rows = parseTable(await fetchErddapJson(url));
     if (rows.length === 0) {
-      throw new Error(`No core Argo data for float ${pid} in the last ${days} days`);
+      const err = new Error(
+        atTime
+          ? `Float ${pid} has no cycle within ${windowDays} days of ${atTime}`
+          : `No core Argo data for float ${pid} in the last ${days} days`
+      );
+      err.code = 'EMPTY_RESULT';
+      throw err;
     }
 
-    // Keep only the latest dive.
-    const latestCycle = Math.max(...rows.map((r) => Number(r.cycle_number) || 0));
-    const cycleRows = rows.filter((r) => Number(r.cycle_number) === latestCycle);
+    const targetCycle = pickCycle(rows, atTime);
+    const cycleRows = rows.filter((r) => Number(r.cycle_number) === targetCycle);
 
     const levels = cycleRows
       .map((r) => {
@@ -148,7 +172,9 @@ export async function fetchCoreProfile(platformNumber, { days = 120, maxPres = 2
       .sort((a, b) => a.depth - b.depth);
 
     if (levels.length === 0) {
-      throw new Error(`Float ${pid} cycle ${latestCycle} has no levels that pass QC`);
+      const err = new Error(`Float ${pid} cycle ${targetCycle} has no levels that pass QC`);
+      err.code = 'EMPTY_RESULT';
+      throw err;
     }
 
     const withPosition = cycleRows.find(
@@ -157,10 +183,12 @@ export async function fetchCoreProfile(platformNumber, { days = 120, maxPres = 2
 
     return {
       platform_number: pid,
-      cycle_number: latestCycle,
+      cycle_number: targetCycle,
       time: cycleRows[0]?.time ?? null,
+      requested_time: atTime,
       // These were always null before: latitude and longitude were read from
-      // columns that the query never requested.
+      // columns that the query never requested. Note this is the position AT
+      // THIS CYCLE, not the float's current position — it drifts between dives.
       lat: withPosition ? round(Number(withPosition.latitude), 4) : null,
       lon: withPosition ? round(Number(withPosition.longitude), 4) : null,
       levels,

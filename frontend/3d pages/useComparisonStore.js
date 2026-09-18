@@ -1,4 +1,17 @@
 import { create } from 'zustand';
+import { apiUrl } from '../services/api.js';
+
+// Module-level cache for AbortControllers to prevent unneeded re-renders & race conditions
+const abortControllers = {
+  depthSlice: {},
+  validation: {}
+};
+
+// Module-level debounce timers for slider / frequent updates
+const debounceTimers = {
+  depthSlice: {},
+  validation: {}
+};
 
 /**
  * useComparisonStore.js — Zustand State for Multi-Region Ocean Comparison
@@ -6,12 +19,10 @@ import { create } from 'zustand';
  * Standalone store (separate from useOceanStore) managing:
  *   - Comparison overlay open/close
  *   - Region search and bounding box lookup
- *   - Per-region: fleet data, depth slider, depth-slice, validation
+ *   - Per-region: fleet data, depth slider, timestamp, depth-slice, validation
  *
  * All data is fetched from the Node/Express backend live endpoints.
  */
-
-import { apiUrl } from '../services/api.js';
 
 // ─── REGION BOUNDING BOX DICTIONARY ──────────────────────────────────────────
 // Worldwide regions where real-time Argo floats are deployed.
@@ -102,7 +113,8 @@ export const useComparisonStore = create((set, get) => ({
       regionData: {
         ...s.regionData,
         [id]: {
-          depth: 0,
+          depth: 15,
+          timestamp: null,
           fleet: [],
           selectedFloat: null,
           depthSlice: null,
@@ -152,6 +164,18 @@ export const useComparisonStore = create((set, get) => ({
       regionData: {
         ...s.regionData,
         [id]: { ...s.regionData[id], depth: clamped },
+      },
+    }));
+  },
+
+  /**
+   * Set the historical timestamp for a region panel (null = live)
+   */
+  setRegionTimestamp: (id, timestamp) => {
+    set((s) => ({
+      regionData: {
+        ...s.regionData,
+        [id]: { ...s.regionData[id], timestamp },
       },
     }));
   },
@@ -232,14 +256,22 @@ export const useComparisonStore = create((set, get) => ({
 
   /**
    * Fetch depth-slice telemetry for the selected float in a region.
-   * Uses: GET /api/argo/depth-slice?platform_number=${id}&depth=${depth}
+   * Uses: GET /api/argo/depth-slice
    */
   fetchDepthSlice: async (id) => {
     const data = get().regionData[id];
     if (!data || !data.selectedFloat) return;
 
     const platformNumber = data.selectedFloat.platform_number || data.selectedFloat.id;
-    const depth = data.depth || 0;
+    const depth = data.depth || 15;
+    const timestamp = data.timestamp;
+
+    // Abort previous in-flight request for this region
+    if (abortControllers.depthSlice[id]) {
+      abortControllers.depthSlice[id].abort();
+    }
+    const ac = new AbortController();
+    abortControllers.depthSlice[id] = ac;
 
     set((s) => ({
       regionData: {
@@ -249,8 +281,14 @@ export const useComparisonStore = create((set, get) => ({
     }));
 
     try {
-      const url = apiUrl(`/api/argo/depth-slice?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}`);
-      const res = await fetch(url);
+      const params = new URLSearchParams({
+        platform_number: platformNumber,
+        depth: String(depth),
+      });
+      if (timestamp) params.set('time', timestamp);
+      
+      const url = apiUrl(`/api/argo/depth-slice?${params}`);
+      const res = await fetch(url, { signal: ac.signal });
       if (!res.ok) throw new Error(`Depth-slice API HTTP ${res.status}`);
       const depthSlice = await res.json();
 
@@ -261,6 +299,7 @@ export const useComparisonStore = create((set, get) => ({
         },
       }));
     } catch (err) {
+      if (err.name === 'AbortError') return; // Ignore aborted fetch
       console.warn(`[ComparisonStore] Depth-slice fetch failed for ${id}:`, err.message);
       set((s) => ({
         regionData: {
@@ -273,16 +312,22 @@ export const useComparisonStore = create((set, get) => ({
 
   /**
    * Fetch model-vs-observation validation for the selected float.
-   * Uses: GET /api/validation?platform_number=${id}&depth=${depth}
+   * Uses: GET /api/validation
    */
   fetchValidation: async (id) => {
     const data = get().regionData[id];
     if (!data || !data.selectedFloat) return;
 
     const platformNumber = data.selectedFloat.platform_number || data.selectedFloat.id;
-    const depth = data.depth || 0;
-    const lat = data.selectedFloat.lat || 0;
-    const lon = data.selectedFloat.lon || 0;
+    const depth = data.depth || 15;
+    const timestamp = data.timestamp;
+
+    // Abort previous in-flight request for this region
+    if (abortControllers.validation[id]) {
+      abortControllers.validation[id].abort();
+    }
+    const ac = new AbortController();
+    abortControllers.validation[id] = ac;
 
     set((s) => ({
       regionData: {
@@ -292,8 +337,14 @@ export const useComparisonStore = create((set, get) => ({
     }));
 
     try {
-      const url = apiUrl(`/api/validation?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}&lat=${lat}&lon=${lon}`);
-      const res = await fetch(url);
+      const params = new URLSearchParams({
+        platform_number: platformNumber,
+        depth: String(depth),
+      });
+      if (timestamp) params.set('time', timestamp);
+      
+      const url = apiUrl(`/api/validation?${params}`);
+      const res = await fetch(url, { signal: ac.signal });
       if (!res.ok) throw new Error(`Validation API HTTP ${res.status}`);
       const validation = await res.json();
 
@@ -304,6 +355,7 @@ export const useComparisonStore = create((set, get) => ({
         },
       }));
     } catch (err) {
+      if (err.name === 'AbortError') return; // Ignore aborted fetch
       console.warn(`[ComparisonStore] Validation fetch failed for ${id}:`, err.message);
       set((s) => ({
         regionData: {

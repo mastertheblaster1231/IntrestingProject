@@ -19,6 +19,9 @@ function DeltaBadge({ delta }) {
 export function RegionPanel({ region }) {
   const data = useComparisonStore((s) => s.regionData[region.id]);
   const selectFloat = useComparisonStore((s) => s.selectFloat);
+  const setRegionTimestamp = useComparisonStore((s) => s.setRegionTimestamp);
+  const fetchDepthSlice = useComparisonStore((s) => s.fetchDepthSlice);
+  const fetchValidation = useComparisonStore((s) => s.fetchValidation);
 
   const [hoveredFloat, setHoveredFloat] = useState(null);
   const [isInfoMaximized, setIsInfoMaximized] = useState(true);
@@ -27,7 +30,7 @@ export function RegionPanel({ region }) {
 
   // Depth is owned by the central RegionDepthDock (per-region slider column);
   // the 3D view follows the store value directly — no local slider state here.
-  const panelDepth = data.depth ?? 0;
+  const panelDepth = data.depth ?? 15;
 
   const {
     fleet,
@@ -44,27 +47,58 @@ export function RegionPanel({ region }) {
     selectFloat(region.id, float || null);
   };
 
-  // Safe accessors for data
-  const realTemp = depthSlice?.primary_oceanographic_variables?.temperature_c;
-  const realSal = depthSlice?.primary_oceanographic_variables?.salinity_psu;
-  const realO2 = depthSlice?.primary_oceanographic_variables?.dissolved_oxygen_umol_kg;
-  const realSpeed = depthSlice?.primary_oceanographic_variables?.current_speed_m_s;
-  const realChl = depthSlice?.primary_oceanographic_variables?.chlorophyll_a_mg_m3;
-  
-  const modTemp = validation?.variables?.find(v => v.name === 'Temp');
-  const modSal = validation?.variables?.find(v => v.name === 'Salinity');
-  const modO2 = validation?.variables?.find(v => v.name === 'O₂ Diss');
-  const modSpeed = validation?.variables?.find(v => v.name === 'Speed');
-  const modChl = validation?.variables?.find(v => v.name === 'Chl-a');
+  const handleTimestampChange = (e) => {
+    const val = e.target.value;
+    const iso = val ? new Date(val).toISOString() : null;
+    setRegionTimestamp(region.id, iso);
+    // Fetch immediately on time selection
+    fetchDepthSlice(region.id);
+    fetchValidation(region.id);
+  };
+
+  const clearTimestamp = () => {
+    setRegionTimestamp(region.id, null);
+    fetchDepthSlice(region.id);
+    fetchValidation(region.id);
+  };
+
+  const formatVal = (val, decimals = 2) =>
+    typeof val === 'number' && Number.isFinite(val) ? val.toFixed(decimals) : '--';
+
+  const getLocalDatetimeString = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const isLoading = isLoadingFleet || isLoadingSlice || isLoadingValidation;
 
   return (
     <div className="region-panel">
-      <div className="region-header">
-        <div className="region-name">{region.name}</div>
+      <div className="region-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div className="region-name">{region.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input 
+              type="datetime-local" 
+              value={getLocalDatetimeString(data.timestamp)} 
+              onChange={handleTimestampChange}
+              style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', border: '1px solid rgba(0,240,255,0.3)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}
+            />
+            {data.timestamp && (
+              <button 
+                onClick={clearTimestamp}
+                style={{ background: 'transparent', color: '#00f0ff', border: '1px solid rgba(0,240,255,0.5)', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' }}
+              >
+                Live
+              </button>
+            )}
+          </div>
+        </div>
         <div className={`region-status ${isLoading ? 'loading' : ''}`}>
-          {isLoading ? 'Fetching Data...' : 'LIVE STREAM'}
+          {isLoading ? 'Fetching Data...' : data.timestamp ? 'HISTORICAL' : 'LIVE STREAM'}
         </div>
       </div>
 
@@ -107,11 +141,16 @@ export function RegionPanel({ region }) {
                   <div style={{ marginTop: '12px' }}>
                     <div className="float-info-label">Coordinates</div>
                     <div className="float-info-val" style={{ fontSize: '12px' }}>
-                      {selectedFloat.lat?.toFixed(4)}°N, {selectedFloat.lon?.toFixed(4)}°E
+                      {validation?.location?.lat?.toFixed(4) ?? selectedFloat.lat?.toFixed(4)}°N, {validation?.location?.lon?.toFixed(4) ?? selectedFloat.lon?.toFixed(4)}°E
                     </div>
-                    <div className="float-info-label" style={{ marginTop: '8px' }}>Last Telemetry</div>
+                    {data.timestamp && validation?.time && Math.abs(new Date(validation.time) - new Date(data.timestamp)) > 86400000 && (
+                      <div style={{ fontSize: '10px', color: '#fbbf24', marginTop: '4px', lineHeight: '1.2' }}>
+                        Nearest cycle: {new Date(validation.time).toLocaleDateString()} ({Math.round(Math.abs(new Date(validation.time) - new Date(data.timestamp)) / 86400000)} days from requested)
+                      </div>
+                    )}
+                    <div className="float-info-label" style={{ marginTop: '8px' }}>Cycle Time</div>
                     <div className="float-info-val" style={{ fontSize: '11px' }}>
-                      {selectedFloat.time ? new Date(selectedFloat.time).toLocaleString() : '--'}
+                      {validation?.time ? new Date(validation.time).toLocaleString() : '--'}
                     </div>
                   </div>
                 )}
@@ -132,36 +171,24 @@ export function RegionPanel({ region }) {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>Temp (°C)</td>
-              <td className="val-real" style={{ textAlign: 'center' }}>{realTemp ?? '--'}</td>
-              <td className="val-model" style={{ textAlign: 'center' }}>{modTemp?.model ?? '--'}</td>
-              <td><DeltaBadge delta={modTemp?.delta} /></td>
-            </tr>
-            <tr>
-              <td>Salinity (PSU)</td>
-              <td className="val-real" style={{ textAlign: 'center' }}>{realSal ?? '--'}</td>
-              <td className="val-model" style={{ textAlign: 'center' }}>{modSal?.model ?? '--'}</td>
-              <td><DeltaBadge delta={modSal?.delta} /></td>
-            </tr>
-            <tr>
-              <td>O₂ Diss (µmol/kg)</td>
-              <td className="val-real" style={{ textAlign: 'center' }}>{realO2 ?? '--'}</td>
-              <td className="val-model" style={{ textAlign: 'center' }}>{modO2?.model ?? '--'}</td>
-              <td><DeltaBadge delta={modO2?.delta} /></td>
-            </tr>
-            <tr>
-              <td>Speed (m/s)</td>
-              <td className="val-real" style={{ textAlign: 'center' }}>{realSpeed ?? '--'}</td>
-              <td className="val-model" style={{ textAlign: 'center' }}>{modSpeed?.model ?? '--'}</td>
-              <td><DeltaBadge delta={modSpeed?.delta} /></td>
-            </tr>
-            <tr>
-              <td>Chl-a (mg/m³)</td>
-              <td className="val-real" style={{ textAlign: 'center' }}>{realChl ?? '--'}</td>
-              <td className="val-model" style={{ textAlign: 'center' }}>{modChl?.model ?? '--'}</td>
-              <td><DeltaBadge delta={modChl?.delta} /></td>
-            </tr>
+            {validation?.variables?.map(row => (
+              <tr key={row.key}>
+                <td>{row.name} {row.unit ? `(${row.unit})` : ''}</td>
+                <td className="val-real" style={{ textAlign: 'center' }} title={row.reason ?? ''}>
+                  {formatVal(row.observed, row.key === 'doxy' ? 1 : row.key === 'chla' ? 3 : 2)}
+                </td>
+                <td className="val-model" style={{ textAlign: 'center' }}>
+                  {formatVal(row.model, 2)}
+                </td>
+                <td><DeltaBadge delta={row.delta} /></td>
+              </tr>
+            )) || (
+              <tr>
+                <td colSpan="4" style={{ textAlign: 'center', padding: '12px', color: '#94a3b8' }}>
+                  Awaiting Data...
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
