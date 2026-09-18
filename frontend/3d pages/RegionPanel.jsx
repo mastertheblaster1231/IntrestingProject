@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useComparisonStore } from './useComparisonStore.js';
 import { ComparisonOceanSurface } from './ComparisonOceanSurface.jsx';
+import { PrintableReport } from './components/PrintableReport.jsx';
+import { apiUrl } from '../services/api.js';
 import './ComparisonWindow.css';
 
 /**
@@ -25,6 +27,8 @@ export function RegionPanel({ region }) {
 
   const [hoveredFloat, setHoveredFloat] = useState(null);
   const [isInfoMaximized, setIsInfoMaximized] = useState(true);
+  const [printSnapshot, setPrintSnapshot] = useState(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   if (!data) return null;
 
@@ -75,6 +79,58 @@ export function RegionPanel({ region }) {
 
   const isLoading = isLoadingFleet || isLoadingSlice || isLoadingValidation;
 
+  const handleGenerateReport = async () => {
+    if (!validation) return;
+    setIsGeneratingReport(true);
+    let currentVector = null;
+    try {
+      if (validation.location?.lat != null && validation.location?.lon != null) {
+        const lat = validation.location.lat;
+        const lon = validation.location.lon;
+        const url = apiUrl(`/api/currents?lat_min=${lat - 0.5}&lat_max=${lat + 0.5}&lon_min=${lon - 0.5}&lon_max=${lon + 0.5}&stride=1`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const cdata = await res.json();
+          if (cdata.vectors && cdata.vectors.length > 0) {
+            // Find the closest point
+            let closest = cdata.vectors[0];
+            let minDist = Math.pow(closest.lat - lat, 2) + Math.pow(closest.lon - lon, 2);
+            for (let i = 1; i < cdata.vectors.length; i++) {
+              const pt = cdata.vectors[i];
+              const dist = Math.pow(pt.lat - lat, 2) + Math.pow(pt.lon - lon, 2);
+              if (dist < minDist) {
+                minDist = dist;
+                closest = pt;
+              }
+            }
+            currentVector = { ...closest, source: cdata.source };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch currents for report', e);
+    }
+
+    setPrintSnapshot({
+      validation,
+      regionName: region.name,
+      currentVector,
+      generatedAt: new Date().toISOString(),
+    });
+    setIsGeneratingReport(false);
+  };
+
+  useEffect(() => {
+    if (printSnapshot) {
+      // Small delay to ensure the DOM is updated before printing
+      const timer = setTimeout(() => {
+        window.print();
+        // Option: we could keep it mounted, or clear it. Leaving it mounted is fine.
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [printSnapshot]);
+
   return (
     <div className="region-panel">
       <div className="region-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -100,6 +156,13 @@ export function RegionPanel({ region }) {
         <div className={`region-status ${isLoading ? 'loading' : ''}`}>
           {isLoading ? 'Fetching Data...' : data.timestamp ? 'HISTORICAL' : 'LIVE STREAM'}
         </div>
+        <button 
+          onClick={handleGenerateReport}
+          disabled={isGeneratingReport || !validation}
+          style={{ marginLeft: '12px', background: '#00f0ff', color: '#040f22', border: 'none', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}
+        >
+          {isGeneratingReport ? 'Generating...' : 'Print Report'}
+        </button>
       </div>
 
       <div className="region-depth-section" style={{ position: 'relative', height: '300px', minHeight: '300px', width: '100%', overflow: 'hidden', padding: '16px', display: 'flex', flexDirection: 'row', gap: '16px' }}>
@@ -166,7 +229,7 @@ export function RegionPanel({ region }) {
             <tr>
               <th>Parameter</th>
               <th style={{ textAlign: 'center' }}>Real (ERDDAP)</th>
-              <th style={{ textAlign: 'center' }}>ROMS 1/12°</th>
+              <th style={{ textAlign: 'center' }}>{validation?.model?.source || 'Model (Unconfigured)'}</th>
               <th>Delta</th>
             </tr>
           </thead>
@@ -192,6 +255,7 @@ export function RegionPanel({ region }) {
           </tbody>
         </table>
       </div>
+      <PrintableReport snapshot={printSnapshot} />
     </div>
   );
 }

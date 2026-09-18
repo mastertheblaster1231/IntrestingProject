@@ -13,6 +13,9 @@ import {
   getAgreementRating,
 } from '../deltaMath.js';
 import { DateTimePicker } from './DateTimePicker.jsx';
+import { PrintableReport } from './PrintableReport.jsx';
+import { apiUrl } from '../../services/api.js';
+import '../ComparisonWindow.css';
 
 /**
  * SideBySideValidationPanel.jsx
@@ -40,6 +43,8 @@ export function SideBySideValidationPanel({ onClose }) {
 
   // Filter dropdown: 'all' or specific variable key
   const [selectedVarFilter, setSelectedVarFilter] = useState('all');
+  const [printSnapshot, setPrintSnapshot] = useState(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const handleDropdownChange = (e) => {
     const val = e.target.value;
@@ -77,6 +82,77 @@ export function SideBySideValidationPanel({ onClose }) {
   const instrumentCoords = `${(activeInstrument?.lat ?? 11.6).toFixed(4)}°N, ${(activeInstrument?.lon ?? 92.5).toFixed(4)}°E`;
   const isDepthLoading = modelComparison?.isLoading;
 
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    let currentVector = null;
+    try {
+      if (activeInstrument?.lat != null && activeInstrument?.lon != null) {
+        const lat = activeInstrument.lat;
+        const lon = activeInstrument.lon;
+        const url = apiUrl(`/api/currents?lat_min=${lat - 0.5}&lat_max=${lat + 0.5}&lon_min=${lon - 0.5}&lon_max=${lon + 0.5}&stride=1`);
+        const res = await fetch(url);
+        if (res.ok) {
+          const cdata = await res.json();
+          if (cdata.vectors && cdata.vectors.length > 0) {
+            let closest = cdata.vectors[0];
+            let minDist = Math.pow(closest.lat - lat, 2) + Math.pow(closest.lon - lon, 2);
+            for (let i = 1; i < cdata.vectors.length; i++) {
+              const pt = cdata.vectors[i];
+              const dist = Math.pow(pt.lat - lat, 2) + Math.pow(pt.lon - lon, 2);
+              if (dist < minDist) {
+                minDist = dist;
+                closest = pt;
+              }
+            }
+            currentVector = { ...closest, source: cdata.source };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch currents for report', e);
+    }
+
+    const builtVariables = displayedVariables.map(v => ({
+      key: v.key,
+      name: v.label,
+      unit: v.unit,
+      observed: dynamicObs?.[v.key] ?? null,
+      model: dynamicModel?.[v.key] ?? null,
+      delta: dynamicDelta?.[v.key] ?? null,
+      observed_source: (v.key === 'chlorophyll' || v.key === 'dissolvedOxygen') ? 'ifremer-erddap-bgc' : 'ifremer-erddap',
+    }));
+
+    const hasAnyModel = builtVariables.some(v => v.model !== null);
+
+    const snapshot = {
+      regionName: instrumentName,
+      currentVector,
+      generatedAt: new Date().toISOString(),
+      validation: {
+        time: selectedTimestamp,
+        depth_level: `${resolvedDepth}m`,
+        location: { lat: activeInstrument?.lat ?? 11.6, lon: activeInstrument?.lon ?? 92.5 },
+        model: {
+          available: hasAnyModel,
+          source: hasAnyModel ? (modelComparison?.modelSource || 'Model Configured') : 'Not configured for this panel',
+        },
+        variables: builtVariables,
+      }
+    };
+    
+    setPrintSnapshot(snapshot);
+    setIsGeneratingReport(false);
+  };
+
+  React.useEffect(() => {
+    if (printSnapshot) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [printSnapshot]);
+
   return (
     <div style={styles.container}>
       {/* ── 1. TOP HEADER & PROVENANCE BAR ────────────────────────────── */}
@@ -102,6 +178,23 @@ export function SideBySideValidationPanel({ onClose }) {
               ✕ Close
             </button>
           )}
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport || isDepthLoading}
+            style={{
+              background: '#00e5ff',
+              color: '#050e1e',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontWeight: 'bold',
+              cursor: isGeneratingReport ? 'not-allowed' : 'pointer',
+              marginLeft: '8px'
+            }}
+          >
+            {isGeneratingReport ? 'Generating...' : 'Print Report'}
+          </button>
         </div>
 
         {/* Provenance Metadata Strip */}
@@ -248,7 +341,11 @@ export function SideBySideValidationPanel({ onClose }) {
               <div style={styles.beaconMod} />
               <div>
                 <div style={styles.columnTitle}>4D NetCDF Numerical Model</div>
-                <div style={styles.columnSubtitle}>INCOIS-ROMS 1/12° Forecast Assimilation</div>
+                <div style={styles.columnSubtitle}>
+                  {modelComparison?.modelSource && modelComparison.modelSource !== 'live-api'
+                    ? `Model: ${modelComparison.modelSource}`
+                    : 'Model (Unconfigured / Default)'}
+                </div>
               </div>
             </div>
             <span style={styles.sourceTagMod}>4D NetCDF</span>
@@ -366,6 +463,7 @@ export function SideBySideValidationPanel({ onClose }) {
           })}
         </div>
       </div>
+      <PrintableReport snapshot={printSnapshot} />
     </div>
   );
 }

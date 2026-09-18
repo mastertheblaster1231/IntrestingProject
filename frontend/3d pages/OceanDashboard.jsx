@@ -111,18 +111,6 @@ export function OceanDashboard({ instruments = [] }) {
         >
           {/* Three.js canvas & depth-bar-container will be positioned here */}
 
-          {/* Compass Rose (Top Right) */}
-          <div className="canvas-compass-rose">
-            <div className="compass-rose-dial">
-              <span className="compass-point compass-n">N</span>
-              <span className="compass-point compass-s">S</span>
-              <span className="compass-point compass-w">W</span>
-              <span className="compass-point compass-e">E</span>
-              <div className="compass-crosshair-v" />
-              <div className="compass-crosshair-h" />
-              <div className="compass-needle" />
-            </div>
-          </div>
 
           {/* Geographic Sector Pin Tag */}
           {activeInstrument ? (

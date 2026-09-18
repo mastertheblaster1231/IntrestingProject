@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useOceanStore } from "../useOceanStore.js";
 
 export function CurrentsLegend() {
+  return null;
   const { currentField, currentStatus, currentSourceMode, currentLastUpdated, currentDepth, fetchCurrentField } = useOceanStore();
 
   const [isMinimized, setIsMinimized] = useState(false);

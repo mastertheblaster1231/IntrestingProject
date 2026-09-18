@@ -184,35 +184,8 @@ export function TopNavbar() {
           )}
         </div>
 
-        {/* Play/Pause */}
-        <button className="nav-play-circle" onClick={handlePlayToggle} title={isPlaying ? 'Pause' : 'Play Timeline'}>
-          {isPlaying ? '⏸' : '▶'}
-        </button>
 
-        {/* Timeline bar with time readout */}
-        <div className="nav-timeline-bar" title="Simulation Timeline">
-          <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.04em', textTransform: 'uppercase', marginRight: '4px' }}>
-            Timeline:
-          </span>
-          <div className="nav-timeline-track">
-            <input
-              type="range"
-              className="panel-slider nav-timeline-slider"
-              min="-72"
-              max="72"
-              step="3"
-              value={timeOffset}
-              onChange={handleTimeChange}
-            />
-          </div>
-          <span className="nav-timeline-date">{liveTime}</span>
-        </div>
 
-        {/* Step buttons */}
-        <div className="nav-step-group">
-          <button className="nav-step-btn" onClick={handleStepBack} title="Step Back 6h">«</button>
-          <button className="nav-step-btn" onClick={handleStepForward} title="Step Forward 6h">»</button>
-        </div>
 
         {/* Environment Cycle Button */}
         <button

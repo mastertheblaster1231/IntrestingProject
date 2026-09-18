@@ -34,20 +34,6 @@ export const SUPPORTED_VARIABLES = [
     isAngular: false,
   },
   {
-    key: "currentSpeed",
-    label: "Current Speed",
-    unit: "m/s",
-    precision: 2,
-    isAngular: false,
-  },
-  {
-    key: "currentDirection",
-    label: "Current Direction",
-    unit: "°",
-    precision: 1,
-    isAngular: true,
-  },
-  {
     key: "dissolvedOxygen",
     label: "Dissolved Oxygen",
     unit: "µmol/kg",

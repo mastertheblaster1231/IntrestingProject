@@ -4,6 +4,7 @@ import { FleetBar } from './FleetBar.jsx';
 import { DEMO_INSTRUMENTS } from './instruments.js';
 import { useOceanStore } from './useOceanStore.js';
 import { SideBySideValidationPanel } from './components/SideBySideValidationPanel.jsx';
+import { useComparisonStore } from './useComparisonStore.js';
 import {
   calculateRealisticModelProfile,
   calculateRealisticObservedProfile,
@@ -2352,6 +2353,7 @@ export function WorkspaceManager({ instruments = [] }) {
     ];
   });
   const [activeWindowId, setActiveWindowId] = useState(null);
+  const isComparisonOpen = useComparisonStore((state) => state.isComparisonOpen);
   const nextZIndexRef = useRef(100);
 
   // Big Box State
@@ -2803,22 +2805,24 @@ export function WorkspaceManager({ instruments = [] }) {
       </div>
 
       {/* 3. FleetBar Component with '+' Button & Multi-Window Tools */}
-      <FleetBar
-        instruments={allInstruments}
-        openWindows={windows}
-        onOpenInstrument={openInstrument}
-        onFocusWindow={focusWindow}
-        onTileSideBySide={() => {
-          // Undock first two cards and tile them floating
-          if (dockedWindows.length >= 2) {
-            undockCard(dockedWindows[0].id, 40, 80);
-            undockCard(dockedWindows[1].id, 400, 80);
-          }
-        }}
-        onTileGrid={() => {}}
-        onMinimizeAll={minimizeAll}
-        onCloseAll={closeAll}
-      />
+      {!isComparisonOpen && (
+        <FleetBar
+          instruments={allInstruments}
+          openWindows={windows}
+          onOpenInstrument={openInstrument}
+          onFocusWindow={focusWindow}
+          onTileSideBySide={() => {
+            // Undock first two cards and tile them floating
+            if (dockedWindows.length >= 2) {
+              undockCard(dockedWindows[0].id, 40, 80);
+              undockCard(dockedWindows[1].id, 400, 80);
+            }
+          }}
+          onTileGrid={() => {}}
+          onMinimizeAll={minimizeAll}
+          onCloseAll={closeAll}
+        />
+      )}
     </>
   );
 }
