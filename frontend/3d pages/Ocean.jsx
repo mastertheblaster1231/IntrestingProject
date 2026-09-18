@@ -2450,6 +2450,13 @@ const sliceFragmentShader = `
     return mix(vec3(0.05, 0.85, 0.35), vec3(0.75, 1.0, 0.2), (t - 0.7) / 0.3);
   }
 
+  vec3 colormapPlasma(float t) {
+    if (t < 0.25) return mix(vec3(0.05, 0.03, 0.53), vec3(0.42, 0.0, 0.66), t * 4.0);
+    if (t < 0.50) return mix(vec3(0.42, 0.0, 0.66), vec3(0.80, 0.14, 0.45), (t - 0.25) * 4.0);
+    if (t < 0.75) return mix(vec3(0.80, 0.14, 0.45), vec3(0.97, 0.56, 0.23), (t - 0.50) * 4.0);
+    return mix(vec3(0.97, 0.56, 0.23), vec3(0.94, 0.98, 0.13), (t - 0.75) * 4.0);
+  }
+
   void main() {
     float val = texture2D(uScalarTexture, vUv).r;
     val = clamp(val, 0.0, 1.0);
@@ -2459,7 +2466,8 @@ const sliceFragmentShader = `
     else if (uColormap == 1) col = colormapHaline(val);
     else if (uColormap == 2) col = colormapTurbo(val);
     else if (uColormap == 3) col = colormapViridis(val);
-    else col = colormapChlorophyll(val);
+    else if (uColormap == 4) col = colormapChlorophyll(val);
+    else col = colormapPlasma(val);
 
     // High-precision isoline rings at 0.1 normalized intervals
     float iso = abs(fract(val * 10.0 - 0.5) - 0.5) / max(1e-4, fwidth(val * 10.0));
@@ -2481,6 +2489,7 @@ function getColormapId(name) {
     case "turbo": return 2;
     case "viridis": return 3;
     case "chlorophyll": return 4;
+    case "plasma": return 5;
     case "thermal":
     default: return 0;
   }
@@ -2575,7 +2584,8 @@ const transectMat = new THREE.ShaderMaterial({
       else if (uColormap == 1) col = colormapHaline(t);
       else if (uColormap == 2) col = colormapTurbo(t);
       else if (uColormap == 3) col = colormapViridis(t);
-      else col = colormapChlorophyll(t);
+      else if (uColormap == 4) col = colormapChlorophyll(t);
+      else col = colormapPlasma(t);
 
       gl_FragColor = vec4(col, uOpacity * 0.85);
     }

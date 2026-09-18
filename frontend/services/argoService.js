@@ -17,14 +17,7 @@
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
-/** Live ERDDAP endpoints — Primary: NOAA AOML (Indian Ocean), Secondary: IFREMER (Global) */
-const ERDDAP_IFREMER =
-  typeof window !== "undefined" && window.location && window.location.origin
-    ? "/erddap-proxy/erddap/tabledap/ArgoFloats.json"
-    : "https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json";
-
-const ERDDAP_AOML =
-  "https://erddap.aoml.noaa.gov/hdb/erddap/tabledap/argo_float_indian_2025_present.json";
+import { apiUrl } from './api.js';
 
 /**
  * Fetch timeout in milliseconds.
@@ -140,82 +133,51 @@ export async function fetchLiveArgoProfile(platformNumber) {
  * @throws {Error} on any network or parse failure
  */
 async function _fetchFromERDDAP(id) {
-  // Build ERDDAP tabledap query URLs:
-  //   Variables: platform_number, time, latitude, longitude, pres, temp, psal
-  //   Constraint: platform_number = "2902351" (double-quoted string in ERDDAP filter syntax)
-  //   orderByMax("time") returns ALL rows for the most recent profile cycle only
-
-  // Primary: NOAA AOML Indian Ocean Dataset (uppercase column names)
-  const aomlUrl =
-    `${ERDDAP_AOML}?PLATFORM_NUMBER,time,latitude,longitude,PRES,TEMP,PSAL` +
-    `&PLATFORM_NUMBER=%22${encodeURIComponent(id)}%22` +
-    `&orderByMax(%22time%22)`;
-
-  // Secondary: IFREMER Global Dataset (lowercase column names)
-  const ifremerUrl =
-    `${ERDDAP_IFREMER}?platform_number,time,latitude,longitude,pres,temp,psal` +
-    `&platform_number=%22${encodeURIComponent(id)}%22` +
-    `&orderByMax(%22time%22)`;
-
-
-
-  // AbortController lets us cancel the fetch if it stalls on slow hackathon Wi-Fi
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  let response;
   try {
-    // Try AOML first (Indian Ocean optimized)
-    console.info(`[argoService] Trying NOAA AOML for float #${id}...`);
-    response = await fetch(aomlUrl, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    }).catch(() => null);
-
-    // Fallback to IFREMER if AOML fails
-    if (!response || !response.ok) {
-      console.info(
-        `[argoService] AOML unavailable, trying IFREMER for float #${id}...`,
-      );
-      response = await fetch(ifremerUrl, {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "INCOIS-SIH-Dashboard/1.0",
-        },
-      });
+    const url = apiUrl(`/api/profile/${encodeURIComponent(id)}`);
+    console.info(`[argoService] Fetching backend profile for float #${id} from ${url}`);
+    
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Backend API HTTP ${response.status} for float #${id}`);
     }
+
+    const json = await response.json();
+    
+    if (json.available === false) {
+      throw new Error(json.reason || 'Data unavailable');
+    }
+
+    const physicsLevels = json.physics?.levels || [];
+    if (physicsLevels.length === 0) {
+      throw new Error(`No physics levels returned for float #${id}`);
+    }
+
+    const profile = physicsLevels.map(level => {
+      // The backend uses 'temp' and 'psal' or 'temperature'/'salinity' depending on how it was built.
+      // Usually fetchCoreProfile produces { depth, temp, psal }
+      return {
+        depth: level.depth,
+        temperature: level.temp !== undefined ? level.temp : level.temperature,
+        salinity: level.psal !== undefined ? level.psal : level.salinity,
+      };
+    }).sort((a, b) => a.depth - b.depth);
+
+    return {
+      floatId: json.platform_number,
+      name: `Argo Float #${json.platform_number}`,
+      timestamp: json.time,
+      lat: json.latitude,
+      lon: json.longitude,
+      source: "backend-api",
+      profile,
+    };
   } finally {
-    clearTimeout(timeoutHandle); // always clear to avoid ghost timers
+    clearTimeout(timeoutHandle);
   }
-
-  if (!response || !response.ok) {
-    throw new Error(
-      `ERDDAP HTTP ${response?.status || "N/A"} for float #${id}`,
-    );
-  }
-
-  const json = await response.json();
-  const rows = json?.table?.rows;
-  const colNames = json?.table?.columnNames;
-
-  if (!rows || rows.length === 0) {
-    throw new Error(`ERDDAP returned zero rows for float #${id}`);
-  }
-
-  // Dynamic column mapping — handles case differences between AOML and IFREMER
-  if (colNames) {
-    const lowerCols = colNames.map((c) => c.toLowerCase());
-    COL.PLATFORM = lowerCols.indexOf("platform_number");
-    COL.TIME = lowerCols.indexOf("time");
-    COL.LAT = lowerCols.indexOf("latitude");
-    COL.LON = lowerCols.indexOf("longitude");
-    COL.PRES = lowerCols.indexOf("pres");
-    COL.TEMP = lowerCols.indexOf("temp");
-    COL.PSAL = lowerCols.indexOf("psal");
-  }
-
-  return _parseErddapRows(id, rows, columnNames);
 }
 
 /**

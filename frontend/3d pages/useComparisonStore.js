@@ -11,10 +11,7 @@ import { create } from 'zustand';
  * All data is fetched from the Node/Express backend live endpoints.
  */
 
-// ─── BACKEND URL (mirrors useOceanData.js pattern) ───────────────────────────
-const BACKEND_URL = (
-  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || ''
-).replace(/\/$/, '');
+import { apiUrl } from '../services/api.js';
 
 // ─── REGION BOUNDING BOX DICTIONARY ──────────────────────────────────────────
 // Worldwide regions where real-time Argo floats are deployed.
@@ -195,7 +192,7 @@ export const useComparisonStore = create((set, get) => ({
     }));
 
     try {
-      const url = `${BACKEND_URL}/api/fleet?lat_min=${lat_min}&lat_max=${lat_max}&lon_min=${lon_min}&lon_max=${lon_max}`;
+      const url = apiUrl(`/api/fleet?lat_min=${lat_min}&lat_max=${lat_max}&lon_min=${lon_min}&lon_max=${lon_max}`);
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Fleet API HTTP ${res.status}`);
       const fleet = await res.json();
@@ -252,7 +249,7 @@ export const useComparisonStore = create((set, get) => ({
     }));
 
     try {
-      const url = `${BACKEND_URL}/api/argo/depth-slice?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}`;
+      const url = apiUrl(`/api/argo/depth-slice?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}`);
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Depth-slice API HTTP ${res.status}`);
       const depthSlice = await res.json();
@@ -295,7 +292,7 @@ export const useComparisonStore = create((set, get) => ({
     }));
 
     try {
-      const url = `${BACKEND_URL}/api/validation?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}&lat=${lat}&lon=${lon}`;
+      const url = apiUrl(`/api/validation?platform_number=${encodeURIComponent(platformNumber)}&depth=${depth}&lat=${lat}&lon=${lon}`);
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Validation API HTTP ${res.status}`);
       const validation = await res.json();

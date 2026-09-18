@@ -25,6 +25,7 @@ import { ComparisonCard } from "../components/ComparisonCard.jsx";
 export function TelemetryPanel() {
   // ── 1. ZUSTAND STORE SUBSCRIPTION ──────────────────────────────────────────
   const activeInstrument = useOceanStore((state) => state.activeInstrument);
+  const activeGlobeFloat = useOceanStore((state) => state.activeGlobeFloat);
   const activeInstrumentDepth = useOceanStore(
     (state) => state.activeInstrumentDepth,
   );
@@ -73,87 +74,81 @@ export function TelemetryPanel() {
           borderLeft: "1px solid rgba(0, 229, 255, 0.2)",
           overflow: "visible",
           zIndex: 100,
-          padding: "12px",
-          gap: "12px",
+          padding: "16px",
+          gap: "16px",
         }}
       >
-        {/* Requirement 1: DateTimePicker strictly placed above Right Telemetry Panel */}
-        <div style={{ padding: "0px 2px" }}>
-          <DateTimePicker compact />
-          <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-            <button
-              onClick={() => {}}
-              style={{
-                flex: 1,
-                padding: "4px",
-                fontSize: "0.7rem",
-                background: "rgba(255, 255, 255, 0.05)",
-                border: "1px solid rgba(0, 229, 255, 0.3)",
-                borderRadius: "4px",
-                color: "#00e5ff",
-                cursor: "not-allowed",
-                opacity: 0.5,
-              }}
-              title="Select an instrument first"
-            >
-              Get data
-            </button>
-            <button
-              onClick={() => {}}
-              style={{
-                flex: 1,
-                padding: "4px",
-                fontSize: "0.7rem",
-                background: "rgba(16, 185, 129, 0.2)",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
-                borderRadius: "4px",
-                color: "#10b981",
-                cursor: "not-allowed",
-                opacity: 0.5,
-              }}
-              title="Select an instrument first"
-            >
-              ● Real-Time
-            </button>
-          </div>
-        </div>
+        {activeGlobeFloat?.id ? (
+          <>
+            <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#00e5ff', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.5rem' }}>🛰️</span> Argo Float Overview
+            </div>
+            
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>Float ID:</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{activeGlobeFloat.id || 'Select a float...'}</div>
+            </div>
 
-        <div
-          className="empty-state"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "240px",
-            padding: "28px 18px",
-            textAlign: "center",
-            color: "#94a3b8",
-            fontSize: "0.85rem",
-            fontFamily: 'var(--font-primary, "Outfit", sans-serif)',
-            background: "rgba(6, 18, 38, 0.7)",
-            borderRadius: "10px",
-            border: "1px dashed rgba(0, 229, 255, 0.25)",
-          }}
-        >
-          <span style={{ fontSize: "2rem", marginBottom: "10px" }}>🛰️</span>
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>Location:</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
+                {activeGlobeFloat.coordinates.lat?.toFixed(4) || '--'}° N, {activeGlobeFloat.coordinates.lon?.toFixed(4) || '--'}° E
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>Temperature Tile:</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#ff453a' }}>
+                  {activeGlobeFloat.isFetching ? (
+                     <span style={{ animation: "pulse 1.5s infinite", opacity: 0.7, fontSize: '1.1rem' }}>Fetching...</span>
+                  ) : (
+                     `${activeGlobeFloat.latestObservation?.temp != null ? activeGlobeFloat.latestObservation.temp : '--'}° C`
+                  )}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '8px' }}>Salinity Tile:</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#00e5ff' }}>
+                  {activeGlobeFloat.isFetching ? (
+                     <span style={{ animation: "pulse 1.5s infinite", opacity: 0.7, fontSize: '1.1rem' }}>Fetching...</span>
+                  ) : (
+                     `${activeGlobeFloat.latestObservation?.salinity != null ? activeGlobeFloat.latestObservation.salinity : '--'} PSU`
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
           <div
-            style={{ fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}
-          >
-            Select an instrument from the fleet dock
-          </div>
-          <div
+            className="empty-state"
             style={{
-              fontSize: "0.72rem",
-              color: "#64748b",
-              maxWidth: "240px",
-              lineHeight: 1.4,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: "240px",
+              padding: "28px 18px",
+              textAlign: "center",
+              color: "#94a3b8",
+              fontSize: "0.85rem",
+              background: "rgba(6, 18, 38, 0.7)",
+              borderRadius: "10px",
+              border: "1px dashed rgba(0, 229, 255, 0.25)",
+              marginTop: 'auto',
+              marginBottom: 'auto'
             }}
           >
-            Click any Argo float, Glider, or CTD rosette in the 3D ocean scene
-            or fleet dock to view in-situ telemetry and model comparison.
+            <span style={{ fontSize: "2rem", marginBottom: "10px" }}>🛰️</span>
+            <div style={{ fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>
+              Select an instrument from the fleet dock
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "#64748b", maxWidth: "240px", lineHeight: 1.4 }}>
+              Click any Argo float, Glider, or CTD rosette in the 3D ocean scene
+              or fleet dock to view in-situ telemetry and model comparison.
+            </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }

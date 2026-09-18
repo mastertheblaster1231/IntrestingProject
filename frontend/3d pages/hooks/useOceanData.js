@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
  * - Prod: VITE_BACKEND_URL= (empty) → same-origin /api via Vite proxy / Vercel rewrite
  * Falls back to localhost:8000 for SSR/tests when window is undefined.
  */
-const BACKEND_URL = ((typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '').replace(/\/$/, '') || ((typeof window !== 'undefined' && window.location && window.location.origin) ? '' : 'http://localhost:8000');
+import { apiUrl } from '../../services/api.js';
 
 export function useOceanData(selectedFloatId = '2902351', activeDepth = 15) {
   const [isLive, setIsLive] = useState(false);
@@ -15,7 +15,7 @@ export function useOceanData(selectedFloatId = '2902351', activeDepth = 15) {
 
   // 1. Fetch Fleet Coordinates
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/fleet`)
+    fetch(apiUrl('/api/fleet'))
       .then((res) => {
         if (!res.ok) throw new Error('API failed');
         return res.json();
@@ -32,7 +32,7 @@ export function useOceanData(selectedFloatId = '2902351', activeDepth = 15) {
 
   // 2. Fetch Validation Matrix on Float or Depth Change
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/validation?platform_number=${selectedFloatId}&depth=${activeDepth}`)
+    fetch(apiUrl(`/api/validation?platform_number=${selectedFloatId}&depth=${activeDepth}`))
       .then((res) => res.json())
       .then((data) => setValidationData(data))
       .catch((err) => console.error(err));

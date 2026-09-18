@@ -983,15 +983,8 @@ export const CF_CONVENTIONS = {
 // ============================================================================
 export class ErddapOceanService {
   constructor(endpoints = {}) {
-    const envIncois = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_INCOIS_BASE) || null;
-    const envIfremer = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_IFREMER_BASE) || null;
-    // envIfremer is full ArgoFloats.json URL; derive base if needed
-    const ifremerBaseFromEnv = envIfremer ? envIfremer.replace(/\/tabledap\/ArgoFloats\.json.*$/, '') : null;
-    const isBrowser = typeof window !== 'undefined';
-    const proxyPath = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_PROXY_PATH) || '/erddap-proxy';
-    this.incoisBaseUrl = endpoints.incois || envIncois || "https://erddap.incois.gov.in/erddap";
-    // In browser, use Vite proxy to avoid CORS (same-origin); in Node, use direct
-    this.ifremerBaseUrl = endpoints.ifremer || (isBrowser ? proxyPath : (ifremerBaseFromEnv || "https://erddap.ifremer.fr/erddap"));
+    this.incoisBaseUrl = endpoints.incois || "https://erddap.incois.gov.in/erddap";
+    this.ifremerBaseUrl = endpoints.ifremer || "https://erddap.ifremer.fr/erddap";
     this.requestTimeoutMs = 20000; // public ERDDAP (was 7000)
   }
 

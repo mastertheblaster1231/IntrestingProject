@@ -41,6 +41,8 @@ if (typeof window !== "undefined") {
   };
 }
 
+import { apiUrl } from '../services/api.js';
+
 // ─── ERDDAP ENDPOINTS (CORS-RESILIENT) ───────────────────────────────────────
 // Primary: backend /api/fleet (server-to-server, no CORS, cached, no abort spam)
 // Fallback: Vite proxy (/erddap-proxy) — same-origin, reliable
@@ -48,34 +50,8 @@ if (typeof window !== "undefined") {
 
 function getCandidateErddapUrls() {
   const cfg = ARGO_FLEET_CONFIG;
-  const query =
-    `?platform_number,time,latitude,longitude,pres,temp,psal` +
-    `&time%3E=${encodeURIComponent(`now-${cfg.timeWindowDays}d`)}` +
-    `&latitude%3E=${cfg.regionLatMin}&latitude%3C=${cfg.regionLatMax}` +
-    `&longitude%3E=${cfg.regionLonMin}&longitude%3C=${cfg.regionLonMax}` +
-    `&pres%3C=10&distinct%28%29`;
-
-  const envBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_IFREMER_BASE) || 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.json';
-  const directUrl = `${envBase}${query}`;
-  const proxyPath = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ERDDAP_PROXY_PATH) || '/erddap-proxy';
-  const backendBase = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BACKEND_URL) || '';
-  const backendFleetUrl = `${backendBase.replace(/\/$/, '')}/api/fleet?lat_min=${cfg.regionLatMin}&lat_max=${cfg.regionLatMax}&lon_min=${cfg.regionLonMin}&lon_max=${cfg.regionLonMax}&days=${cfg.timeWindowDays}`;
-
-  const isBrowser = typeof window !== "undefined";
-  if (isBrowser) {
-    // Order: backend (no CORS, fastest, cached) → Vite proxy (same-origin) → direct (will be CORS-blocked, last resort)
-    const urls = [];
-    urls.push(backendFleetUrl); // always try backend first
-    urls.push(`${proxyPath}/erddap/tabledap/ArgoFloats.json${query}`);
-    // Public CORS proxies removed — they cause 403/522 and spam; keep direct as final fallback (will fail CORS but caught)
-    urls.push(directUrl);
-    return urls;
-  } else {
-    return [
-      directUrl,
-      `http://localhost:5173${proxyPath}/erddap/tabledap/ArgoFloats.json${query}`,
-    ];
-  }
+  const backendFleetUrl = apiUrl(`/api/fleet?lat_min=${cfg.regionLatMin}&lat_max=${cfg.regionLatMax}&lon_min=${cfg.regionLonMin}&lon_max=${cfg.regionLonMax}&days=${cfg.timeWindowDays}`);
+  return [backendFleetUrl];
 }
 
 // Helper to detect backend fleet response (already array, not raw ERDDAP table)

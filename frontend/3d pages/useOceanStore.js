@@ -5,6 +5,7 @@ import {
   getProfileAtDepth,
 } from "../services/argoService.js";
 import { fetchArgoDepthSlice } from "../services/argoBackendService.js";
+import { apiUrl } from "../services/api.js";
 import {
   calculateDelta,
   getComparisonStatus,
@@ -34,16 +35,100 @@ import {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
-
-/** FastAPI microservice base URL (server.py running locally) */
-const MODEL_API_BASE = "http://127.0.0.1:8000";
-
 /** Timeout for model API calls (public backend, was 5000) */
 const MODEL_API_TIMEOUT_MS = 15000;
 
 // ─── STORE ───────────────────────────────────────────────────────────────────
 export const useOceanStore = create((set, get) => ({
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW: ARGO FLOAT REAL-TIME STATE
+  // ═══════════════════════════════════════════════════════════════════════════
+  activeGlobeFloat: {
+    id: null,
+    coordinates: { lat: null, lon: null },
+    latestObservation: { time: null, temp: null, salinity: null },
+    isFetching: false,
+  },
+  setSelectedGlobeFloat: (floatData) => {
+    set((state) => ({ 
+      activeGlobeFloat: { 
+        ...state.activeGlobeFloat, 
+        ...floatData,
+        latestObservation: {
+          ...state.activeGlobeFloat.latestObservation,
+          ...(floatData.latestObservation || {})
+        }
+      } 
+    }));
+  },
+  fetchRealTimeGlobeFloat: async (id, lat, lon) => {
+    const { setSelectedGlobeFloat } = get();
+    // Dispatch known data immediately with fetching state
+    setSelectedGlobeFloat({
+      id,
+      coordinates: { lat, lon },
+      isFetching: true,
+    });
+
+    // Directly update the HTML sidebar for immediate visual feedback (loading state)
+    if (typeof document !== "undefined") {
+      const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
+      const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
+      if (elSurfaceTemp) elSurfaceTemp.innerHTML = `<span style="animation: pulse 1.5s infinite; opacity: 0.7; font-size: 1rem;">Fetching...</span>`;
+      if (elSurfaceSal) elSurfaceSal.innerHTML = `<span style="animation: pulse 1.5s infinite; opacity: 0.7; font-size: 1rem;">Fetching...</span>`;
+    }
+    
+    try {
+      const cleanId = id.toString().replace(/^argo-/i, "");
+      
+      let tempVal = null;
+      let salVal = null;
+      let timeVal = null;
+      
+      const backendUrl = apiUrl(`/api/argo/depth-slice?platform_number=${cleanId}&depth=0`);
+      const backendRes = await fetch(backendUrl);
+      
+      if (!backendRes.ok) {
+        throw new Error(`Backend API returned ${backendRes.status}`);
+      }
+      
+      const bData = await backendRes.json();
+      if (bData && bData.primary_oceanographic_variables) {
+        tempVal = bData.primary_oceanographic_variables.temperature_c;
+        salVal = bData.primary_oceanographic_variables.salinity_psu;
+        timeVal = bData.timestamp || new Date().toISOString();
+      } else {
+        throw new Error("No data returned from backend API");
+      }
+
+      if (tempVal != null && salVal != null) {
+         setSelectedGlobeFloat({
+           latestObservation: {
+             time: timeVal,
+             temp: tempVal,
+             salinity: salVal,
+           },
+           isFetching: false,
+         });
+
+         // Update HTML sidebar dynamically with real-time resolved values
+         if (typeof document !== "undefined") {
+           const elSurfaceTemp = document.getElementById("argoSurfaceTemp");
+           const elSurfaceSal = document.getElementById("argoSurfaceSalinity");
+           if (elSurfaceTemp && tempVal != null) elSurfaceTemp.textContent = `${tempVal.toFixed(2)} °C`;
+           if (elSurfaceSal && salVal != null) elSurfaceSal.textContent = `${salVal.toFixed(2)} PSU`;
+         }
+      } else {
+         setSelectedGlobeFloat({ isFetching: false });
+         // DO NOT overwrite with '—' if we already have analytical data showing
+      }
+    } catch(e) {
+      console.error("Failed to fetch real-time globe float:", e);
+      setSelectedGlobeFloat({ isFetching: false });
+      // DO NOT overwrite with '—' if we already have analytical data showing
+    }
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 1. REUSABLE LAYER REGISTRY (Extensible for INCOIS HF-Radar, ADCP, etc.)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -136,7 +221,7 @@ export const useOceanStore = create((set, get) => ({
         current: { min: 0, max: 2.0, palette: "viridis" },
         currentSpeed: { min: 0, max: 2.0, palette: "viridis" },
         currentDirection: { min: 0, max: 360, palette: "cyclic" },
-        chlorophyll: { min: 0.01, max: 5.0, palette: "algae" },
+        chlorophyll: { min: 0.01, max: 5.0, palette: "chlorophyll" },
         dissolvedOxygen: { min: 40, max: 300, palette: "plasma" },
       };
       const colorbar =
@@ -240,7 +325,7 @@ export const useOceanStore = create((set, get) => ({
     set({ currentStatus: "loading", currentError: null });
 
     try {
-      const response = await fetch(`http://localhost:8000/api/currents/latest?depth=${currentDepth}&time=${currentTime}`);
+      const response = await fetch(apiUrl(`/api/currents/latest?depth=${currentDepth}&time=${currentTime}`));
       if (!response.ok) throw new Error("Failed to fetch currents");
       
       const data = await response.json();

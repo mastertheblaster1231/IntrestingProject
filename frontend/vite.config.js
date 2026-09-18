@@ -44,13 +44,6 @@ export default defineConfig({
           });
         },
       },
-      '/erddap-proxy': {
-        target: process.env.VITE_ERDDAP_PROXY_TARGET || 'https://erddap.ifremer.fr',
-        changeOrigin: true,
-        secure: true,
-        timeout: 35000, // public ERDDAP (was 15000)
-        rewrite: (path) => path.replace(/^\/erddap-proxy/, ''),
-      },
     },
     watch: {
       // Ignore watching heavy image/binary directories to avoid Windows EBUSY file locks

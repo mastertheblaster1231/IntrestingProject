@@ -7,6 +7,7 @@ import { oceanDataService } from "./oceanDataService.js";
 import { createOrbitalDiveController } from "./orbitalDive.js";
 import { getRealArgoPoints, ARGO_FLEET_CONFIG } from "./argoFleetService.js";
 import { useOceanStore } from "./useOceanStore.js";
+import { apiUrl } from "../services/api.js";
 
 // ============================================================================
 // ⚙️ ANCHOR & BADGE SIZE CONFIGURATION (User Configurable)
@@ -2016,10 +2017,10 @@ export async function selectStation(id, opts = {}) {
   const point =
     argoPoints.find(
       (p) =>
-        p.id.toUpperCase() === cleanId ||
-        p.code.toUpperCase() === cleanId ||
-        (p.altId && p.altId.toUpperCase() === cleanId) ||
-        String(p.wmoId) === cleanId,
+        String(p.id || "").toUpperCase() === cleanId ||
+        String(p.code || "").toUpperCase() === cleanId ||
+        String(p.altId || "").toUpperCase() === cleanId ||
+        String(p.wmoId || "") === cleanId,
     ) || argoPoints[0];
 
   if (!point) {
@@ -2063,12 +2064,54 @@ export async function selectStation(id, opts = {}) {
   updateArgoFloatUI(buildMarkerFallbackData(point, "loading live ERDDAP…"), showPanel);
 
   // 2. Upgrade the panel with live (ERDDAP-first) data when it resolves.
+  let floatData = {};
   try {
-    const floatData = await oceanDataService.getFloatDetails(point);
-    if (floatData) updateArgoFloatUI(floatData, showPanel);
+    const backendUrl = apiUrl(`/api/profile/${cleanId}`);
+    const res = await fetch(backendUrl);
+    if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+    const bData = await res.json();
+    
+    // Convert backend profile to the shape updateArgoFloatUI expects
+    const levels = bData.physics?.levels || [];
+    const shallowest = levels[0] || {};
+    const maxDepth = levels.length > 0 ? levels[levels.length - 1].depth : 2000;
+    
+    const lat = bData.latitude || point.lat || 0;
+    const lon = bData.longitude || point.lon || 0;
+
+    floatData = {
+      floatId: bData.platform_number || cleanId,
+      status: point?.status || "active",
+      locationFormatted: `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? "E" : "W"}`,
+      lastObservation: bData.time || point?.time || "—",
+      maxDepthMeters: maxDepth,
+      measurements: "Temperature, Salinity",
+      scientificData: {
+        surfaceTempC: shallowest.temp,
+        surfaceSalinityPSU: shallowest.salinity,
+      },
+      verticalProfile: levels.map(l => ({
+        depthMeters: l.depth,
+        temperatureC: l.temp,
+        salinityPSU: l.salinity,
+        pressureDbar: l.pres,
+        densitySigmaTheta: "—" // Derived in backend or left blank
+      })),
+      mission: {
+        cycleNumber: bData.cycle_number,
+        batteryPercent: null
+      },
+      lat: lat,
+      lon: lon,
+      buoyName: `Argo Float #${bData.platform_number || cleanId}`,
+      source: bData.source || "ifremer-erddap"
+    };
+
+    updateArgoFloatUI(floatData, showPanel);
   } catch (err) {
     console.warn(`[ArgoPanel] live fetch failed for ${targetId}, keeping marker metadata:`, err?.message);
-    updateArgoFloatUI(buildMarkerFallbackData(point, "unavailable (backend unreachable)"), showPanel);
+    floatData = buildMarkerFallbackData(point, "unavailable (backend unreachable)");
+    updateArgoFloatUI(floatData, showPanel);
   }
 
   // Sync with Zustand store so React components (like OceanDashboard) update their location badges
@@ -2078,9 +2121,9 @@ export async function selectStation(id, opts = {}) {
       name: floatData.buoyName || point.name || point.id,
       sea: floatData.locationPrimary || "Indian Ocean",
       region: floatData.locationSecondary || "Central Basin",
-      type: floatData.platformType?.toLowerCase().includes("glider")
+      type: (floatData.platformType || "").toLowerCase().includes("glider")
         ? "glider"
-        : floatData.platformType?.toLowerCase().includes("ctd")
+        : (floatData.platformType || "").toLowerCase().includes("ctd")
           ? "ctd"
           : "argo",
       platform: floatData.platformType || "APEX Profiling Float",
@@ -2123,6 +2166,8 @@ export async function selectStation(id, opts = {}) {
     };
     // Dispatch custom event so React components re-render
     window.dispatchEvent(new CustomEvent('argoLocationSelected', { detail: window.selectedArgoLocation }));
+    
+    // (Real-time fetch is now handled directly above via /api/profile endpoint)
   }
 }
 
@@ -2454,9 +2499,9 @@ function onPointerDoubleClick(event) {
   }
 }
 
-window.addEventListener("pointermove", onPointerMove);
-window.addEventListener("click", onPointerClick);
-window.addEventListener("dblclick", onPointerDoubleClick);
+window.addEventListener("pointermove", onPointerMove, true);
+window.addEventListener("pointerdown", onPointerClick, true);
+window.addEventListener("dblclick", onPointerDoubleClick, true);
 
 // Focus function when clicking a point in the list
 window.focusOnPoint = function (id) {
@@ -2468,10 +2513,10 @@ window.focusOnPoint = function (id) {
     .toUpperCase();
   const pt = argoPoints.find(
     (p) =>
-      p.id.toUpperCase() === cleanId ||
-      p.code.toUpperCase() === cleanId ||
-      (p.altId && p.altId.toUpperCase() === cleanId) ||
-      String(p.wmoId) === cleanId,
+        String(p.id || "").toUpperCase() === cleanId ||
+        String(p.code || "").toUpperCase() === cleanId ||
+        String(p.altId || "").toUpperCase() === cleanId ||
+        String(p.wmoId || "") === cleanId,
   );
   if (!pt) return;
 

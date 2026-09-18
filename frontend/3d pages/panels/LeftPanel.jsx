@@ -140,6 +140,7 @@ export function LeftPanel() {
               <option value="salinity">💧 Salinity (PSU)</option>
               <option value="current">🌊 Current Velocity (m/s)</option>
               <option value="chlorophyll">🌿 Chlorophyll-a (mg/m³)</option>
+              <option value="dissolvedOxygen">🫧 Dissolved Oxygen (µmol/kg)</option>
             </select>
           </div>
 
