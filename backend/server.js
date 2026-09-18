@@ -56,11 +56,15 @@ app.get(['/health', '/api/health'], async (_req, res) => {
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
-app.listen(PORT, () => {
-  console.log(`Ocean backend listening on :${PORT}`);
-  console.log(`  core Argo : ${process.env.ERDDAP_IFREMER_BASE || 'default Ifremer ArgoFloats'}`);
-  console.log(`  BGC Argo  : ${process.env.ERDDAP_BGC_BASE || 'default ArgoFloats-synthetic-BGC'}`);
-  console.log(
-    `  model     : ${isModelConfigured() ? process.env.MODEL_DATASET_ID : 'NOT CONFIGURED (model values will report available:false)'}`
-  );
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Ocean backend listening on :${PORT}`);
+    console.log(`  core Argo : ${process.env.ERDDAP_IFREMER_BASE || 'default Ifremer ArgoFloats'}`);
+    console.log(`  BGC Argo  : ${process.env.ERDDAP_BGC_BASE || 'default ArgoFloats-synthetic-BGC'}`);
+    console.log(
+      `  model     : ${isModelConfigured() ? process.env.MODEL_DATASET_ID : 'NOT CONFIGURED (model values will report available:false)'}`
+    );
+  });
+}
+
+export default app;

@@ -5,7 +5,9 @@
   "cleanUrls": false,
   "rewrites": [
     { "source": "/ocean", "destination": "/ocean.html" },
-    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" }
+    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" },
+    { "source": "/api/(.*)", "destination": "/backend/server.js" },
+    { "source": "/(.*)", "destination": "/frontend/$1" }
   ],
   "headers": [
     {

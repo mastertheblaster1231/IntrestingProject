@@ -1268,18 +1268,80 @@ window.reloadArgoFleet = function (count) {
 window.applyTemperatureColors = applyTemperatureColors;
 
 // --- Custom UI Toggles State Logic ---
-window.filterArgoPoints = function (query, showAll) {
+
+/**
+ * Region inference for points that carry no `sea`/`region` label (live
+ * backend /api/fleet floats only provide lat/lon). Checked in order —
+ * smaller seas must be tested before the larger basins that contain them.
+ */
+const POINT_REGION_BOUNDS = [
+  { name: "Lakshadweep Sea", latMin: 8, latMax: 14, lonMin: 70, lonMax: 77 },
+  { name: "Andaman Sea", latMin: 3, latMax: 18, lonMin: 92, lonMax: 100 },
+  { name: "Bay of Bengal", latMin: 5, latMax: 25, lonMin: 78, lonMax: 98 },
+  { name: "Arabian Sea", latMin: 0, latMax: 27, lonMin: 50, lonMax: 78 },
+  { name: "Red Sea", latMin: 12, latMax: 30, lonMin: 32, lonMax: 44 },
+  { name: "Persian Gulf", latMin: 23, latMax: 30, lonMin: 47, lonMax: 57 },
+];
+
+function getPointRegionLabel(pt) {
+  const known = pt.sea || pt.region;
+  if (known) return String(known);
+  const lat = Number(pt.lat);
+  const lon = Number(pt.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "Indian Ocean";
+  for (const b of POINT_REGION_BOUNDS) {
+    if (lat >= b.latMin && lat <= b.latMax && lon >= b.lonMin && lon <= b.lonMax) {
+      return b.name;
+    }
+  }
+  return "Indian Ocean";
+}
+
+/**
+ * Searchable identity of a float: WMO platform number plus any id/code
+ * variants, so partial IDs typed by the user still match.
+ */
+function getPointIdText(pt) {
+  return [
+    pt.platform_number,
+    pt.id,
+    pt.code,
+    pt.altId,
+    pt.wmoId,
+    pt.name,
+  ]
+    .filter((v) => v !== undefined && v !== null)
+    .map((v) => String(v))
+    .join(" ")
+    .toLowerCase();
+}
+
+/**
+ * Fleet filter used by the search bar.
+ *   query   — region/ocean name typed in "Search Region..." (matches the
+ *             float's sea label, or its lat/lon-derived region)
+ *   showAll — "All points" checkbox: when true the whole fleet is shown
+ *   idQuery — Argo WMO ID typed in "Search Argo ID..." (shows only floats
+ *             whose ID contains the typed value)
+ * Both queries are applied together when both are present. An empty
+ * result set is legal — it means no float matched the search.
+ */
+window.filterArgoPoints = function (query, showAll, idQuery = "") {
   let filtered = [];
   if (showAll) {
     filtered = argoPoints;
-  } else if (query) {
-    const q = query.toLowerCase();
+  } else {
+    const q = String(query || "").toLowerCase().trim();
+    const idQ = String(idQuery || "").toLowerCase().trim();
     filtered = argoPoints.filter((pt) => {
-      const region = (pt.sea || pt.region || "").toLowerCase();
-      return region.includes(q);
+      const region = getPointRegionLabel(pt).toLowerCase();
+      const idText = getPointIdText(pt);
+      if (q && idQ) return region.includes(q) && idText.includes(idQ);
+      if (q) return region.includes(q);
+      if (idQ) return idText.includes(idQ);
+      return false; // no query at all → show nothing
     });
   }
-  // If showAll is false and query is empty, filtered remains empty (0 points).
   initArgoMarkers(filtered);
   buildSidebarCards(filtered);
 };
