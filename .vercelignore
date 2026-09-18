@@ -1,0 +1,18 @@
+# Keep the deployment lean: no venvs, legacy snapshots, env files or
+# build artifacts — Vercel installs dependencies and builds from source.
+.git
+.vercel
+node_modules
+**/node_modules
+MainProjectFiles
+copernicus_project
+server
+HelpingDocs
+frontend/dist
+backend/dist
+backend/.env
+frontend/.env
+.env
+.env.local
+*.log
+render.yaml

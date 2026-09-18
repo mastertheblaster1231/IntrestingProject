@@ -1,13 +1,18 @@
 {
-  "installCommand": "npm --prefix frontend install",
+  "installCommand": "npm install && npm --prefix frontend install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "cleanUrls": false,
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/ocean", "destination": "/ocean.html" },
-    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" },
-    { "source": "/api/(.*)", "destination": "/backend/server.js" },
-    { "source": "/(.*)", "destination": "/frontend/$1" }
+    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" }
   ],
   "headers": [
     {

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { gsap } from "gsap";
 import earth8kMapUrl from "../Images/8k_earth_daymap.jpg";
 import earth8kCloudsUrl from "../Images/8k_earth_clouds.jpg";
@@ -1357,11 +1358,18 @@ window.applySalinityLayer = function (enabled) {
 // ============================================================================
 
 // ── Configuration ──────────────────────────────────────────────────────────
-const VF_COUNT = 40000; // Dense streamer particles for NASA SVS look
-const VF_TRAIL = 24;   // Long trails for flowing streamline effect
+const VF_COUNT = 10000; // Dense streamer particles for the NASA "Perpetual Ocean" look
+const VF_TRAIL = 20;   // Long trails for flowing streamline effect
 const VF_SEGS = VF_TRAIL - 1;
 const VF_VERTS = VF_COUNT * VF_SEGS * 2;
 const VF_R = GLOBE_RADIUS + 0.003;
+// Visual exaggeration: real geostrophic speeds are 0.05–0.5 m/s and 1 deg of
+// lat ≈ 111 km, so raw m/s would look frozen on the globe. This factor maps
+// 1 m/s → ~9 deg/s of on-globe motion (a 0.3 m/s current flows ~2.7 deg/s).
+const VF_VISUAL_TIME_SCALE = 1000000;
+// Particle advection runs at a fixed 30 Hz — halves CPU cost and keeps every
+// recorded trail segment a consistent length regardless of frame rate.
+const VF_SIM_STEP = 1 / 30;
 
 // ── State ──────────────────────────────────────────────────────────────────
 let vfMesh = null; // THREE.LineSegments
@@ -1468,18 +1476,20 @@ function advanceLatLon(lat, lon, u, v, deltaSeconds) {
 }
 
 function spawnFromValidOceanCell(field, xyzOut) {
-  if (!field) return;
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const i = Math.floor(Math.random() * field.width);
-    const j = Math.floor(Math.random() * field.height);
-    const uVal = field.u[j * field.width + i];
-    if (Number.isFinite(uVal)) {
-      const lat = field.lats[j];
-      const lon = field.lons[i];
-      _vfToXYZ(lat, lon, xyzOut);
-      return { lat, lon };
-    }
-  }
+  // Spawn only on REAL ocean cells at/above the noise floor — the spawnable
+  // list is built once per field load in buildFlowFieldFromVectors().
+  if (!field || !field.spawnable || field.spawnable.length === 0) return null;
+  const cell = field.spawnable[(Math.random() * field.spawnable.length) | 0];
+  // Small jitter inside the cell so particles don't stack on grid nodes
+  const lat = Math.max(
+    -89.9,
+    Math.min(89.9, cell[0] + (Math.random() - 0.5) * field.latitudeStep * 0.9),
+  );
+  const lon = normalizeLongitude(
+    cell[1] + (Math.random() - 0.5) * field.longitudeStep * 0.9,
+  );
+  _vfToXYZ(lat, lon, xyzOut);
+  return { lat, lon };
 }
 
 // ============================================================================
@@ -1488,11 +1498,12 @@ function spawnFromValidOceanCell(field, xyzOut) {
 
 function createOceanVectorField() {
   if (vfMesh) return;
+  if (!window.currentField) return; // real data required — no procedural fallback
 
-  console.log("Vector field data loaded:", {
+  console.log("[VectorField] flow particles live:", {
     particles: VF_COUNT,
     trailLength: VF_TRAIL,
-    model: "Copernicus Marine Real-Time Vectors",
+    source: "NOAA CoastWatch — altimetry-derived geostrophic surface currents",
   });
 
   // ── Allocate per-particle state ──────────────────────────────────────────
@@ -1503,10 +1514,15 @@ function createOceanVectorField() {
 
   const xyz = [0, 0, 0];
   for (let i = 0; i < VF_COUNT; i++) {
-    const lat = Math.asin(2 * Math.random() - 1) * RAD2DEG;
-    const lon = Math.random() * 360 - 180;
-
-    _vfToXYZ(lat, lon, xyz);
+    // Spawn on real ocean cells of the loaded field (bbox fallback)
+    if (!spawnFromValidOceanCell(window.currentField, xyz) && window.currentField) {
+      const f = window.currentField;
+      _vfToXYZ(
+        f.south + Math.random() * (f.north - f.south),
+        f.west + Math.random() * (f.east - f.west),
+        xyz,
+      );
+    }
 
     // Fill entire trail with identical position (will spread naturally)
     for (let j = 0; j < VF_TRAIL; j++) {
@@ -1574,45 +1590,80 @@ function createOceanVectorField() {
   scene.add(vfMesh);
   vfActive = true;
 
-  // ── Startup fetch: populate window.currentField immediately ──────────────
-  if (!window.currentField) {
-    console.log('[VectorField] Fetching initial current field from backend...');
-    fetch('http://localhost:8000/api/currents/latest?depth=0&step=1')
-      .then(r => r.json())
-      .then(data => {
-        if (!data.ok || !data.grid || !data.vectors) return;
-        const { width, height, west, longitudeStep, latitudeStep } = data.grid;
-        const south = data.grid.south;
-        const count = width * height;
-        const uArr = new Float32Array(count);
-        const vArr = new Float32Array(count);
-        uArr.fill(NaN);
-        vArr.fill(NaN);
-        const lats = new Float32Array(height);
-        const lons = new Float32Array(width);
-        for (let j = 0; j < height; j++) lats[j] = south + j * latitudeStep;
-        for (let i = 0; i < width; i++) lons[i] = west + i * longitudeStep;
-        for (const vec of data.vectors) {
-          const i = Math.round((vec.lon - west) / longitudeStep);
-          const j = Math.round((vec.lat - south) / latitudeStep);
-          if (i >= 0 && i < width && j >= 0 && j < height) {
-            uArr[j * width + i] = vec.u;
-            vArr[j * width + i] = vec.v;
-          }
-        }
-        window.currentField = {
-          width, height, west, south,
-          east: data.grid.east, north: data.grid.north,
-          longitudeStep, latitudeStep,
-          u: uArr, v: vArr, lats, lons,
-          timestamp: data.source.time,
-          provider: data.source.provider,
-          mode: data.source.mode
-        };
-        console.log('[VectorField] ✅ Current field loaded:', data.vectors.length, 'vectors');
-      })
-      .catch(err => console.warn('[VectorField] Startup fetch failed:', err.message));
+}
+
+/**
+ * Build the flow-field grid consumed by sampleCurrentField() from ONE real
+ * /api/currents response (NOAA CoastWatch altimetry-derived geostrophic
+ * vectors). Land cells / gaps stay NaN — they are never interpolated or
+ * fabricated, and particles only ever spawn on real ocean cells.
+ */
+function buildFlowFieldFromVectors(vectors, requestedSpacingDeg) {
+  if (!Array.isArray(vectors) || vectors.length === 0) return false;
+
+  let south = Infinity, north = -Infinity, west = Infinity, east = -Infinity;
+  for (const vec of vectors) {
+    if (vec.lat < south) south = vec.lat;
+    if (vec.lat > north) north = vec.lat;
+    if (vec.lon < west) west = vec.lon;
+    if (vec.lon > east) east = vec.lon;
   }
+
+  // Grid spacing: trust the backend's requested spacing, else detect the
+  // minimum gap between distinct latitudes in the response.
+  let latStep = Number(requestedSpacingDeg) || 0;
+  if (!(latStep > 0)) {
+    const uniq = [...new Set(vectors.map((v) => +Number(v.lat).toFixed(4)))].sort((a, b) => a - b);
+    for (let i = 1; i < uniq.length; i++) {
+      const d = uniq[i] - uniq[i - 1];
+      if (d > 0 && (latStep === 0 || d < latStep)) latStep = d;
+    }
+  }
+  if (!(latStep > 0)) return false;
+  const lonStep = latStep;
+
+  const height = Math.round((north - south) / latStep) + 1;
+  const width = Math.round((east - west) / lonStep) + 1;
+  if (width < 2 || height < 2 || width * height > 2e6) return false;
+
+  const u = new Float32Array(width * height).fill(NaN);
+  const v = new Float32Array(width * height).fill(NaN);
+  const spd = new Float32Array(width * height).fill(NaN);
+  const lats = new Float32Array(height);
+  const lons = new Float32Array(width);
+  for (let j = 0; j < height; j++) lats[j] = south + j * latStep;
+  for (let i = 0; i < width; i++) lons[i] = west + i * lonStep;
+
+  for (const vec of vectors) {
+    const i = Math.round((vec.lon - west) / lonStep);
+    const j = Math.round((vec.lat - south) / latStep);
+    if (i >= 0 && i < width && j >= 0 && j < height) {
+      const k = j * width + i;
+      u[k] = Number(vec.u);
+      v[k] = Number(vec.v);
+      spd[k] = Number(vec.speed);
+    }
+  }
+
+  // Spawnable list: real ocean cells at/above the noise floor only
+  const spawnable = [];
+  for (let j = 0; j < height; j++) {
+    for (let i = 0; i < width; i++) {
+      const k = j * width + i;
+      if (Number.isFinite(u[k]) && spd[k] >= CURRENTS_LAYER.noiseThreshold) {
+        spawnable.push([lats[j], lons[i]]);
+      }
+    }
+  }
+  if (spawnable.length === 0) return false;
+
+  window.currentField = {
+    width, height, west, south, east, north,
+    longitudeStep: lonStep, latitudeStep: latStep,
+    u, v, speed: spd, lats, lons, spawnable,
+    provider: "NOAA CoastWatch ERDDAP — noaacwBLENDEDNRTcurrentsDaily",
+  };
+  return true;
 }
 
 function destroyOceanVectorField() {
@@ -1634,9 +1685,18 @@ function destroyOceanVectorField() {
 }
 
 // ── Per-frame animation (called from animate()) ────────────────────────────
+let vfSimAccum = 0;
 function updateOceanVectorField(delta) {
-  if (!vfActive || !vfMesh) return;
+  if (!vfActive || !vfMesh || !window.currentField) return;
   if (delta <= 0 || delta > 0.5) delta = 0.016; // Clamp wild deltas
+
+  // Fixed-rate simulation: accumulate real time, run a tick only when a full
+  // VF_SIM_STEP has elapsed. Between ticks nothing changed — skip the whole
+  // vertex rebuild.
+  vfSimAccum += delta;
+  if (vfSimAccum < VF_SIM_STEP) return;
+  delta = vfSimAccum;
+  vfSimAccum = 0;
 
   const posArr = vfPosAttr.array;
   const alphaArr = vfAlphaAttr.array;
@@ -1663,8 +1723,7 @@ function updateOceanVectorField(delta) {
         isLand = true; // Use provider missing data mask
     } else {
         spd = sample.speed;
-        const visualTimeScale = 180; // Global visual acceleration
-        const visualSeconds = delta * visualTimeScale;
+        const visualSeconds = delta * VF_VISUAL_TIME_SCALE;
         
         const next = advanceLatLon(
             ll[0], ll[1],
@@ -1687,14 +1746,8 @@ function updateOceanVectorField(delta) {
 
     // ── Age management ──
     vfAges[i] += delta * 15;  // Slower aging = longer visible trails
-    if (vfAges[i] > vfLifes[i] || spd < 0.005 || isLand) {
-      if (window.currentField) {
-        spawnFromValidOceanCell(window.currentField, xyz);
-      } else {
-        const rLat = Math.asin(2 * Math.random() - 1) * RAD2DEG;
-        const rLon = Math.random() * 360 - 180;
-        _vfToXYZ(rLat, rLon, xyz);
-      }
+    if (vfAges[i] > vfLifes[i] || spd < CURRENTS_LAYER.noiseThreshold || isLand) {
+      spawnFromValidOceanCell(window.currentField, xyz); // real ocean cells only
       for (let j = 0; j < VF_TRAIL; j++) {
         const b = (i * VF_TRAIL + j) * 3;
         vfTrails[b] = xyz[0];
@@ -1749,49 +1802,292 @@ function updateOceanVectorField(delta) {
 }
 
 // ============================================================================
-// 📡 REAL-TIME OCEAN CURRENTS API FETCH (OSCAR / HYCOM)
+// 🧭 REAL SURFACE CURRENT ARROWS — NOAA CoastWatch (altimetry-derived geostrophic)
 // ============================================================================
-async function fetchRealOceanCurrents() {
-  console.group(
-    "%c🌊 REAL OCEAN CURRENTS STATUS",
-    "color: #00ffcc; font-weight: bold; font-size: 14px;",
+// Data: GET /api/currents — server-side-strided griddap vectors from
+// noaacwBLENDEDNRTcurrentsDaily on NOAA CoastWatch ERDDAP (satellite
+// altimetry → geostrophic u/v, global 0.25°, daily). SURFACE ONLY — this
+// layer has no depth dimension, and the values are the geostrophic
+// component only (no wind-driven or tidal currents), so coastal speeds
+// read low. That is the truth of the product; label it as such.
+//
+// Rendering: ONE InstancedMesh of small arrows. Each instance is oriented
+// with the local surface normal at its own lat/lon (the globe's "up"
+// varies across the sphere) and rotated by the flow's compass bearing.
+// No procedural fallback: if the fetch fails, the layer shows an error
+// state instead of a plausible-looking fabricated field.
+// ============================================================================
+
+const CURRENTS_LAYER = {
+  endpoint: "/api/currents",
+  stride: 6,                 // griddap index stride → ~1.5° spacing → few hundred arrows
+  refetchMs: 5 * 60 * 1000,  // daily cadence — never poll faster than several minutes
+  noiseThreshold: 0.02,      // m/s — below this the vector is noise: hide it, don't draw a stub
+  speedMax: 1.5,             // fixed colour/length domain (m/s)
+  altitude: GLOBE_RADIUS + 0.012, // just above the globe surface, below float markers
+  arrowScale: 0.045,         // world-unit length at full speed (dimmed under the flow particles)
+};
+
+// Shared with the shader via onBeforeCompile — ONE uniform per frame, no
+// per-instance JS work in the render loop.
+const CURRENTS_TIME = { value: 0 };
+
+let currentsMesh = null;
+let currentsAbort = null;
+let currentsData = null;
+let currentsFetchedAt = 0;
+
+let currentsArrowGeo = null;
+let currentsArrowMat = null;
+
+function getCurrentsArrowGeometry() {
+  if (currentsArrowGeo) return currentsArrowGeo;
+  // Unit arrow pointing along +Y, total length 1.0 — scaled per instance.
+  const shaft = new THREE.CylinderGeometry(0.055, 0.055, 0.66, 6, 1, false);
+  shaft.translate(0, 0.33, 0);
+  const head = new THREE.ConeGeometry(0.15, 0.34, 12);
+  head.translate(0, 0.83, 0);
+  currentsArrowGeo = mergeGeometries([shaft, head]);
+  return currentsArrowGeo;
+}
+
+function getCurrentsArrowMaterial() {
+  if (currentsArrowMat) return currentsArrowMat;
+  const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.55 });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = CURRENTS_TIME;
+    shader.vertexShader =
+      "uniform float uTime;\nattribute float aPulse;\n" +
+      shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        [
+          "#include <begin_vertex>",
+          // Flow pulse: each arrow breathes in phase with its own flow
+          // direction (aPulse = bearing/360), so the field reads as
+          // flowing. Single time uniform — zero per-instance work/frame.
+          "transformed *= 1.0 + 0.16 * sin(uTime * 2.0 + aPulse * 6.28318);",
+        ].join("\n"),
+      );
+  };
+  currentsArrowMat = mat;
+  return mat;
+}
+
+// Fixed speed → colour ramp over 0–1.5 m/s: cyan → amber → red.
+const _curColLow = new THREE.Color(0x00e5ff);
+const _curColMid = new THREE.Color(0xffd54a);
+const _curColHigh = new THREE.Color(0xff4d4d);
+const _curColor = new THREE.Color();
+
+function currentsSpeedColor(speed, target) {
+  const t = Math.max(0, Math.min(1, speed / CURRENTS_LAYER.speedMax));
+  if (t < 0.5) return target.copy(_curColLow).lerp(_curColMid, t / 0.5);
+  return target.copy(_curColMid).lerp(_curColHigh, (t - 0.5) / 0.5);
+}
+
+function setVectorsStatus(text, isError = false) {
+  const el = document.getElementById("vectorsStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("error", Boolean(isError));
+}
+
+function disposeCurrentsMesh() {
+  if (!currentsMesh) return;
+  scene.remove(currentsMesh);
+  currentsMesh.geometry.dispose(); // per-fetch clone (carries the aPulse attribute)
+  currentsMesh.dispose();          // frees the instance matrices/colours
+  currentsMesh = null;
+}
+
+// Pre-allocated scratch objects for the instance build (runs once per fetch)
+const _curUp = new THREE.Vector3();
+const _curEast = new THREE.Vector3();
+const _curNorth = new THREE.Vector3();
+const _curFlow = new THREE.Vector3();
+const _curXAxis = new THREE.Vector3();
+const _curBasis = new THREE.Matrix4();
+const _curQuat = new THREE.Quaternion();
+const _curScale = new THREE.Vector3();
+const _curMatrix = new THREE.Matrix4();
+const CURRENTS_WORLD_UP = new THREE.Vector3(0, 1, 0);
+const CURRENTS_HIDDEN_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+
+function buildCurrentsMesh(vectors) {
+  disposeCurrentsMesh();
+
+  const geometry = getCurrentsArrowGeometry().clone();
+  // Phase-locked pulse: attribute holds each arrow's bearing/360 so the
+  // shader can make the field appear to travel along the flow.
+  const phases = new Float32Array(vectors.length);
+  for (let i = 0; i < vectors.length; i++) {
+    phases[i] = ((Number(vectors[i].direction_deg) || 0) % 360) / 360;
+  }
+  geometry.setAttribute("aPulse", new THREE.InstancedBufferAttribute(phases, 1));
+
+  const mesh = new THREE.InstancedMesh(
+    geometry,
+    getCurrentsArrowMaterial(),
+    Math.max(1, vectors.length),
   );
-  console.log("Checking for live gridded U/V vector data from ERDDAP/OSCAR...");
+  mesh.frustumCulled = false; // instances hug the globe; default bounds would cull wrongly
+
+  for (let i = 0; i < vectors.length; i++) {
+    const vec = vectors[i];
+    const speed = Number(vec.speed) || 0;
+    if (speed < CURRENTS_LAYER.noiseThreshold) {
+      mesh.setMatrixAt(i, CURRENTS_HIDDEN_MATRIX); // hidden, not a meaningless stub
+      continue;
+    }
+
+    // 1. Position — REUSES the same latLonToVector3 the Argo floats use, so
+    //    floats and currents can never drift apart on the sphere.
+    const pos = latLonToVector3(vec.lat, vec.lon, CURRENTS_LAYER.altitude);
+
+    // 2. Local frame at this point: "up" is the surface normal here, and
+    //    east/north are the local tangents. One global up would be wrong.
+    _curUp.copy(pos).normalize();
+    _curEast.copy(CURRENTS_WORLD_UP).cross(_curUp);
+    if (_curEast.lengthSq() < 1e-8) _curEast.set(1, 0, 0);
+    _curEast.normalize();
+    _curNorth.crossVectors(_curUp, _curEast).normalize();
+
+    // 3. Flow direction from the compass bearing (0 = N, 90 = E, flows TOWARD).
+    const bearing = ((Number(vec.direction_deg) || 0) * Math.PI) / 180;
+    _curFlow
+      .copy(_curNorth)
+      .multiplyScalar(Math.cos(bearing))
+      .addScaledVector(_curEast, Math.sin(bearing))
+      .normalize();
+
+    // 4. Orient the arrow: local +Y → flow direction (tangent to the
+    //    surface), local +Z → surface normal, so the glyph lies flat on
+    //    the globe pointing where the current actually goes.
+    _curXAxis.crossVectors(_curFlow, _curUp).normalize();
+    _curBasis.makeBasis(_curXAxis, _curFlow, _curUp);
+    _curQuat.setFromRotationMatrix(_curBasis);
+
+    // 5. Length/width scale by speed within the fixed 0–1.5 m/s domain.
+    const t = Math.min(speed / CURRENTS_LAYER.speedMax, 1);
+    const s = CURRENTS_LAYER.arrowScale * (0.5 + 0.45 * t);
+    _curMatrix.compose(pos, _curQuat, _curScale.set(s, s, s));
+    mesh.setMatrixAt(i, _curMatrix);
+
+    currentsSpeedColor(speed, _curColor);
+    mesh.setColorAt(i, _curColor);
+  }
+
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  scene.add(mesh);
+  currentsMesh = mesh;
+}
+
+/** Build BOTH renderings of one real snapshot: flow particles + arrows. */
+function renderCurrentsLayer(data) {
+  buildCurrentsMesh(data.vectors); // orientation arrows (kept, dimmed)
+  const spacing = data.grid ? Number(data.grid.requested_spacing_deg) : NaN;
+  if (buildFlowFieldFromVectors(data.vectors, spacing)) {
+    createOceanVectorField(); // spawn the flowing particle trails (no-op if alive)
+  } else {
+    destroyOceanVectorField(); // no grid → no flow, never a fake field
+    console.warn("[Currents] flow grid could not be reconstructed — particles off");
+  }
+  setVectorsStatus(
+    `NOAA CoastWatch (altimetry) · grid ${new Date(data.time).toISOString().slice(0, 10)}` +
+      ` · ${data.grid.count} vectors · flowing`,
+  );
+  console.info(
+    `[Currents] ✓ ${data.grid.count} altimetry-derived vectors rendered (grid ${data.time})`,
+  );
+}
+
+async function showCurrentArrows() {
+  if (currentsAbort) return; // fetch already in flight
+  const isFresh = currentsData && Date.now() - currentsFetchedAt < CURRENTS_LAYER.refetchMs;
+  if (isFresh) {
+    renderCurrentsLayer(currentsData); // cached snapshot — rebuild instantly
+    return;
+  }
+
+  const controller = new AbortController();
+  currentsAbort = controller;
+  setVectorsStatus("⏳ Loading NOAA CoastWatch currents…", false);
 
   try {
-    // In a production environment, this would hit a backend proxy that
-    // downloads a NetCDF grid and serves it as a binary texture or lightweight JSON.
-    // ERDDAP raw Griddap requests are too massive (~50MB+) to fetch directly into the browser.
-    const res = await fetch("/api/ocean-currents/latest", { method: "HEAD" });
-    if (res.ok) {
-      console.log(
-        "✅ Live backend grid found! Switching to real-time ERDDAP vectors.",
-      );
-      // ... Load real data ...
-    } else {
-      throw new Error("Backend proxy not found (404)");
+    const cfg = ARGO_FLEET_CONFIG; // same regional box the float fleet uses
+    const params = new URLSearchParams({
+      lat_min: cfg.regionLatMin,
+      lat_max: cfg.regionLatMax,
+      lon_min: cfg.regionLonMin,
+      lon_max: cfg.regionLonMax,
+      stride: CURRENTS_LAYER.stride,
+    });
+    const res = await fetch(apiUrl(`${CURRENTS_LAYER.endpoint}?${params}`), {
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${res.status}`);
     }
+    const data = await res.json();
+    if (!Array.isArray(data.vectors) || data.vectors.length === 0) {
+      throw new Error(data.error || "no valid ocean cells in the region");
+    }
+    if (data.note) console.warn("[Currents]", data.note);
+
+    currentsData = data;
+    currentsFetchedAt = Date.now();
+    renderCurrentsLayer(data);
   } catch (err) {
-    console.warn("⚠️ Live Vector Backend Proxy not connected.");
-    console.warn(
-      "ℹ️ HOW TO KNOW IF VECTORS ARE REAL: Real vectors require a server to parse massive NetCDF current grids into compressed textures. Without a backend, querying ERDDAP Griddap directly for 40,000 global U/V points crashes the browser.",
+    if (err.name === "AbortError") return; // toggle turned off mid-fetch — stay quiet
+    console.error(
+      "[Currents] real-data fetch failed — error state shown, no placeholder field:",
+      err.message,
     );
-    console.warn(
-      "🔄 FALLING BACK TO SCIENTIFIC MATH MODEL: Using high-fidelity Navier-Stokes approximations of the 5 global gyres and 12 major boundary currents.",
-    );
+    setVectorsStatus("⚠ Currents unavailable — NOAA ERDDAP unreachable", true);
+    disposeCurrentsMesh();
+    destroyOceanVectorField();
+    window.currentField = null;
+  } finally {
+    currentsAbort = null;
   }
-  console.groupEnd();
+}
+
+function disposeCurrentsLayer() {
+  if (currentsAbort) {
+    currentsAbort.abort(); // cancel any pending fetch, don't just hide it
+    currentsAbort = null;
+  }
+  disposeCurrentsMesh();
+  destroyOceanVectorField();   // stop the flow particles entirely
+  window.currentField = null;  // no stale field left for the sim
 }
 
 window.applyVectorsLayer = function (enabled) {
-  console.info(`[Globe] Ocean Vectors layer visibility: ${enabled}`);
   if (enabled) {
-    fetchRealOceanCurrents(); // Trigger the real-data check and log
-    createOceanVectorField();
+    showCurrentArrows();
   } else {
-    destroyOceanVectorField();
+    disposeCurrentsLayer();
+    setVectorsStatus("NOAA CoastWatch (altimetry) — layer off");
   }
 };
+
+// Dev helper (console): force a refetch, optionally with a different stride.
+// Region/zoom is not tracked on this globe; the layer covers the same
+// Indian-Ocean box as the Argo fleet.
+window.reloadCurrents = function (stride) {
+  if (stride) CURRENTS_LAYER.stride = Math.max(1, Math.min(40, Math.round(stride)));
+  currentsData = null;
+  currentsFetchedAt = 0;
+  disposeCurrentsMesh();
+  showCurrentArrows();
+};
+
+/** One shared time uniform per frame — called from animate(). */
+function updateCurrentArrowsPulse(elapsedSeconds) {
+  CURRENTS_TIME.value = elapsedSeconds;
+}
 // ============================================================================
 
 window.applyChloroLayer = function (enabled) {
@@ -2718,6 +3014,10 @@ function animate() {
       cameraTransition = null;
     }
   }
+
+  // Flow pulse for the real current arrows — one shared time uniform, no
+  // per-instance JS work. Cheap no-op when the layer is off.
+  updateCurrentArrowsPulse(elapsedTime);
 
   // 1. HORIZON OCCLUSION CHECK (Hide markers when behind the Earth's curvature)
   const camPos = camera.position;

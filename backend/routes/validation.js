@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { fetchCoreProfile, fetchFleet, interpolateAt } from '../services/argoCore.js';
 import { BGC_UNITS, BGC_VARIABLES, discoverBgcFloats, fetchBgcProfile } from '../services/argoBgc.js';
 import { discoverModelDatasets, fetchModelPoint, isModelConfigured } from '../services/modelGrid.js';
+import { CURRENTS_SOURCE, fetchCurrentVectors } from '../services/currentsGrid.js';
 import { round } from '../services/sanitize.js';
 
 dotenv.config();
@@ -411,5 +412,38 @@ router.get('/validation', handleValidation);
 
 // Legacy alias so any existing frontend call keeps resolving.
 router.get('/validate', handleValidation);
+
+// ---- 6. SURFACE CURRENTS (NOAA CoastWatch, altimetry-derived geostrophic) ---
+/**
+ * Decimated geostrophic surface current vectors from satellite altimetry.
+ * Surface only — there is no depth dimension. Values are the geostrophic
+ * component only (no wind-driven or tidal currents). Never fabricated:
+ * a fetch failure is surfaced as an error, not a placeholder field.
+ *
+ * Query: lat_min, lat_max, lon_min, lon_max (deg), stride (griddap index
+ * stride; 1 = full 0.25° grid, 4 = 1° spacing, ...).
+ */
+router.get('/currents', async (req, res) => {
+  try {
+    res.json(
+      await fetchCurrentVectors({
+        latMin: parseFloat(req.query.lat_min) || 0,
+        latMax: parseFloat(req.query.lat_max) || 25,
+        lonMin: parseFloat(req.query.lon_min) || 55,
+        lonMax: parseFloat(req.query.lon_max) || 98,
+        stride: parseInt(req.query.stride, 10) || 4,
+      })
+    );
+  } catch (err) {
+    const status = err.code === 'BAD_INPUT' ? 400 : err.code === 'EMPTY_RESULT' ? 404 : 502;
+    asError(res, status, err.message, {
+      source: CURRENTS_SOURCE,
+      hint:
+        err.code === 'UPSTREAM'
+          ? 'NOAA CoastWatch ERDDAP (coastwatch.noaa.gov) could not be reached — no placeholder field is served.'
+          : undefined,
+    });
+  }
+});
 
 export default router;

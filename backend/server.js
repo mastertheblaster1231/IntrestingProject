@@ -56,7 +56,12 @@ app.get(['/health', '/api/health'], async (_req, res) => {
 
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 
-if (process.env.NODE_ENV !== 'production') {
+// Bind a port only when running standalone (local dev). On Vercel serverless
+// (or any production host where the platform supplies the HTTP listener)
+// the app is simply exported and the platform manages the server.
+const isServerless = Boolean(process.env.VERCEL);
+
+if (!isServerless && process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Ocean backend listening on :${PORT}`);
     console.log(`  core Argo : ${process.env.ERDDAP_IFREMER_BASE || 'default Ifremer ArgoFloats'}`);

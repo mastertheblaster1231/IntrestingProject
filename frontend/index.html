@@ -1516,6 +1516,19 @@
         justify-content: space-between;
         padding: 7px 12px;
       }
+      /* Small provenance/status line under a layer toggle (e.g. currents source) */
+      .layer-status {
+        font-family: 'Space Mono', monospace;
+        font-size: 0.62rem;
+        line-height: 1.35;
+        color: #8bb2db;
+        margin-top: -7px;
+        padding: 0 2px;
+        user-select: none;
+      }
+      .layer-status.error {
+        color: #fbbf24;
+      }
     </style>
   </head>
   <body>
@@ -1559,11 +1572,12 @@
           <span class="temp-toggle-label">🧂 Salinity</span>
           <div class="temp-toggle-switch"></div>
         </div>
-        <!-- Ocean Vectors Toggle -->
-        <div id="vectorsToggle" class="temp-toggle-container" onclick="toggleVectorsMode()" title="Toggle Ocean Vectors Layer">
+        <!-- Ocean Vectors Toggle — REAL altimetry-derived geostrophic currents -->
+        <div id="vectorsToggle" class="temp-toggle-container" onclick="toggleVectorsMode()" title="Toggle flowing surface-current animation — NOAA CoastWatch (altimetry-derived geostrophic currents, surface only, no wind/tidal component)">
           <span class="temp-toggle-label">↗️ Ocean Vectors</span>
           <div class="temp-toggle-switch"></div>
         </div>
+        <div id="vectorsStatus" class="layer-status">NOAA CoastWatch (altimetry)</div>
         <!-- Chlorophyll - a Toggle -->
         <div id="chloroToggle" class="temp-toggle-container" onclick="toggleChloroMode()" title="Toggle Chlorophyll - a Layer">
           <span class="temp-toggle-label">🌿 Chlorophyll - a</span>
@@ -2234,16 +2248,29 @@
         }
       }
 
+      // Set when the user manually un-ticks "All points": every point is
+      // hidden and the checkbox STAYS un-ticked — even with no search query —
+      // until the user re-ticks it or starts a new search.
+      let userHidAllPoints = false;
+
       /**
-       * Central filter-state sync: any active query (region OR Argo ID)
-       * un-ticks "All points"; when no query is left the checkbox is
-       * re-ticked and the full fleet is shown.
+       * Central filter-state sync. An active query (region OR Argo ID) shows
+       * only the matching points with "All points" un-ticked. A manual
+       * un-tick hides every point and sticks; a manual re-tick restores the
+       * full fleet (and clears the searches).
        */
       function refreshFilterState() {
         const checkbox = document.getElementById('allPointsCheckbox');
         const hasFilter = searchQuery.length > 0 || argoIdQuery.length > 0;
-        showAllPoints = !hasFilter;
-        if (checkbox) checkbox.checked = !hasFilter;
+        if (hasFilter) {
+          userHidAllPoints = false; // a new search overrides a manual hide
+          showAllPoints = false;
+        } else if (userHidAllPoints) {
+          showAllPoints = false; // manual hide-all sticks — never force back on
+        } else {
+          showAllPoints = true;
+        }
+        if (checkbox) checkbox.checked = showAllPoints;
         applyArgoFilters();
       }
 
@@ -2264,20 +2291,19 @@
 
       function handleAllPointsToggle(checked) {
         showAllPoints = checked;
-        const checkbox = document.getElementById('allPointsCheckbox');
-        if (showAllPoints) {
-          // Re-ticked: clear both searches and show every Argo point
+        userHidAllPoints = !checked;
+        if (checked) {
+          // Re-ticked by hand: clear both searches and show every Argo point
           searchQuery = "";
           argoIdQuery = "";
           const regionInput = document.getElementById('regionSearchInput');
           const idInput = document.getElementById('argoIdSearchInput');
           if (regionInput) regionInput.value = "";
           if (idInput) idInput.value = "";
-        } else if (!searchQuery && !argoIdQuery) {
-          // Un-ticked with no query at all — nothing to filter, restore tick
-          showAllPoints = true;
-          if (checkbox) checkbox.checked = true;
         }
+        // Un-ticked by hand: hide EVERY point. With no query the globe simply
+        // shows zero points until the user re-ticks the box — it is never
+        // force-restored.
         applyArgoFilters();
       }
 
