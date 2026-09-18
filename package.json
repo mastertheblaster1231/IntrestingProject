@@ -3,8 +3,23 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix MainProjectFiles run dev",
-    "build": "npm --prefix MainProjectFiles run build",
-    "preview": "npm --prefix MainProjectFiles run preview"
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:all": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\" || npm --prefix frontend run dev & npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview",
+    "preview:frontend": "npm --prefix frontend run preview",
+    "start": "npm --prefix backend start",
+    "start:backend": "npm --prefix backend start",
+    "start:frontend": "npm --prefix frontend run preview",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "clean": "rm -rf frontend/dist backend/dist && echo 'cleaned'",
+    "clean:all": "rm -rf frontend/dist frontend/node_modules/.vite backend/dist && echo 'cleaned'",
+    "lint": "npm --prefix frontend run lint && npm --prefix backend run lint",
+    "lint:fix": "npm --prefix frontend run lint:fix && npm --prefix backend run lint:fix",
+    "check": "npm --prefix backend run check:env && npm --prefix backend run test:endpoints",
+    "test": "npm --prefix backend test"
   }
 }

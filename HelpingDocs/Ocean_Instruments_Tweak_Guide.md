@@ -8,11 +8,11 @@ A quick-reference cheat sheet for developers on where to tweak variables, custom
 
 | Purpose                                 | File Path                                                                                                                                      |
 | :-------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
-| **3D Instrument Geometries & Batching** | [`MainProjectFiles/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js)             |
-| **React Three Fiber Component**         | [`MainProjectFiles/3d pages/RenderInstrument.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/RenderInstrument.jsx) |
-| **3D Ocean Scene, Shaders & Camera**    | [`MainProjectFiles/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js)                         |
-| **Data Service & Scientific Glossary**  | [`MainProjectFiles/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/oceanDataService.js)   |
-| **UI Layout, Half-Screen Card & HUD**   | [`MainProjectFiles/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/ocean.html)                                         |
+| **3D Instrument Geometries & Batching** | [`frontend/3d pages/instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js)             |
+| **React Three Fiber Component**         | [`frontend/3d pages/RenderInstrument.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/RenderInstrument.jsx) |
+| **3D Ocean Scene, Shaders & Camera**    | [`frontend/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js)                         |
+| **Data Service & Scientific Glossary**  | [`frontend/3d pages/oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/oceanDataService.js)   |
+| **UI Layout, Half-Screen Card & HUD**   | [`frontend/ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/ocean.html)                                         |
 
 ---
 
@@ -20,7 +20,7 @@ A quick-reference cheat sheet for developers on where to tweak variables, custom
 
 ### A. How to Add or Move Instruments in the 3D Scene
 
-Locate `DEMO_INSTRUMENTS` in [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js#L17-L115):
+Locate `DEMO_INSTRUMENTS` in [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js#L17-L115):
 
 ```javascript
 {
@@ -109,7 +109,7 @@ import { InstancedInstruments } from "./RenderInstrument";
 
 ### A. Half-Screen Window Dimensions
 
-To adjust the size or position of the expanded profile window, edit `.argo-subtab-card.enlarged` in [`ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/ocean.html#L744-L770):
+To adjust the size or position of the expanded profile window, edit `.argo-subtab-card.enlarged` in [`ocean.html`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/ocean.html#L744-L770):
 
 ```css
 .argo-subtab-card.enlarged {
@@ -126,7 +126,7 @@ To adjust the size or position of the expanded profile window, edit `.argo-subta
 
 ### B. Graph SVG Resolution & Scales
 
-In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L640-L668), locate `renderProfileChart`:
+In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L640-L668), locate `renderProfileChart`:
 
 ```javascript
 const w = 700; // SVG coordinate width
@@ -165,7 +165,7 @@ To change where the Oxygen Minimum Zone (OMZ) or Twilight zone starts, change th
 
 ### D. Underwater Water Color & Deep Abyss Blue
 
-When diving deep underground/underwater into the abyss, the water colors, atmospheric fog, and ambient lighting are controlled inside `window.setOceanDepth` in [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L1705-L1750):
+When diving deep underground/underwater into the abyss, the water colors, atmospheric fog, and ambient lighting are controlled inside `window.setOceanDepth` in [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L1705-L1750):
 
 ```javascript
 // Luminous deep oceanic blue palette (keeps water richly blue instead of pitch black):
@@ -181,7 +181,7 @@ const deepOceanAmbient = new THREE.Color(0x1e4b7a); // Deep water ambient light
 
 ---
 
-Hovering over the `ⓘ` button next to any parameter shows the scientific explanation card. To add or modify definitions, edit `PARAMETER_GLOSSARY` in [`oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/oceanDataService.js#L14-L85):
+Hovering over the `ⓘ` button next to any parameter shows the scientific explanation card. To add or modify definitions, edit `PARAMETER_GLOSSARY` in [`oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/oceanDataService.js#L14-L85):
 
 ```javascript
 salinity: {
@@ -201,7 +201,7 @@ salinity: {
 
 To feed live data from an external REST API, WebSocket, or NetCDF/GeoJSON backend:
 
-1. Use the pre-built adapter `fetchInstrumentsFromAPI(url)` in [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js#L360):
+1. Use the pre-built adapter `fetchInstrumentsFromAPI(url)` in [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js#L360):
 
    ```javascript
    import {
@@ -228,7 +228,7 @@ To feed live data from an external REST API, WebSocket, or NetCDF/GeoJSON backen
 
 When the device dives deep underground/underwater into the scene (e.g. 1000m to 4000m Hadal abyss), the colors are calibrated to keep the water a **rich, dark blueish oceanic color instead of pitch black**:
 
-All variables are located in [`MainProjectFiles/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L1765-L1825):
+All variables are located in [`frontend/3d pages/Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L1765-L1825):
 
 | Parameter          | Default Color | Description & Tweak Advice                                       |
 | ------------------ | ------------- | ---------------------------------------------------------------- |
@@ -248,7 +248,7 @@ Underwater gliders (Slocum & Spray) utilize variable buoyancy engines to glide t
 
 ### Helper Function Usage (Three.js):
 
-Imported from [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js#L650):
+Imported from [`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js#L650):
 
 ```javascript
 import { createGliderSawtoothTrail } from "./instruments.js";
@@ -269,7 +269,7 @@ slocumTrail.userData.update(elapsedTime, gliderMesh.position);
 
 ### React Three Fiber Usage:
 
-Imported from [`RenderInstrument.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/RenderInstrument.jsx#L380):
+Imported from [`RenderInstrument.jsx`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/RenderInstrument.jsx#L380):
 
 ```jsx
 import { GliderSawtoothTrail } from "./RenderInstrument";
@@ -290,7 +290,7 @@ import { GliderSawtoothTrail } from "./RenderInstrument";
 
 Visualizes real-time ocean current velocity and direction (e.g. $0.42\text{ m/s} \rightarrow \text{NE}$) around floats and instruments using a single high-performance `THREE.InstancedMesh`.
 
-### Configuration Parameters ([`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L1425)):
+### Configuration Parameters ([`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L1425)):
 
 ```javascript
 const currentVectorStream = createCurrentVectorStream({
@@ -311,7 +311,7 @@ Compares in-situ observations from Argo floats, gliders, and CTDs with numerical
 
 $$\Delta T = T_{\text{obs}} - T_{\text{model}} \qquad \Delta S = S_{\text{obs}} - S_{\text{model}}$$
 
-### Data Schema ([`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/instruments.js#L35)):
+### Data Schema ([`instruments.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/instruments.js#L35)):
 
 ```javascript
 modelValidation: {
@@ -345,7 +345,7 @@ modelValidation: {
   ```
 - **Cycle Sun Direction**: Run `window.cycleSolarTime()` in the console or click the sun button to test dawn, sunset, and night lighting.
 - **Inspect Selected Instrument**: Meshes created via `createInstrumentObject(inst)` have `mesh.userData.instrumentData` attached, ready for Three.js raycasting on click.
-- **Adjust Seabed Elevation**: In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/Ocean.js#L1460), tweak `seabedGroup.position.y = -102.0` to raise or lower the abyssal floor.
+- **Adjust Seabed Elevation**: In [`Ocean.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/Ocean.js#L1460), tweak `seabedGroup.position.y = -102.0` to raise or lower the abyssal floor.
 
 ---
 
@@ -471,7 +471,7 @@ console.log(data.scientificData, data.verticalProfile);
 
 ### D. Connecting a Real Backend API in the Future
 
-The architecture in [`oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/MainProjectFiles/3d%20pages/oceanDataService.js) has been designed so you can switch from procedural mock data to a live API with a single configuration line:
+The architecture in [`oceanDataService.js`](file:///c:/Users/siddh/Desktop/SIHProject/frontend/3d%20pages/oceanDataService.js) has been designed so you can switch from procedural mock data to a live API with a single configuration line:
 
 ```javascript
 import { oceanDataService } from "./3d pages/oceanDataService.js";

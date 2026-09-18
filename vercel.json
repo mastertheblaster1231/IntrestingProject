@@ -1,10 +1,18 @@
 {
-  "framework": "vite",
-  "buildCommand": "cd MainProjectFiles && npm run build",
-  "outputDirectory": "MainProjectFiles/dist",
+  "installCommand": "npm --prefix frontend install",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
   "cleanUrls": false,
   "rewrites": [
     { "source": "/ocean", "destination": "/ocean.html" },
-    { "source": "/erddap-proxy/(.*)", "destination": "https://erddap.ifremer.fr/$1" }
+    { "source": "/erddap-proxy/:path*", "destination": "https://erddap.ifremer.fr/:path*" },
+    { "source": "/api/(.*)", "destination": "/backend/server.js" },
+    { "source": "/(.*)", "destination": "/frontend/$1" }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [{ "key": "Access-Control-Allow-Origin", "value": "*" }]
+    }
   ]
 }
