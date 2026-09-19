@@ -37,12 +37,19 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_BACKEND_PROXY_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
-        timeout: 35000, // public backend (was 15000)
+        timeout: 60000, // public backend (was 15000)
         configure: (proxy) => {
           proxy.on('error', (err, _req, _res) => {
             console.warn('[vite proxy /api] Backend unreachable — frontend will use fallback:', err.message);
           });
         },
+      },
+      '/erddap-proxy': {
+        target: process.env.VITE_ERDDAP_PROXY_TARGET || 'https://erddap.ifremer.fr',
+        changeOrigin: true,
+        secure: true,
+        timeout: 60000, // public ERDDAP (was 15000)
+        rewrite: (path) => path.replace(/^\/erddap-proxy/, ''),
       },
     },
     watch: {

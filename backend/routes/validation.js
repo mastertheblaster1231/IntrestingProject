@@ -11,6 +11,16 @@ dotenv.config();
 
 const router = Router();
 
+// Log every backend response as JSON (user requested: whatever backend sends to frontend, log it)
+router.use((req, _res, next) => {
+  const originalJson = _res.json.bind(_res);
+  _res.json = (data) => {
+    logJson(req, data);
+    return originalJson(data);
+  };
+  next();
+});
+
 /**
  * Every endpoint here returns real measurements or an explicit absence.
  *
@@ -35,6 +45,14 @@ const router = Router();
 
 const asError = (res, status, message, extra = {}) =>
   res.status(status).json({ error: message, available: false, ...extra });
+
+const logJson = (req, data) => {
+  try {
+    console.log(`[backend] ${req.method} ${req.originalUrl} ->`, JSON.stringify(data, null, 2));
+  } catch (_) {
+    console.log(`[backend] ${req.method} ${req.originalUrl} ->`, String(data).slice(0, 500));
+  }
+};
 
 // ---- 1. FLEET --------------------------------------------------------------
 router.get('/fleet', async (req, res) => {

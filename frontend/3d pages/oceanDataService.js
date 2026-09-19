@@ -985,7 +985,7 @@ export class ErddapOceanService {
   constructor(endpoints = {}) {
     this.incoisBaseUrl = endpoints.incois || "https://erddap.incois.gov.in/erddap";
     this.ifremerBaseUrl = endpoints.ifremer || "https://erddap.ifremer.fr/erddap";
-    this.requestTimeoutMs = 20000; // public ERDDAP (was 7000)
+    this.requestTimeoutMs = 60000; // public ERDDAP (was 40000)
   }
 
   /**

@@ -23,7 +23,7 @@ import { apiUrl } from './api.js';
  * Fetch timeout in milliseconds.
  * 25 seconds for public ERDDAP (international latency, large tables).
  */
-const FETCH_TIMEOUT_MS = 25000;
+const FETCH_TIMEOUT_MS = 60000; // public ERDDAP (was 40000)
 
 /**
  * Path to the bundled offline JSON cache.

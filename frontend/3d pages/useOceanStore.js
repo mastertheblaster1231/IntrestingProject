@@ -35,8 +35,8 @@ import {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-/** Timeout for model API calls (public backend, was 5000) */
-const MODEL_API_TIMEOUT_MS = 15000;
+/** Timeout for model API calls (public backend, was 30000) */
+const MODEL_API_TIMEOUT_MS = 60000; // public backend + ERDDAP (was 30000)
 
 // ─── STORE ───────────────────────────────────────────────────────────────────
 export const useOceanStore = create((set, get) => ({

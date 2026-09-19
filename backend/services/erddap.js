@@ -12,7 +12,7 @@ import fetch from 'node-fetch';
  * Both return the same JSON envelope, so parseTable() works for either.
  */
 
-export const ERDDAP_TIMEOUT_MS = parseInt(process.env.ERDDAP_TIMEOUT_MS || '30000', 10);
+export const ERDDAP_TIMEOUT_MS = parseInt(process.env.ERDDAP_TIMEOUT_MS || '60000', 10); // public ERDDAP (was 30000)
 
 /**
  * ERDDAP's query grammar uses  &  =  >  <  ,  structurally, so we cannot run
