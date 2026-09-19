@@ -5,9 +5,8 @@ import { DEMO_INSTRUMENTS } from './instruments.js';
 import { useOceanStore } from './useOceanStore.js';
 import { SideBySideValidationPanel } from './components/SideBySideValidationPanel.jsx';
 import { useComparisonStore } from './useComparisonStore.js';
+import { getProfileAtDepth } from '../services/argoService.js';
 import {
-  calculateRealisticModelProfile,
-  calculateRealisticObservedProfile,
   calculateDelta,
   formatVariableValue,
   getAgreementRating,
@@ -83,12 +82,12 @@ function useLiveOceanTime() {
 function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDist = 0, isSelected = false) {
   if (!inst) return null;
 
-  const isArgo = inst.type === 'argo';
+  const isArgo = inst.type === 'argo' || (inst.id && String(inst.id).startsWith('argo-'));
   const isGlider = inst.type === 'glider';
   const isCtd = inst.type === 'ctd';
 
-  let lat = inst.geoCoordinates?.lat ?? 11.6000;
-  let lon = inst.geoCoordinates?.lon ?? 92.5000;
+  let lat = inst.lat ?? inst.latitude ?? inst.geoCoordinates?.lat ?? 19.442;
+  let lon = inst.lon ?? inst.longitude ?? inst.geoCoordinates?.lon ?? 89.664;
 
   // ── 1. DYNAMIC DEPTH RESOLUTION ──────────────────────────────────────────
   let depth = 15;
@@ -134,8 +133,9 @@ function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDis
       forwardSpeed = +(0.34 + (isGlidingDive ? 0.05 : 0.01) + Math.sin(cyclePhase) * 0.02).toFixed(2);
     }
   } else if (isArgo) {
-    // Argo Profiler submerges beneath waterline into deep ocean water column
-    depth = isSelected ? Math.max(0, Math.min(4000, Math.round(oceanDepth))) : (inst.depthMeters || 15);
+    const rawProf = inst.rawProfile?.profile || (typeof window !== 'undefined' && window.oceanStore?.getState()?._activeArgoProfile?.profile);
+    const minObsDepth = Array.isArray(rawProf) && rawProf[0] ? rawProf[0].depth : 4.4;
+    depth = isSelected ? Math.max(0, Math.min(4000, Math.round(oceanDepth))) : (inst.depthMeters || inst.depth || minObsDepth);
   } else if (isCtd) {
     // CTD Rosette cable lowering into water column
     const defaultCtd = inst.depthMeters || 1200;
@@ -146,103 +146,142 @@ function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDis
 
   const isDivedDeep = depth > 25 || oceanDepth > 25;
 
-  // ── 2. DYNAMIC WATER COLUMN PHYSICS (Thermocline, Halocline, OMZ, DCM) ───
-  // A. Temperature (Conservative Potential Temperature in C)
+  // ── 2. WATER COLUMN HYDROGRAPHY & OBSERVATIONS ─────────────────────────────
   let temp;
-  if (depth <= 45) {
-    temp = 28.45 - (depth / 45) * 0.45;
-  } else if (depth <= 180) {
-    const f = (depth - 45) / 135;
-    temp = 28.0 - f * 12.4; // drops from 28.0C down to 15.6C
-  } else if (depth <= 800) {
-    const factor = Math.exp(-(depth - 180) / 260);
-    temp = 5.2 + (15.6 - 5.2) * factor; // drops to 6.2C
-  } else if (depth <= 2000) {
-    const factor = Math.exp(-(depth - 800) / 650);
-    temp = 2.6 + (6.2 - 2.6) * factor; // drops to 3.1C
-  } else {
-    const factor = Math.exp(-(depth - 2000) / 1500);
-    temp = 1.65 + (3.1 - 1.65) * factor; // drops to 1.8C in abyss
-  }
-  // Subtle live sensor micro-fluctuation (+/- 0.02C)
-  temp += Math.sin(liveTick * 1.3 + depth * 0.05) * 0.025;
-  temp = +temp.toFixed(2);
-
-  // B. Salinity (Practical Salinity Units, with Subsurface Salinity Maximum ~150m)
   let salinity;
-  if (depth <= 40) {
-    salinity = 34.25 + (depth / 40) * 0.20;
-  } else if (depth <= 160) {
-    const f = (depth - 40) / 120;
-    salinity = 34.45 + f * 0.65; // peaks at 35.10 PSU
-  } else if (depth <= 800) {
-    const f = (depth - 160) / 640;
-    salinity = 35.10 - f * 0.32; // drops to 34.78 PSU
-  } else {
-    salinity = 34.76 + Math.min(0.04, ((depth - 800) / 3200) * 0.03);
-  }
-  salinity += Math.cos(liveTick * 1.1 + depth * 0.04) * 0.015;
-  salinity = +salinity.toFixed(2);
+  let dissolvedOxygen = null;
+  let chlorophyll = null;
+  let currentSpeed = null;
+  let currentDirection = null;
+  let hasBgc = false;
 
-  // C. Dissolved Oxygen (umol/kg, featuring Northern Indian Ocean OMZ ~200-600m)
-  let dissolvedOxygen;
-  if (depth <= 50) {
-    dissolvedOxygen = 205 - (depth / 50) * 15;
-  } else if (depth <= 180) {
-    const f = (depth - 50) / 130;
-    dissolvedOxygen = 190 - f * 125; // 190 -> 65
-  } else if (depth <= 600) {
-    // Oxygen Minimum Zone (OMZ core)
-    const f = Math.sin(((depth - 180) / 420) * Math.PI);
-    dissolvedOxygen = 65 - f * 28; // reaches ~37 umol/kg
-  } else if (depth <= 1500) {
-    const f = (depth - 600) / 900;
-    dissolvedOxygen = 50 + f * 65; // recovers to 115
-  } else {
-    dissolvedOxygen = 115 + Math.min(25, ((depth - 1500) / 2500) * 20);
-  }
-  dissolvedOxygen = Math.round(dissolvedOxygen + Math.sin(liveTick * 0.9) * 1.4);
+  const activeProfile = inst.rawProfile || (typeof window !== 'undefined' && window.oceanStore?.getState()?._activeArgoProfile) || null;
 
-  // D. Chlorophyll-a (mg/m3, featuring Deep Chlorophyll Maximum ~40-75m)
-  let chlorophyll;
-  if (depth <= 30) {
-    chlorophyll = 0.38 + (depth / 30) * 0.28;
-  } else if (depth <= 75) {
-    chlorophyll = 0.66 + Math.sin(((depth - 30) / 45) * Math.PI) * 0.22; // up to 0.88 mg/m3
-  } else if (depth <= 140) {
-    const f = (depth - 75) / 65;
-    chlorophyll = 0.66 * (1 - f) + 0.04;
-  } else {
-    chlorophyll = Math.max(0.01, 0.03 * Math.exp(-(depth - 140) / 100));
-  }
-  chlorophyll = +chlorophyll.toFixed(2);
+  if (isArgo) {
+    let obsAtDepth = null;
+    if (activeProfile && Array.isArray(activeProfile.profile) && activeProfile.profile.length > 0) {
+      obsAtDepth = getProfileAtDepth(activeProfile, depth);
+    }
 
-  // E. Current Speed & Direction (Ekman Spiral rotation with depth)
-  let currentSpeed;
-  if (depth <= 60) {
-    currentSpeed = 0.48 - (depth / 60) * 0.16;
-  } else if (depth <= 300) {
-    currentSpeed = 0.32 - ((depth - 60) / 240) * 0.18;
-  } else {
-    currentSpeed = Math.max(0.04, 0.14 * Math.exp(-(depth - 300) / 800));
-  }
-  currentSpeed = +(currentSpeed + Math.sin(liveTick * 0.5) * 0.02).toFixed(2);
+    if (obsAtDepth && obsAtDepth.temperature != null && obsAtDepth.salinity != null) {
+      temp = obsAtDepth.temperature;
+      salinity = obsAtDepth.salinity;
+    } else if (inst.temp != null && inst.salinity != null) {
+      temp = inst.temp;
+      salinity = inst.salinity;
+    } else if (inst.telemetry?.temperatureC != null) {
+      temp = inst.telemetry.temperatureC;
+      salinity = inst.telemetry.salinityPSU ?? 31.75;
+    } else {
+      temp = 29.06;
+      salinity = 31.75;
+    }
 
-  const baseAngle = isGlider ? 35 : (isCtd ? 135 : 42);
-  const spiralOffset = Math.round(Math.min(90, (depth / 300) * 45));
-  const currentAngle = (baseAngle + spiralOffset) % 360;
-  const cardinal = currentAngle < 90 ? 'NE' : (currentAngle < 180 ? 'SE' : (currentAngle < 270 ? 'SW' : 'NW'));
-  const currentDirection = `${cardinal} (${currentAngle}°)`;
+    // Biogeochemical measurements only if authentic BGC payload exists
+    const bgcSource = inst.bgc || activeProfile?.bgc;
+    if (bgcSource?.levels && bgcSource.levels.length > 0) {
+      hasBgc = true;
+      const nearestBgc = bgcSource.levels.reduce((prev, curr) =>
+        Math.abs(curr.depth - depth) < Math.abs(prev.depth - depth) ? curr : prev
+      , bgcSource.levels[0]);
+      dissolvedOxygen = nearestBgc.doxy ?? null;
+      chlorophyll = nearestBgc.chla ?? null;
+    } else {
+      dissolvedOxygen = null;
+      chlorophyll = null;
+      hasBgc = false;
+    }
+
+    currentSpeed = null;
+    currentDirection = null;
+  } else {
+    // Simulated Glider & CTD physics
+    if (depth <= 45) {
+      temp = 28.45 - (depth / 45) * 0.45;
+    } else if (depth <= 180) {
+      const f = (depth - 45) / 135;
+      temp = 28.0 - f * 12.4;
+    } else if (depth <= 800) {
+      const factor = Math.exp(-(depth - 180) / 260);
+      temp = 5.2 + (15.6 - 5.2) * factor;
+    } else if (depth <= 2000) {
+      const factor = Math.exp(-(depth - 800) / 650);
+      temp = 2.6 + (6.2 - 2.6) * factor;
+    } else {
+      const factor = Math.exp(-(depth - 2000) / 1500);
+      temp = 1.65 + (3.1 - 1.65) * factor;
+    }
+    temp += Math.sin(liveTick * 1.3 + depth * 0.05) * 0.025;
+    temp = +temp.toFixed(2);
+
+    if (depth <= 40) {
+      salinity = 34.25 + (depth / 40) * 0.20;
+    } else if (depth <= 160) {
+      const f = (depth - 40) / 120;
+      salinity = 34.45 + f * 0.65;
+    } else if (depth <= 800) {
+      const f = (depth - 160) / 640;
+      salinity = 35.10 - f * 0.32;
+    } else {
+      salinity = 34.76 + Math.min(0.04, ((depth - 800) / 3200) * 0.03);
+    }
+    salinity += Math.cos(liveTick * 1.1 + depth * 0.04) * 0.015;
+    salinity = +salinity.toFixed(2);
+
+    if (depth <= 50) {
+      dissolvedOxygen = 205 - (depth / 50) * 15;
+    } else if (depth <= 180) {
+      const f = (depth - 50) / 130;
+      dissolvedOxygen = 190 - f * 125;
+    } else if (depth <= 600) {
+      const f = Math.sin(((depth - 180) / 420) * Math.PI);
+      dissolvedOxygen = 65 - f * 28;
+    } else if (depth <= 1500) {
+      const f = (depth - 600) / 900;
+      dissolvedOxygen = 50 + f * 65;
+    } else {
+      dissolvedOxygen = 115 + Math.min(25, ((depth - 1500) / 2500) * 20);
+    }
+    dissolvedOxygen = Math.round(dissolvedOxygen + Math.sin(liveTick * 0.9) * 1.4);
+
+    if (depth <= 30) {
+      chlorophyll = 0.38 + (depth / 30) * 0.28;
+    } else if (depth <= 75) {
+      chlorophyll = 0.66 + Math.sin(((depth - 30) / 45) * Math.PI) * 0.22;
+    } else if (depth <= 140) {
+      const f = (depth - 75) / 65;
+      chlorophyll = 0.66 * (1 - f) + 0.04;
+    } else {
+      chlorophyll = Math.max(0.01, 0.03 * Math.exp(-(depth - 140) / 100));
+    }
+    chlorophyll = +chlorophyll.toFixed(2);
+
+    if (depth <= 60) {
+      currentSpeed = 0.48 - (depth / 60) * 0.16;
+    } else if (depth <= 300) {
+      currentSpeed = 0.32 - ((depth - 60) / 240) * 0.18;
+    } else {
+      currentSpeed = Math.max(0.04, 0.14 * Math.exp(-(depth - 300) / 800));
+    }
+    currentSpeed = +(currentSpeed + Math.sin(liveTick * 0.5) * 0.02).toFixed(2);
+
+    const baseAngle = isGlider ? 35 : (isCtd ? 135 : 42);
+    const spiralOffset = Math.round(Math.min(90, (depth / 300) * 45));
+    const currentAngle = (baseAngle + spiralOffset) % 360;
+    const cardinal = currentAngle < 90 ? 'NE' : (currentAngle < 180 ? 'SE' : (currentAngle < 270 ? 'SW' : 'NW'));
+    currentDirection = `${cardinal} (${currentAngle}°)`;
+    hasBgc = true;
+  }
 
   // ── 3. DERIVED HYDROGRAPHIC & DEVICE-SPECIFIC PARAMETERS ─────────────────
   const seaPressureDbar = Math.round(depth * 1.006);
-  const potentialDensity = +(23.2 + (depth <= 180 ? (depth / 180) * 3.2 : 3.2 + (depth / 2000) * 1.35)).toFixed(2);
-  const soundVelocity = +(1538 - (depth <= 900 ? (depth / 900) * 52 : 52 - ((depth - 900) / 3100) * 46)).toFixed(1);
-  const o2Saturation = depth <= 50 ? 98 : (depth <= 600 ? Math.round(30 + (dissolvedOxygen / 190) * 30) : 68);
+  const potentialDensity = +(28.1 + 0.8 * (salinity - 35) - 0.25 * (temp - 15) + (depth / 1000) * 0.5).toFixed(2);
+  const soundVelocity = +(1449.2 + 4.6 * temp - 0.055 * (temp ** 2) + 0.00029 * (temp ** 3) + (1.34 - 0.01 * temp) * (salinity - 35) + 0.016 * depth).toFixed(1);
+  const o2Saturation = hasBgc && dissolvedOxygen != null ? (depth <= 50 ? 98 : (depth <= 600 ? Math.round(30 + (dissolvedOxygen / 190) * 30) : 68)) : null;
 
-  const bbp700 = (0.0022 * Math.exp(-depth / 220)).toFixed(4);
-  const cdom = +(1.45 * Math.exp(-depth / 320) + 0.11).toFixed(2);
-  const par = depth <= 20 ? 460 : (depth <= 85 ? Math.round(460 * Math.exp(-(depth - 20) / 18)) : 0);
+  const bbp700 = hasBgc ? (0.0022 * Math.exp(-depth / 220)).toFixed(4) : null;
+  const cdom = hasBgc ? +(1.45 * Math.exp(-depth / 320) + 0.11).toFixed(2) : null;
+  const par = hasBgc ? (depth <= 20 ? 460 : (depth <= 85 ? Math.round(460 * Math.exp(-(depth - 20) / 18)) : 0)) : null;
 
   // Status & Bladder displacement for Argo
   let status = 'SURFACE-TELEMETRY';
@@ -270,17 +309,29 @@ function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDis
     status = isDivedDeep ? 'CAST-LOWERING' : 'STATION-SURFACE';
   }
 
-  // Live formatted timestamp
-  const now = new Date();
-  const utcHours = String(now.getUTCHours()).padStart(2, '0');
-  const utcMins = String(now.getUTCMinutes()).padStart(2, '0');
-  const utcSecs = String(now.getUTCSeconds()).padStart(2, '0');
-  const timestamp = `11 Sep 2026 ${utcHours}:${utcMins}:${utcSecs} UTC`;
+  // Authentic observation timestamp
+  let timestamp;
+  const rawTs = inst.timestamp || activeProfile?.timestamp;
+  if (rawTs) {
+    try {
+      const dt = new Date(rawTs);
+      if (!isNaN(dt.getTime())) {
+        timestamp = dt.toUTCString().replace('GMT', 'UTC');
+      } else {
+        timestamp = String(rawTs);
+      }
+    } catch {
+      timestamp = String(rawTs);
+    }
+  } else {
+    const now = new Date();
+    timestamp = `${now.toUTCString().replace('GMT', 'UTC')}`;
+  }
 
-  const cycle = inst.telemetry?.cycle || (isArgo ? 147 : (isGlider ? 84 : 12));
-  const battery = inst.telemetry?.batteryPct || 82;
-  const source = inst.telemetry?.source || (isArgo ? 'INCOIS / ARGO GDAC' : (isGlider ? 'INCOIS Glider Fleet' : 'INCOIS Moored Array'));
-  const qcStatus = 'GOOD';
+  const cycle = inst.cycle ?? inst.telemetry?.cycle ?? activeProfile?.cycleNumber ?? (isArgo ? 38 : (isGlider ? 84 : 12));
+  const battery = inst.batteryPercent ?? inst.telemetry?.batteryPct ?? 88;
+  const source = inst.source ?? inst.telemetry?.source ?? (isArgo ? (activeProfile?.sourceDetails || 'IFREMER / ARGO GDAC (ERDDAP)') : (isGlider ? 'INCOIS Glider Fleet' : 'INCOIS Moored Array'));
+  const qcStatus = inst.qc || inst.qcStatus || 'QC Passed (Flags: 1)';
 
   // Glider specific
   const rollDeg = '+1.8° (Trim Stable)';
@@ -332,6 +383,8 @@ function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDis
     qcStatus,
     modelValidation: inst.modelValidation,
     rawInstrument: inst,
+    rawProfile: activeProfile,
+    hasBgc,
     horizontalDistance: horizontalDist || 0,
     // Researched properties
     seaPressureDbar,
@@ -377,15 +430,33 @@ function formatInstrumentData(inst, oceanDepth = 15, liveTick = 0, horizontalDis
  */
 function DepthProfileView({ telemetry, onBack }) {
   const currentDepth = telemetry.depth || 15;
-  const maxDepthRange = currentDepth > 1500 ? 2000 : (telemetry.isGlider ? 1000 : 1000);
+  const raw = telemetry.rawProfile?.profile || telemetry.rawInstrument?.rawProfile?.profile;
+
+  const maxDepthRange = useMemo(() => {
+    if (telemetry.isArgo && Array.isArray(raw) && raw.length > 0) {
+      const deepest = Math.max(...raw.map((p) => p.depth));
+      return Math.max(160, Math.ceil(deepest / 50) * 50);
+    }
+    return currentDepth > 1500 ? 2000 : (telemetry.isGlider ? 1000 : 1000);
+  }, [telemetry.isArgo, raw, currentDepth, telemetry.isGlider]);
+
   const deltaT = telemetry.modelValidation?.deltaTempC ?? 0.3;
 
   // Glider sub-view toggle: 'sawtooth' (Yo-Yo profile) vs 'ctd' (vertical profile)
   const [gliderProfileTab, setGliderProfileTab] = useState(telemetry.isGlider ? 'sawtooth' : 'ctd');
 
   const profilePoints = useMemo(() => {
+    if (telemetry.isArgo && Array.isArray(raw) && raw.length > 0) {
+      return raw
+        .map((p) => ({
+          depth: p.depth,
+          temp: p.temp != null ? p.temp : p.temperature,
+          salinity: p.salinity != null ? p.salinity : p.psal,
+        }))
+        .filter((p) => typeof p.temp === 'number' && !isNaN(p.temp));
+    }
     return generateDepthProfileData(telemetry.temp, telemetry.salinity, maxDepthRange);
-  }, [telemetry.temp, telemetry.salinity, maxDepthRange]);
+  }, [telemetry.isArgo, raw, telemetry.temp, telemetry.salinity, maxDepthRange]);
 
   const modelPoints = useMemo(() => {
     return profilePoints.map((p) => ({
@@ -783,75 +854,52 @@ function ModelVsObsTopSection({ telemetry }) {
     if (!telemetry || !telemetry.id) return;
     
     setLoading(true);
-    // Fetch live/historical ERDDAP data via Express backend
-    // Format floatId (e.g. from 'argo-2902351' -> '2902351')
     const platformMatch = telemetry.id.match(/\d+/);
     const platformNumber = platformMatch ? platformMatch[0] : '2902351';
     
-    // Add date filter logic if the user provides one (mocked out in this example unless passed in)
-    const timeParam = selectedDate ? `&timestamp=${encodeURIComponent(selectedDate)}` : '';
+    const timeParam = selectedDate ? `&time=${encodeURIComponent(selectedDate)}` : '';
     const depth = telemetry.depth ?? 15;
-    const url = `/api/argo/depth-slice?platform_number=${platformNumber}&depth=${depth}${timeParam}`;
+    const url = `/api/validation?platform_number=${platformNumber}&depth=${depth}${timeParam}`;
     
     fetch(url)
       .then(res => res.json())
       .then(json => {
-        if (json.primary_oceanographic_variables) {
-          const p = json.primary_oceanographic_variables;
-          const b = json.bgc_optics_and_diagnostics || {};
-          const h = json.hydraulics_telemetry || {};
-          const m = json.metadata || {};
-
-          setBackendData({
-            temp: { obs: p.temperature_c, model: +(p.temperature_c - 0.35).toFixed(2), delta: 0.35 },
-            salinity: { obs: p.salinity_psu, model: +(p.salinity_psu - 0.12).toFixed(2), delta: 0.12 },
-            o2: { obs: p.dissolved_oxygen_umol_kg, model: +(p.dissolved_oxygen_umol_kg + 3.2).toFixed(1), delta: -3.2 },
-            speed: { obs: p.current_speed_m_s, model: +(p.current_speed_m_s - 0.04).toFixed(2), delta: 0.04 },
-            chla: { obs: p.chlorophyll_a_mg_m3, model: +(p.chlorophyll_a_mg_m3 - 0.03).toFixed(2), delta: 0.03 },
-            density: b.potential_density_kg_m3,
-            soundSpeed: b.sound_velocity_m_s,
-            par: b.downwelling_par_umol_m2_s,
-            bbp: b.backscattering_bbp_m_inv,
-            cdom: b.cdom_fluorescence_ppb,
-            oxySat: b.oxygen_saturation_pct,
-            bladder: h.hydraulic_bladder_cc,
-            vacuum: h.internal_vacuum_inhg,
-            divePhase: h.dive_phase,
-            linkMode: h.link_mode,
-            metadata: m,
-          });
+        if (json.variables) {
+          setBackendData(json);
         }
       })
-      .catch(err => console.error("Failed to fetch backend depth-slice:", err))
+      .catch(err => console.error("Failed to fetch backend validation:", err))
       .finally(() => setLoading(false));
   }, [telemetry, selectedDate]);
 
   if (!telemetry) return null;
 
   const depth = telemetry.depth ?? 15;
-  const model = useMemo(() => calculateRealisticModelProfile(depth), [depth]);
+  const tempRow = backendData?.variables?.find((v) => v.key === 'temp');
+  const psalRow = backendData?.variables?.find((v) => v.key === 'psal');
+  const doxyRow = backendData?.variables?.find((v) => v.key === 'doxy');
+  const chlaRow = backendData?.variables?.find((v) => v.key === 'chla');
 
-  // Use Backend Data if available, fallback to procedurally generated if still loading
-  const obsTemp = backendData ? backendData.temp.obs : telemetry.temp;
-  const modelTemp = backendData ? backendData.temp.model : model.temperature;
-  const deltaTemp = backendData ? backendData.temp.delta : +(obsTemp - modelTemp).toFixed(2);
+  const obsTemp = tempRow?.observed ?? (telemetry.temp != null && !isNaN(telemetry.temp) ? telemetry.temp : null);
+  const modelTemp = tempRow?.model ?? null;
+  const deltaTemp = tempRow?.delta ?? ((obsTemp != null && modelTemp != null) ? +(obsTemp - modelTemp).toFixed(2) : null);
   
-  const obsSal = backendData ? backendData.salinity.obs : telemetry.salinity;
-  const modelSal = backendData ? backendData.salinity.model : model.salinity;
-  const deltaSal = backendData ? backendData.salinity.delta : +(obsSal - modelSal).toFixed(2);
+  const obsSal = psalRow?.observed ?? (telemetry.salinity != null && !isNaN(telemetry.salinity) ? telemetry.salinity : null);
+  const modelSal = psalRow?.model ?? null;
+  const deltaSal = psalRow?.delta ?? ((obsSal != null && modelSal != null) ? +(obsSal - modelSal).toFixed(2) : null);
 
-  const obsO2 = backendData ? backendData.o2.obs : telemetry.dissolvedOxygen;
-  const modelO2 = backendData ? backendData.o2.model : model.dissolvedOxygen;
-  const deltaO2 = backendData ? backendData.o2.delta : +(obsO2 - modelO2).toFixed(1);
+  const obsO2 = doxyRow?.observed ?? null;
+  const modelO2 = doxyRow?.model ?? null;
+  const deltaO2 = doxyRow?.delta ?? null;
 
-  const obsSpeed = backendData ? backendData.speed.obs : telemetry.currentSpeed;
-  const modelSpeed = backendData ? backendData.speed.model : model.currentSpeed;
-  const deltaSpeed = backendData ? backendData.speed.delta : +(obsSpeed - modelSpeed).toFixed(2);
+  const obsSpeed = null; // Argo floats do not measure currents
+  const modelSpeed = null;
+  const deltaSpeed = null;
 
-  const hasChl = (telemetry.chlorophyll != null && model.chlorophyll != null) || (backendData != null);
-  const obsChl = backendData ? backendData.chla.obs : telemetry.chlorophyll;
-  const modelChl = backendData ? backendData.chla.model : model.chlorophyll;
-  const deltaChl = hasChl ? (backendData ? backendData.chla.delta : +(obsChl - modelChl).toFixed(2)) : null;
+  const obsChl = chlaRow?.observed ?? null;
+  const modelChl = chlaRow?.model ?? null;
+  const deltaChl = chlaRow?.delta ?? null;
+  const hasChl = obsChl != null || modelChl != null;
 
   return (
     <div
@@ -1031,20 +1079,20 @@ function ModelVsObsTopSection({ telemetry }) {
             />
           </span>
           <span style={{ textAlign: 'right', color: '#ff9436', fontFamily: 'Space Mono', fontWeight: 600 }}>
-            {obsTemp.toFixed(1)}°C
+            {obsTemp != null ? `${obsTemp.toFixed(1)}°C` : '—'}
           </span>
           <span style={{ textAlign: 'right', color: '#38bdf8', fontFamily: 'Space Mono' }}>
-            {modelTemp.toFixed(1)}°C
+            {modelTemp != null ? `${modelTemp.toFixed(1)}°C` : '—'}
           </span>
           <span
             style={{
               textAlign: 'right',
               fontFamily: 'Space Mono',
               fontWeight: 700,
-              color: Math.abs(deltaTemp) <= 0.4 ? '#4ade80' : '#fbbf24',
+              color: deltaTemp == null ? '#64748b' : Math.abs(deltaTemp) <= 0.4 ? '#4ade80' : '#fbbf24',
             }}
           >
-            {deltaTemp >= 0 ? `+${deltaTemp.toFixed(1)}` : deltaTemp.toFixed(1)}°
+            {deltaTemp != null ? (deltaTemp >= 0 ? `+${deltaTemp.toFixed(1)}°` : `${deltaTemp.toFixed(1)}°`) : '—'}
           </span>
         </div>
 
@@ -1071,20 +1119,20 @@ function ModelVsObsTopSection({ telemetry }) {
             />
           </span>
           <span style={{ textAlign: 'right', color: '#ff9436', fontFamily: 'Space Mono', fontWeight: 600 }}>
-            {obsSal.toFixed(2)}
+            {obsSal != null ? obsSal.toFixed(2) : '—'}
           </span>
           <span style={{ textAlign: 'right', color: '#38bdf8', fontFamily: 'Space Mono' }}>
-            {modelSal.toFixed(2)}
+            {modelSal != null ? modelSal.toFixed(2) : '—'}
           </span>
           <span
             style={{
               textAlign: 'right',
               fontFamily: 'Space Mono',
               fontWeight: 700,
-              color: Math.abs(deltaSal) <= 0.15 ? '#4ade80' : '#fbbf24',
+              color: deltaSal == null ? '#64748b' : Math.abs(deltaSal) <= 0.15 ? '#4ade80' : '#fbbf24',
             }}
           >
-            {deltaSal >= 0 ? `+${deltaSal.toFixed(2)}` : deltaSal.toFixed(2)}
+            {deltaSal != null ? (deltaSal >= 0 ? `+${deltaSal.toFixed(2)}` : deltaSal.toFixed(2)) : '—'}
           </span>
         </div>
 
@@ -1112,20 +1160,20 @@ function ModelVsObsTopSection({ telemetry }) {
             />
           </span>
           <span style={{ textAlign: 'right', color: '#ff9436', fontFamily: 'Space Mono', fontWeight: 600 }}>
-            {obsO2.toFixed(0)}
+            {obsO2 != null ? obsO2.toFixed(1) : '—'}
           </span>
           <span style={{ textAlign: 'right', color: '#38bdf8', fontFamily: 'Space Mono' }}>
-            {modelO2.toFixed(0)}
+            {modelO2 != null ? modelO2.toFixed(1) : '—'}
           </span>
           <span
             style={{
               textAlign: 'right',
               fontFamily: 'Space Mono',
               fontWeight: 700,
-              color: Math.abs(deltaO2) <= 12 ? '#4ade80' : '#fbbf24',
+              color: deltaO2 == null ? '#64748b' : Math.abs(deltaO2) <= 12 ? '#4ade80' : '#fbbf24',
             }}
           >
-            {deltaO2 >= 0 ? `+${deltaO2.toFixed(0)}` : deltaO2.toFixed(0)}
+            {deltaO2 != null ? (deltaO2 >= 0 ? `+${deltaO2.toFixed(1)}` : deltaO2.toFixed(1)) : '—'}
           </span>
         </div>
 
@@ -1151,21 +1199,20 @@ function ModelVsObsTopSection({ telemetry }) {
               style={{ cursor: 'pointer' }}
             />
           </span>
-          <span style={{ textAlign: 'right', color: '#ff9436', fontFamily: 'Space Mono', fontWeight: 600 }}>
-            {obsSpeed.toFixed(2)}m/s
+          <span style={{ textAlign: 'right', color: '#64748b', fontFamily: 'Space Mono' }}>
+            —
           </span>
-          <span style={{ textAlign: 'right', color: '#38bdf8', fontFamily: 'Space Mono' }}>
-            {modelSpeed.toFixed(2)}m/s
+          <span style={{ textAlign: 'right', color: '#64748b', fontFamily: 'Space Mono' }}>
+            —
           </span>
           <span
             style={{
               textAlign: 'right',
               fontFamily: 'Space Mono',
-              fontWeight: 700,
-              color: Math.abs(deltaSpeed) <= 0.08 ? '#4ade80' : '#fbbf24',
+              color: '#64748b',
             }}
           >
-            {deltaSpeed >= 0 ? `+${deltaSpeed.toFixed(2)}` : deltaSpeed.toFixed(2)}
+            —
           </span>
         </div>
 
@@ -1196,20 +1243,20 @@ function ModelVsObsTopSection({ telemetry }) {
           {hasChl ? (
             <>
               <span style={{ textAlign: 'right', color: '#ff9436', fontFamily: 'Space Mono', fontWeight: 600 }}>
-                {obsChl.toFixed(2)}
+                {obsChl != null ? obsChl.toFixed(2) : '—'}
               </span>
               <span style={{ textAlign: 'right', color: '#38bdf8', fontFamily: 'Space Mono' }}>
-                {modelChl.toFixed(2)}
+                {modelChl != null ? modelChl.toFixed(2) : '—'}
               </span>
               <span
                 style={{
                   textAlign: 'right',
                   fontFamily: 'Space Mono',
                   fontWeight: 700,
-                  color: Math.abs(deltaChl) <= 0.1 ? '#4ade80' : '#fbbf24',
+                  color: deltaChl == null ? '#64748b' : Math.abs(deltaChl) <= 0.1 ? '#4ade80' : '#fbbf24',
                 }}
               >
-                {deltaChl >= 0 ? `+${deltaChl.toFixed(2)}` : deltaChl.toFixed(2)}
+                {deltaChl != null ? (deltaChl >= 0 ? `+${deltaChl.toFixed(2)}` : deltaChl.toFixed(2)) : '—'}
               </span>
             </>
           ) : (
@@ -1222,7 +1269,7 @@ function ModelVsObsTopSection({ telemetry }) {
                 fontStyle: 'italic',
               }}
             >
-              {depth > 120 ? 'Aphotic depth (>100m) — No Chl-a' : 'Sensor not present / Inactive'}
+              {depth > 120 ? 'Aphotic depth (>100m) — No Chl-a' : 'Sensor not equipped (Core Argo)'}
             </span>
           )}
         </div>
@@ -1459,14 +1506,14 @@ function TelemetryCardBody({
             </div>
             <div className="telemetry-row">
               <span className="telemetry-row__label">Dissolved Oxygen</span>
-              <span className="telemetry-row__value" style={{ fontFamily: 'Space Mono', color: telemetry.dissolvedOxygen < 80 ? '#f87171' : 'inherit' }}>
-                {telemetry.dissolvedOxygen} µmol/kg {telemetry.dissolvedOxygen < 80 ? '(OMZ Depleted)' : ''}
+              <span className="telemetry-row__value" style={{ fontFamily: 'Space Mono', color: (telemetry.dissolvedOxygen != null && telemetry.dissolvedOxygen < 80) ? '#f87171' : 'inherit' }}>
+                {telemetry.dissolvedOxygen != null ? `${telemetry.dissolvedOxygen} µmol/kg ${telemetry.dissolvedOxygen < 80 ? '(OMZ Depleted)' : ''}` : '— (Sensor not equipped / Core Argo)'}
               </span>
             </div>
             <div className="telemetry-row">
               <span className="telemetry-row__label">Chlorophyll-a</span>
               <span className="telemetry-row__value telemetry-row__value--amber" style={{ fontFamily: 'Space Mono' }}>
-                {typeof telemetry.chlorophyll === 'number' ? `${telemetry.chlorophyll.toFixed(2)} mg/m³` : telemetry.chlorophyll} {telemetry.depth >= 30 && telemetry.depth <= 75 ? '(DCM Peak)' : ''}
+                {telemetry.chlorophyll != null ? `${typeof telemetry.chlorophyll === 'number' ? telemetry.chlorophyll.toFixed(2) : telemetry.chlorophyll} mg/m³ ${telemetry.depth >= 30 && telemetry.depth <= 75 ? '(DCM Peak)' : ''}` : '— (Sensor not equipped / Core Argo)'}
               </span>
             </div>
           </div>
@@ -1477,13 +1524,13 @@ function TelemetryCardBody({
             <div className="telemetry-row">
               <span className="telemetry-row__label">Speed</span>
               <span className="telemetry-row__value">
-                {telemetry.currentSpeed} m/s
+                {telemetry.currentSpeed != null ? `${telemetry.currentSpeed} m/s` : '— (Lagrangian Drift)'}
               </span>
             </div>
             <div className="telemetry-row">
               <span className="telemetry-row__label">Direction</span>
               <span className="telemetry-row__value">
-                {telemetry.currentDirection}
+                {telemetry.currentDirection || '— (Lagrangian Drift)'}
               </span>
             </div>
           </div>
@@ -1491,7 +1538,9 @@ function TelemetryCardBody({
           {/* Researched Device-Specific Parameters Section */}
           {telemetry.isArgo && (
             <div className="telemetry-section">
-              <div className="telemetry-section__title">🧬 BGC-Argo Optics & Hydraulics</div>
+              <div className="telemetry-section__title">
+                {telemetry.hasBgc ? '🧬 BGC-Argo Optics & Hydraulics' : '⚙️ Argo Mechanics & Hydraulics'}
+              </div>
               <div className="telemetry-row">
                 <span className="telemetry-row__label">Sea Pressure</span>
                 <span className="telemetry-row__value">{telemetry.seaPressureDbar} dbar</span>
@@ -1504,22 +1553,30 @@ function TelemetryCardBody({
                 <span className="telemetry-row__label">Sound Velocity</span>
                 <span className="telemetry-row__value">{telemetry.soundVelocity} m/s</span>
               </div>
-              <div className="telemetry-row">
-                <span className="telemetry-row__label">Oxygen Saturation</span>
-                <span className="telemetry-row__value telemetry-row__value--cyan">{telemetry.o2Saturation}%</span>
-              </div>
-              <div className="telemetry-row">
-                <span className="telemetry-row__label">Backscattering (bbp 700)</span>
-                <span className="telemetry-row__value">{telemetry.bbp700} m⁻¹</span>
-              </div>
-              <div className="telemetry-row">
-                <span className="telemetry-row__label">CDOM Fluorescence</span>
-                <span className="telemetry-row__value">{telemetry.cdom} ppb</span>
-              </div>
-              <div className="telemetry-row">
-                <span className="telemetry-row__label">Downwelling PAR</span>
-                <span className="telemetry-row__value telemetry-row__value--amber">{telemetry.par} µmol/m²/s</span>
-              </div>
+              {telemetry.hasBgc ? (
+                <>
+                  <div className="telemetry-row">
+                    <span className="telemetry-row__label">Oxygen Saturation</span>
+                    <span className="telemetry-row__value telemetry-row__value--cyan">{telemetry.o2Saturation}%</span>
+                  </div>
+                  <div className="telemetry-row">
+                    <span className="telemetry-row__label">Backscattering (bbp 700)</span>
+                    <span className="telemetry-row__value">{telemetry.bbp700} m⁻¹</span>
+                  </div>
+                  <div className="telemetry-row">
+                    <span className="telemetry-row__label">CDOM Fluorescence</span>
+                    <span className="telemetry-row__value">{telemetry.cdom} ppb</span>
+                  </div>
+                  <div className="telemetry-row">
+                    <span className="telemetry-row__label">Downwelling PAR</span>
+                    <span className="telemetry-row__value telemetry-row__value--amber">{telemetry.par} µmol/m²/s</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '6px 8px', margin: '4px 0', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', borderLeft: '2px solid rgba(56, 189, 248, 0.4)', fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>Standard Core Argo:</span> CTD profiling payload (T &amp; S). Biogeochemical sensors (DO, Chl-a) are not equipped on this float.
+                </div>
+              )}
               <div className="telemetry-row">
                 <span className="telemetry-row__label">Hydraulic Bladder</span>
                 <span className="telemetry-row__value">{telemetry.bladderDisp}</span>
@@ -2397,10 +2454,11 @@ export function WorkspaceManager({ instruments = [] }) {
   const openInstrument = useCallback(
     (instrumentId) => {
       const now = Date.now();
-      if (lastOpenRef.current.id === instrumentId && now - lastOpenRef.current.time < 50) {
+      const idKey = typeof instrumentId === 'object' && instrumentId?.id ? instrumentId.id : String(instrumentId || '');
+      if (lastOpenRef.current.id === idKey && now - lastOpenRef.current.time < 50) {
         return;
       }
-      lastOpenRef.current = { id: instrumentId, time: now };
+      lastOpenRef.current = { id: idKey, time: now };
 
       const idStr = typeof instrumentId === 'object' && instrumentId?.id
         ? String(instrumentId.id)
@@ -2424,6 +2482,19 @@ export function WorkspaceManager({ instruments = [] }) {
             i.id.includes(idStr) ||
             idStr.includes(i.id)
         );
+      }
+      if (!inst) {
+        const fleet = useOceanStore.getState ? (useOceanStore.getState().fleet || []) : [];
+        inst = fleet.find((i) => i.id === idStr || String(i.floatId) === idStr || i.id?.includes(idStr) || idStr.includes(i.id));
+      }
+      if (!inst && typeof instrumentId === 'object' && instrumentId?.id) {
+        inst = instrumentId;
+      }
+      if (!inst) {
+        const active = useOceanStore.getState ? useOceanStore.getState().activeInstrument : null;
+        if (active && (active.id === idStr || active.id?.includes(idStr) || idStr.includes(active.id))) {
+          inst = active;
+        }
       }
 
       if (!inst) return;
@@ -2479,6 +2550,8 @@ export function WorkspaceManager({ instruments = [] }) {
               isMinimized: false,
               isDocked: true,
               zIndex: nextZIndexRef.current,
+              title: inst.name || existing.title,
+              subtitle: inst.platform || existing.subtitle,
               instrumentData: inst,
             }
           : newWin;
@@ -2492,6 +2565,15 @@ export function WorkspaceManager({ instruments = [] }) {
     },
     [allInstruments, bigBoxWidth]
   );
+
+  const activeInstrument = useOceanStore((state) => state.activeInstrument);
+
+  // Sync activeInstrument updates into open windows
+  useEffect(() => {
+    if (activeInstrument?.id) {
+      openInstrument(activeInstrument);
+    }
+  }, [activeInstrument, openInstrument]);
 
   // Close / Remove a window or subcard
   const closeWindow = useCallback((winId) => {
@@ -2783,9 +2865,9 @@ export function WorkspaceManager({ instruments = [] }) {
                     type="button"
                     className="telemetry-action-btn"
                     style={{ marginTop: 8 }}
-                    onClick={() => openInstrument('argo-2902351')}
+                    onClick={() => openInstrument(allInstruments[0]?.id || 'argo-7902070')}
                   >
-                    Inspect Demo Float #2902351
+                    Inspect Float #{allInstruments[0]?.floatId || allInstruments[0]?.id?.replace('argo-', '') || '7902070'}
                   </button>
                 </div>
               ) : (

@@ -119,7 +119,7 @@ export function SideBySideValidationPanel({ onClose }) {
       observed: dynamicObs?.[v.key] ?? null,
       model: dynamicModel?.[v.key] ?? null,
       delta: dynamicDelta?.[v.key] ?? null,
-      observed_source: (v.key === 'chlorophyll' || v.key === 'dissolvedOxygen') ? 'ifremer-erddap-bgc' : 'ifremer-erddap',
+      observed_source: dynamicObs?.[v.key] == null ? null : (v.key === 'chlorophyll' || v.key === 'dissolvedOxygen') ? 'ifremer-erddap-bgc' : 'ifremer-erddap',
     }));
 
     const hasAnyModel = builtVariables.some(v => v.model !== null);
@@ -284,7 +284,7 @@ export function SideBySideValidationPanel({ onClose }) {
                 <div style={styles.columnSubtitle}>{instrumentName} • {instrumentPlatform}</div>
               </div>
             </div>
-            <span style={styles.sourceTagObs}>ERDDAP GDAC</span>
+            <span style={styles.sourceTagObs}>{activeInstrument?.sourceLabel || 'LIVE'}</span>
           </div>
 
           <div style={styles.metaRow}>
@@ -318,8 +318,8 @@ export function SideBySideValidationPanel({ onClose }) {
 
                   <div style={styles.paramValueRow}>
                     {isMissing ? (
-                      <span style={styles.missingSensorBadge} title="Sensor missing or below euphotic zone">
-                        Sensor N/A — Aphotic Zone
+                      <span style={styles.missingSensorBadge} title="Sensor parameter not equipped or unavailable">
+                        {varKey === 'chlorophyll' && resolvedDepth > 120 ? 'Aphotic Zone (>120m)' : 'Sensor Unavailable'}
                       </span>
                     ) : (
                       <span style={styles.paramNumberObs}>
@@ -344,11 +344,11 @@ export function SideBySideValidationPanel({ onClose }) {
                 <div style={styles.columnSubtitle}>
                   {modelComparison?.modelSource && modelComparison.modelSource !== 'live-api'
                     ? `Model: ${modelComparison.modelSource}`
-                    : 'Model (Unconfigured / Default)'}
+                    : 'Model: incois_argo_10d_VAM'}
                 </div>
               </div>
             </div>
-            <span style={styles.sourceTagMod}>4D NetCDF</span>
+            <span style={styles.sourceTagMod}>{modelComparison?.modelAvailable !== false ? 'INCOIS GridDAP' : 'Model Unavailable'}</span>
           </div>
 
           <div style={styles.metaRow}>
@@ -382,8 +382,8 @@ export function SideBySideValidationPanel({ onClose }) {
 
                   <div style={styles.paramValueRow}>
                     {isMissing ? (
-                      <span style={styles.missingModelBadge} title="Supercomputer grid point lacks this variable">
-                        Model N/A — Aphotic Zone
+                      <span style={styles.missingModelBadge} title="Numerical model grid point lacks this variable">
+                        Model Unavailable
                       </span>
                     ) : (
                       <span style={styles.paramNumberMod}>

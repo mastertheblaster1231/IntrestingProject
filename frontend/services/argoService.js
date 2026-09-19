@@ -170,10 +170,15 @@ async function _fetchFromERDDAP(id) {
       floatId: json.platform_number,
       name: `Argo Float #${json.platform_number}`,
       timestamp: json.time,
-      lat: json.latitude,
-      lon: json.longitude,
-      source: "backend-api",
+      lat: json.lat ?? json.latitude,
+      lon: json.lon ?? json.longitude,
+      source: "live-erddap",
+      sourceLabel: "LIVE",
+      sourceDetails: "Source: IFREMER Argo GDAC",
       profile,
+      cycleNumber: json.cycle_number ?? null,
+      bgc: json.bgc ?? null,
+      rawPhysics: json.physics ?? null,
     };
   } finally {
     clearTimeout(timeoutHandle);
@@ -181,72 +186,11 @@ async function _fetchFromERDDAP(id) {
 }
 
 /**
- * _parseErddapRows
- * ----------------
- * Converts raw ERDDAP table.rows into a structured ArgoProfile.
- *
- * Each row is an array: [platform_number, time, latitude, longitude, pres, temp, psal]
- * All rows share the same platform_number, time, lat, lon (one profile cycle).
- * Each row represents ONE measurement at one pressure level (depth).
- *
- * The function:
- *   1. Extracts the metadata from the first row (time, lat, lon are identical across rows)
- *   2. Iterates every row to build the vertical profile array
- *   3. Skips rows where temp or psal is null (QC-flagged bad data or missing sensors)
- *   4. Converts pressure (dbar) to depth (m) using standard approximation: 1 dbar ~ 1 m
- *   5. Sorts profile by ascending depth (shallow to deep)
- *
- * @param {string}   id    WMO platform number
- * @param {Array[]}  rows  Raw ERDDAP row arrays
- * @returns {ArgoProfile}
- */
-function _parseErddapRows(id, rows) {
-  // Metadata from row[0]; lat/lon/time are identical for all rows in one profile
-  const firstRow = rows[0];
-  const timestamp = firstRow[COL.TIME] || new Date().toISOString();
-  const lat = _toNum(firstRow[COL.LAT]);
-  const lon = _toNum(firstRow[COL.LON]);
-
-  const profile = rows
-    .map((row) => {
-      const pressure = _toNum(row[COL.PRES]); // decibars
-      const temperature = _toNum(row[COL.TEMP]); // degrees C
-      const salinity = _toNum(row[COL.PSAL]); // PSU
-
-      // Skip rows with missing or clearly invalid sensor readings
-      if (pressure === null || temperature === null || salinity === null)
-        return null;
-      if (isNaN(pressure) || isNaN(temperature) || isNaN(salinity)) return null;
-
-      return {
-        // 1 dbar of pressure ~ 1 metre of depth (standard seawater approximation, <1% error to 2000m)
-        depth: parseFloat(pressure.toFixed(1)),
-        temperature: parseFloat(temperature.toFixed(3)),
-        salinity: parseFloat(salinity.toFixed(3)),
-      };
-    })
-    .filter(Boolean) // remove null entries from rejected rows
-    .sort((a, b) => a.depth - b.depth); // shallow to deep ordering for charts
-
-  return {
-    floatId: id,
-    name: `Argo Float #${id}`,
-    timestamp,
-    lat,
-    lon,
-    source: "live-erddap",
-    profile,
-    rawColumnNames: columnNames,
-  };
-}
-
-/**
  * _fetchFromLocalCache
  * --------------------
  * Loads the bundled real_argo_cache.json (captured from IFREMER ERDDAP on 2026-09-09)
- * and returns the entry matching `id`. This is REAL data (historical snapshot), not synthetic.
- * Per project mandate, synthetic generation is DEPRECATED — if cache misses we throw
- * so the UI shows a proper "data unavailable" state instead of fake physics.
+ * and returns the entry matching `id`. This is REAL historical data, labeled as such.
+ * Synthetic generation is completely eliminated per project integrity mandate.
  *
  * @param {string} id  WMO platform number
  * @returns {Promise<ArgoProfile>}
@@ -261,66 +205,22 @@ async function _fetchFromLocalCache(id) {
 
     if (cacheData[id]) {
       console.info(`[argoService] Offline cache HIT for float #${id}`);
-      // Tag the provenance so the UI can show the offline badge
-      return { ...cacheData[id], source: "offline-cache" };
+      return {
+        ...cacheData[id],
+        source: "offline-cache",
+        sourceLabel: "HISTORICAL SNAPSHOT",
+        sourceDetails: "Source: IFREMER Argo GDAC (Captured: 09 Sep 2026)",
+        cycleNumber: cacheData[id].cycleNumber ?? cacheData[id].cycle_number ?? null,
+      };
     }
 
-    console.warn(
-      `[argoService] Float #${id} not in offline cache; using synthetic fallback`,
-    );
-    return _syntheticFallback(id);
+    throw new Error(`Float #${id} is not present in the offline historical cache`);
   } catch (cacheError) {
-    // Absolute last resort: cache file itself is missing or corrupt
-    console.error(
-      `[argoService] Offline cache load failed: ${cacheError.message} — generating synthetic profile`,
+    console.warn(
+      `[argoService] Float #${id} unavailable: ${cacheError.message}`
     );
-    return _syntheticFallback(id);
+    throw cacheError;
   }
-}
-
-/**
- * _syntheticFallback — DEPRECATED (real-data mandate)
- * Retained only for reference / tests. Not used in production code path.
- * @deprecated Use real ERDDAP live or real_argo_cache.json instead.
- */
-function _syntheticFallback(id) {
-  const DEPTHS = [
-    0, 10, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000,
-  ];
-  const surfaceT = 28.3; // degrees C — typical Indian Ocean surface temperature
-  const surfaceS = 34.3; // PSU — typical Bay of Bengal surface salinity
-
-  const profile = DEPTHS.map((d) => {
-    let temperature;
-    if (d <= 50) temperature = surfaceT - (d / 50) * 0.4;
-    else if (d <= 1000)
-      temperature = 3.5 + (surfaceT - 3.5) * Math.exp(-d / 320);
-    else temperature = 1.8 + (3.5 - 1.8) * Math.exp(-(d - 1000) / 900);
-    let salinity;
-    if (d <= 150) {
-      salinity = surfaceS + (d / 150) * 0.55;
-    } else if (d <= 800) {
-      salinity = surfaceS + 0.55 - ((d - 150) / 650) * 0.35;
-    } else {
-      salinity = 34.75 + ((d - 800) / 1200) * 0.15;
-    }
-
-    return {
-      depth: d,
-      temperature: parseFloat(temperature.toFixed(2)),
-      salinity: parseFloat(salinity.toFixed(2)),
-    };
-  });
-
-  return {
-    floatId: id,
-    name: `Argo Float #${id}`,
-    timestamp: new Date().toISOString(),
-    lat: 11.6,
-    lon: 92.5,
-    source: "synthetic-fallback",
-    profile,
-  };
 }
 
 // ─── UTILITY ─────────────────────────────────────────────────────────────────
@@ -348,24 +248,27 @@ function _toNum(v) {
  * Used by the Zustand store's setDepth action to get the Observation value
  * at the current depth slider position for the Delta calculation.
  *
- * Strategy:
- *   - Find the two bracketing profile levels above and below the target depth
- *   - Linear interpolation: value = lower + t * (upper - lower), where t is the fractional position
- *   - Falls back to nearest-neighbour if depth is outside the profiled range
+ * If depth is outside the measured profile range by more than 25m, returns NaN
+ * so the system marks the variable as unavailable rather than fabricating data.
  *
  * @param {ArgoProfile} profile   Profile object from fetchLiveArgoProfile
  * @param {number}      depthM    Target depth in metres
  * @returns {{ temperature: number, salinity: number, depth: number }}
  */
 export function getProfileAtDepth(profile, depthM) {
-  const pts = profile.profile;
+  const pts = profile?.profile;
   if (!pts || pts.length === 0) {
     return { depth: depthM, temperature: NaN, salinity: NaN };
   }
 
-  // Clamp target depth to the measured range
   const minD = pts[0].depth;
   const maxD = pts[pts.length - 1].depth;
+
+  // Beyond measured range -> return NaN to indicate unavailable
+  if (depthM < minD - 25 || depthM > maxD + 25) {
+    return { depth: depthM, temperature: NaN, salinity: NaN };
+  }
+
   const d = Math.max(minD, Math.min(maxD, depthM));
 
   // Locate the two bracketing profile points

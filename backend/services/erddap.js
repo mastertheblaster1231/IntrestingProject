@@ -1,4 +1,10 @@
 import fetch from 'node-fetch';
+import https from 'https';
+
+// Agent for handling regional government SSL certificates (e.g. incois.gov.in)
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
 
 /**
  * Shared ERDDAP client.
@@ -56,12 +62,13 @@ export function buildTableUrl(base, variables, constraints = []) {
 /**
  * Build a griddap URL. Dimension order MUST match the dataset's own order —
  * check <dataset>.dds before using this.
+ * Brackets are percent-encoded (%5B and %5D) so Tomcat/RFC 7230 does not reject them.
  * @param {Array<[number|string, number|string]|[string]>} ranges
  *        one entry per dimension. [a, b] -> [(a):(b)], [a] -> [(a)]
  */
 export function buildGridUrl(base, variable, ranges) {
   const brackets = ranges
-    .map((r) => (r.length === 1 ? `[(${r[0]})]` : `[(${r[0]}):(${r[1]})]`))
+    .map((r) => (r.length === 1 ? `%5B(${encodeURIComponent(r[0])})%5D` : `%5B(${encodeURIComponent(r[0])}):(${encodeURIComponent(r[1])})%5D`))
     .join('');
   return `${base}?${encodeURIComponent(variable)}${brackets}`;
 }
@@ -79,7 +86,10 @@ export async function fetchErddapJson(url, { retries = 1, timeoutMs = ERDDAP_TIM
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, {
+        signal: controller.signal,
+        agent: url.startsWith('https') ? httpsAgent : undefined,
+      });
 
       if (!res.ok) {
         // 404 from ERDDAP usually means "unrecognized variable" or "no matching

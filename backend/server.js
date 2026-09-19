@@ -1,12 +1,25 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+// Silence non-error logs in production environment
+if (process.env.NODE_ENV === 'production') {
+  console.log = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+}
 
 import validationRouter from './routes/validation.js';
 import { fetchErddapJson } from './services/erddap.js';
 import { isModelConfigured } from './services/modelGrid.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -65,7 +78,7 @@ if (!isServerless && process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Ocean backend listening on :${PORT}`);
     console.log(`  core Argo : ${process.env.ERDDAP_IFREMER_BASE || 'default Ifremer ArgoFloats'}`);
-    console.log(`  BGC Argo  : ${process.env.ERDDAP_BGC_BASE || 'default ArgoFloats-synthetic-BGC'}`);
+    console.log(`  BGC Argo  : ${process.env.ERDDAP_BGC_BASE || 'IFREMER ArgoFloats-synthetic-BGC (Real BGC sensors)'}`);
     console.log(
       `  model     : ${isModelConfigured() ? process.env.MODEL_DATASET_ID : 'NOT CONFIGURED (model values will report available:false)'}`
     );

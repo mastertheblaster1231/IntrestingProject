@@ -17,42 +17,74 @@ import * as THREE from 'three';
 // ============================================================================
 // 1. DEMO UNIFIED INSTRUMENT DATASET (Ready for future API replacements)
 // ============================================================================
-export const DEMO_INSTRUMENTS = [
-  // 1. ARGO PROFILING FLOAT (Lagrangian Drifter)
-  {
-    id: "argo-2902351",
-    floatId: "2902351",
-    name: "Argo 2902351",
+function getInitialArgoFloat() {
+  let wmo = "2902351";
+  let lat = 11.6000;
+  let lon = 92.5000;
+  let sea = "Indian Ocean (Equatorial Basin)";
+  if (typeof window !== "undefined" && window.location?.search) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const idParam = params.get("id");
+      const clean = String(idParam || "").replace(/\D/g, "");
+      if (clean.length >= 5) {
+        wmo = clean;
+        const pLat = parseFloat(params.get("lat"));
+        const pLon = parseFloat(params.get("lon"));
+        if (Number.isFinite(pLat)) lat = pLat;
+        if (Number.isFinite(pLon)) lon = pLon;
+        const pSea = params.get("sea");
+        if (pSea) sea = pSea;
+        else sea = lon > 78 ? "Bay of Bengal" : "Arabian Sea";
+      }
+    } catch (_) {}
+  }
+  return {
+    id: `argo-${wmo}`,
+    floatId: wmo,
+    name: `Argo ${wmo}`,
     type: "argo",
-    platform: "APEX Profiling Float (Coastal Buoy)",
+    platform: "APEX Profiling Float",
     position: [0, -0.2, 1.5], // Surface waterline (15m)
     depth: 15,
     depthMeters: 15,
     status: "active",
     colorTag: "orange",
-    geoCoordinates: { lat: 11.6000, lon: 92.5000, depthM: 15 },
+    geoCoordinates: { lat, lon, depthM: 15 },
+    sea,
+    region: sea,
     telemetry: {
-      temperatureC: 28.3,
-      salinityPSU: 34.3,
-      dissolvedOxygen: 198,
-      batteryPct: 82,
-      cycle: 147,
-      status: "active"
+      temperatureC: null,
+      salinityPSU: null,
+      dissolvedOxygen: null,
+      chlorophyll: null,
+      currentSpeed: null,
+      currentDirection: null,
+      batteryPct: 85,
+      cycle: null,
+      status: "active",
+      sourceLabel: "AWAITING FETCH",
+      sourceDetails: "Pending live GDAC query",
     },
     modelValidation: {
-      modelName: "INCOIS-ROMS 1/12°",
-      deltaTempC: 0.3,
-      deltaSalPSU: -0.10,
-      obsTemp: 28.3,
-      modelTemp: 28.0,
-      obsSal: 34.30,
-      modelSal: 34.40,
-      status: "OPTIMAL AGREEMENT",
-      confidenceScore: "98.4%",
-      biasRating: "LOW BIAS",
-      lastRun: "00:00 UTC Assimilation"
+      modelName: "incois_argo_10d_VAM",
+      deltaTempC: null,
+      deltaSalPSU: null,
+      obsTemp: null,
+      modelTemp: null,
+      obsSal: null,
+      modelSal: null,
+      status: "AWAITING SYNC",
+      confidenceScore: "—",
+      biasRating: "—",
+      lastRun: "—"
     }
-  },
+  };
+}
+
+export const DEMO_INSTRUMENTS = [
+  // 1. ARGO PROFILING FLOAT (Lagrangian Drifter — dynamically populated from selected float)
+  getInitialArgoFloat(),
 
   // 2. AUTONOMOUS UNDERWATER GLIDER (Autonomous Mobile Glider)
   {

@@ -498,10 +498,17 @@ export const useOceanStore = create((set, get) => ({
       );
 
     if (!inst) {
+      if (String(instrumentId).startsWith("argo-") || /^\d{5,8}$/.test(String(instrumentId))) {
+        return get().selectFloat(instrumentId);
+      }
       console.warn(
         `[useOceanStore] Instrument "${instrumentId}" not found in fleet.`,
       );
       return;
+    }
+
+    if (inst.type === "argo" || (inst.id && String(inst.id).startsWith("argo-")) || inst.floatId) {
+      return get().selectFloat(inst.floatId || inst.id);
     }
 
     const instSavedCoord = get().instruments?.[inst.id] || {};
@@ -651,7 +658,7 @@ export const useOceanStore = create((set, get) => ({
   },
 
   // ─── MULTI-DEVICE COMPARISON STATE (Requirement 3) ──────────────────────
-  comparedInstruments: ["argo-2902351", "glider-slocum-04"],
+  comparedInstruments: [DEMO_INSTRUMENTS[0]?.id || "argo-2902351", "glider-slocum-04"],
 
   setComparedInstruments: (instruments) => {
     const list = Array.isArray(instruments) ? instruments : [instruments];
@@ -698,7 +705,7 @@ export const useOceanStore = create((set, get) => ({
    */
   // ─── INDEPENDENT INSTRUMENT SPATIAL COORDINATES ─────────────────────────
   instruments: {
-    "argo-2902351": { depth: 15, x: 0, z: 0 },
+    [DEMO_INSTRUMENTS[0]?.id || "argo-2902351"]: { depth: 15, x: 0, z: 0 },
     "glider-slocum-04": { depth: 190, transectDistance: 25, x: 0, z: 0 },
     "ctd-rosette-01": { depth: 1200, x: 0, z: 0 },
   },
@@ -859,76 +866,76 @@ export const useOceanStore = create((set, get) => ({
     variables: {
       temperature: {
         key: "temperature",
-        obs: 28.3,
-        model: 28.1,
-        delta: 0.2,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "PENDING",
       },
       salinity: {
         key: "salinity",
-        obs: 34.3,
-        model: 34.12,
-        delta: 0.18,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "PENDING",
       },
       chlorophyll: {
         key: "chlorophyll",
-        obs: 0.42,
-        model: 0.45,
-        delta: -0.03,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "UNAVAILABLE",
       },
       currentSpeed: {
         key: "currentSpeed",
-        obs: 0.42,
-        model: 0.38,
-        delta: 0.04,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "UNAVAILABLE",
       },
       currentDirection: {
         key: "currentDirection",
-        obs: 42.0,
-        model: 40.0,
-        delta: 2.0,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "UNAVAILABLE",
       },
       dissolvedOxygen: {
         key: "dissolvedOxygen",
-        obs: 198.0,
-        model: 202.4,
-        delta: -4.4,
-        status: "VALID",
+        obs: null,
+        model: null,
+        delta: null,
+        status: "UNAVAILABLE",
       },
     },
     observed: {
-      temperature: 28.3,
-      salinity: 34.3,
-      chlorophyll: 0.42,
-      currentSpeed: 0.42,
-      currentDirection: 42.0,
-      dissolvedOxygen: 198.0,
+      temperature: null,
+      salinity: null,
+      chlorophyll: null,
+      currentSpeed: null,
+      currentDirection: null,
+      dissolvedOxygen: null,
     },
     model: {
-      temperature: 28.1,
-      salinity: 34.12,
-      chlorophyll: 0.45,
-      currentSpeed: 0.38,
-      currentDirection: 40.0,
-      dissolvedOxygen: 202.4,
+      temperature: null,
+      salinity: null,
+      chlorophyll: null,
+      currentSpeed: null,
+      currentDirection: null,
+      dissolvedOxygen: null,
     },
     delta: {
-      temperature: 0.2,
-      salinity: 0.18,
-      chlorophyll: -0.03,
-      currentSpeed: 0.04,
-      currentDirection: 2.0,
-      dissolvedOxygen: -4.4,
+      temperature: null,
+      salinity: null,
+      chlorophyll: null,
+      currentSpeed: null,
+      currentDirection: null,
+      dissolvedOxygen: null,
     },
     depth: 15,
     isLoading: false,
     error: null,
-    modelSource: "live-api",
-    obsSource: "live-erddap",
+    modelSource: "incois_argo_10d_VAM",
+    obsSource: "IFREMER Argo GDAC",
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -993,9 +1000,11 @@ export const useOceanStore = create((set, get) => ({
     const rawId = String(floatId).replace(/^argo-/i, "");
 
     // 0. IMMEDIATE LOCAL SYNC (0ms UI latency, eliminates lag while awaiting ERDDAP)
-    const localMetaImmediate = DEMO_INSTRUMENTS.find(
-      (d) => d.id === `argo-${rawId}` || d.floatId === rawId,
-    );
+    const currentFleet = get().fleet || DEMO_INSTRUMENTS;
+    const localMetaImmediate =
+      currentFleet.find((d) => d.id === `argo-${rawId}` || d.floatId === rawId) ||
+      DEMO_INSTRUMENTS.find((d) => d.id === `argo-${rawId}` || d.floatId === rawId);
+
     if (localMetaImmediate) {
       const immediateDepth = Math.round(
         localMetaImmediate.geoCoordinates?.depthM ??
@@ -1056,9 +1065,9 @@ export const useOceanStore = create((set, get) => ({
     const obsAtSurface = getProfileAtDepth(argoProfile, 0); // surface reading for header display
 
     // Try to enrich with existing DEMO_INSTRUMENTS metadata (cycle, battery, etc.)
-    const localMeta = DEMO_INSTRUMENTS.find(
-      (d) => d.id === `argo-${rawId}` || d.floatId === rawId,
-    );
+    const localMeta =
+      currentFleet.find((d) => d.id === `argo-${rawId}` || d.floatId === rawId) ||
+      DEMO_INSTRUMENTS.find((d) => d.id === `argo-${rawId}` || d.floatId === rawId);
 
     // Use the float's actual physical depth from its profile, NOT the global slice depth.
     // This is the key decoupling: clicking a float resets activeInstrumentDepth
@@ -1067,49 +1076,106 @@ export const useOceanStore = create((set, get) => ({
       localMeta?.geoCoordinates?.depthM ?? obsAtSurface.depth ?? 15,
     );
 
+    const sourceLabel =
+      argoProfile.source === "live-erddap"
+        ? "LIVE (IFREMER Argo GDAC)"
+        : "HISTORICAL SNAPSHOT (IFREMER GDAC, Captured: 09 Sep 2026)";
+
+    const resolvedSea =
+      argoProfile.sea ||
+      localMeta?.sea ||
+      (argoProfile.lon > 78 ? "Bay of Bengal" : "Arabian Sea");
+
     const instrumentData = {
       id: `argo-${rawId}`,
       floatId: rawId,
-      name: argoProfile.name,
+      name: argoProfile.name || `Argo Float #${rawId}`,
       platform: localMeta?.platform || "APEX Profiling Float",
       lat: argoProfile.lat,
       lon: argoProfile.lon,
+      sea: resolvedSea,
+      region: resolvedSea,
+      geoCoordinates: {
+        lat: argoProfile.lat,
+        lon: argoProfile.lon,
+        depthM: floatPhysicalDepth,
+      },
       depth: floatPhysicalDepth,
-      temp: obsAtSurface.temperature,
-      salinity: obsAtSurface.salinity,
-      // Fields not available from ERDDAP profile endpoint — use local metadata or sensible defaults
-      dissolvedOxygen: localMeta?.telemetry?.dissolvedOxygen ?? 195,
-      chlorophyll: localMeta?.telemetry?.chlorophyll ?? 0.38,
-      currentSpeed: localMeta?.telemetry?.currentSpeed ?? 0.4,
-      currentDirection: localMeta?.telemetry?.currentDirection ?? "ENE (55°)",
+      depthMeters: floatPhysicalDepth,
+      temp: !isNaN(obsAtSurface.temperature) ? obsAtSurface.temperature : null,
+      salinity: !isNaN(obsAtSurface.salinity) ? obsAtSurface.salinity : null,
+      // Strictly null for Argo floats unless real sensor observation exists
+      dissolvedOxygen: argoProfile.bgc?.levels?.[0]?.doxy ?? null,
+      chlorophyll: argoProfile.bgc?.levels?.[0]?.chla ?? null,
+      currentSpeed: null,
+      currentDirection: null,
       status: "ACTIVE",
-      cycle: localMeta?.telemetry?.cycle ?? 148,
-      battery: localMeta?.telemetry?.battery ?? 80,
+      cycle: argoProfile.cycleNumber ?? localMeta?.telemetry?.cycle ?? null,
+      battery: localMeta?.telemetry?.battery ?? 85,
       timestamp: argoProfile.timestamp,
-      source:
-        argoProfile.source === "live-erddap"
-          ? "IFREMER / INCOIS Live ERDDAP GDAC"
-          : argoProfile.source === "offline-cache"
-            ? "Offline Cache (Hackathon Fail-Safe)"
-            : "Synthetic Profile",
-      profileId: `${rawId} / ${localMeta?.telemetry?.cycle ?? 148}`,
-      qcStatus: "GOOD",
+      source: sourceLabel,
+      sourceLabel: argoProfile.source === "live-erddap" ? "LIVE" : "HISTORICAL SNAPSHOT",
+      profileId: `${rawId}`,
+      qcStatus: "GOOD (QC 1, 2, 5)",
+      rawProfile: argoProfile,
+      bgc: argoProfile.bgc,
+      hasBgc: Boolean(argoProfile.bgc?.levels && argoProfile.bgc.levels.length > 0),
+      telemetry: {
+        temperatureC: !isNaN(obsAtSurface.temperature) ? obsAtSurface.temperature : null,
+        salinityPSU: !isNaN(obsAtSurface.salinity) ? obsAtSurface.salinity : null,
+        dissolvedOxygen: argoProfile.bgc?.levels?.[0]?.doxy ?? null,
+        chlorophyll: argoProfile.bgc?.levels?.[0]?.chla ?? null,
+        currentSpeed: null,
+        currentDirection: null,
+        batteryPct: localMeta?.telemetry?.battery ?? 85,
+        cycle: argoProfile.cycleNumber ?? localMeta?.telemetry?.cycle ?? null,
+        status: "active",
+        sourceLabel: argoProfile.source === "live-erddap" ? "LIVE" : "HISTORICAL SNAPSHOT",
+        sourceDetails: argoProfile.sourceDetails || "Source: IFREMER Argo GDAC",
+      },
     };
+
+    // Update fleet list so FleetBar reflects this selected float
+    const baseFleet = get().fleet && get().fleet.length > 0 ? get().fleet : DEMO_INSTRUMENTS;
+    const otherFleet = baseFleet.filter((f) => f.type !== "argo" && !f.id.includes("argo"));
+    const updatedFleet = [instrumentData, ...otherFleet];
 
     // Store the raw ArgoProfile internally for depth-slider recalculation
     // AND reset targetDepth and activeInstrumentDepth to this float's physical depth.
-    set({
+    set((state) => ({
       _activeArgoProfile: argoProfile,
       activeInstrument: instrumentData,
+      fleet: updatedFleet,
       targetDepth: floatPhysicalDepth,
       activeInstrumentDepth: floatPhysicalDepth,
       activeInstrumentHorizontal: 0, // completely isolates horizontal state
+      instruments: {
+        ...state.instruments,
+        [`argo-${rawId}`]: {
+          ...(state.instruments[`argo-${rawId}`] || { x: 0, z: 0 }),
+          depth: floatPhysicalDepth,
+        },
+      },
       isLoadingInstrument: false,
       instrumentError: null,
-    });
+    }));
 
-    if (typeof window !== "undefined" && window.OCEAN_STATE) {
-      window.OCEAN_STATE.selectedInstrument = instrumentData;
+    if (DEMO_INSTRUMENTS && DEMO_INSTRUMENTS[0]) {
+      Object.assign(DEMO_INSTRUMENTS[0], instrumentData);
+    }
+    if (typeof window !== "undefined") {
+      if (window.OCEAN_STATE) {
+        window.OCEAN_STATE.selectedInstrument = instrumentData;
+      }
+      if (window.interactiveInstrumentsMap) {
+        const mesh =
+          window.interactiveInstrumentsMap.get(instrumentData.id) ||
+          window.interactiveInstrumentsMap.get(`argo-${rawId}`) ||
+          window.interactiveInstrumentsMap.get("argo-2902351");
+        if (mesh) {
+          mesh.userData.instrumentData = instrumentData;
+        }
+      }
     }
 
     // ── PHASE B: Model extraction + Multi-Variable Delta calculation ─────────
@@ -1173,18 +1239,20 @@ export const useOceanStore = create((set, get) => ({
       },
     }));
 
-    // 3. Extract NetCDF Model prediction (live API or analytical simulation fallback)
+    // 3. Extract Real NetCDF Model prediction from INCOIS ERDDAP
     let modelRaw = null;
-    let modelSource = "live-api";
+    let modelSource = "INCOIS ERDDAP (incois_argo_10d_VAM)";
     let modelError = null;
+    let modelAvailable = false;
 
     try {
       const modelResp = await _fetchModelPoint(
         instrument?.lat ?? 11.6,
         instrument?.lon ?? 92.5,
         depthM,
+        timestamp,
       );
-      if (modelResp && modelResp.model) {
+      if (modelResp && modelResp.available && modelResp.model) {
         modelRaw = modelResp.model;
         if (modelResp.matching_metadata?.model_depth != null) {
           provenance.modelDepth = modelResp.matching_metadata.model_depth;
@@ -1193,94 +1261,55 @@ export const useOceanStore = create((set, get) => ({
           provenance.matchingMethod =
             modelResp.matching_metadata.matching_method;
         }
-        modelSource = modelResp.data_source || "live-api";
+        modelSource = modelResp.data_source || modelResp.source || "INCOIS ERDDAP (incois_argo_10d_VAM)";
+        modelAvailable = true;
       } else {
-        throw new Error("Invalid model response payload");
+        modelRaw = null;
+        modelSource = modelResp?.reason || "INCOIS ERDDAP (Model Unavailable)";
+        modelAvailable = false;
       }
     } catch (_modelErr) {
-      modelRaw = _simulateModelPointFallback(
-        instrument?.lat ?? 11.6,
-        instrument?.lon ?? 92.5,
-        depthM,
-        timestamp,
-      );
-      modelSource = "synthetic-fallback";
+      modelRaw = null;
+      modelSource = "INCOIS ERDDAP (Model Unavailable)";
+      modelError = _modelErr.message;
+      modelAvailable = false;
     }
 
-    // 4. Normalize Model Variables with diurnal cycle
-    const diurnalMod = calculateDiurnalModulation(timestamp, depthM, true);
+    // 4. Model Variables — GENUINE INCOIS MODEL VALUES ONLY (Zero diurnal offsets for live scientific validation)
     const modelVars = {
       temperature:
-        modelRaw.temperature != null
-          ? +(
-              Number(modelRaw.temperature) +
-              (modelSource === "live-api" ? diurnalMod.temperature : 0)
-            ).toFixed(2)
+        modelRaw?.temperature != null
+          ? parseFloat(Number(modelRaw.temperature).toFixed(2))
           : null,
       salinity:
-        modelRaw.salinity != null
-          ? +(
-              Number(modelRaw.salinity) +
-              (modelSource === "live-api" ? diurnalMod.salinity : 0)
-            ).toFixed(2)
+        modelRaw?.salinity != null
+          ? parseFloat(Number(modelRaw.salinity).toFixed(2))
           : null,
       chlorophyll:
-        modelRaw.chlorophyll != null
-          ? +Math.max(
-              0.01,
-              Number(modelRaw.chlorophyll) +
-                (modelSource === "live-api" ? diurnalMod.chlorophyll : 0),
-            ).toFixed(2)
+        modelRaw?.chlorophyll != null
+          ? parseFloat(Number(modelRaw.chlorophyll).toFixed(2))
           : null,
       currentSpeed:
-        modelRaw.current_speed != null
-          ? +Math.max(
-              0.01,
-              Number(modelRaw.current_speed) +
-                (modelSource === "live-api" ? diurnalMod.currentSpeed : 0),
-            ).toFixed(2)
-          : modelRaw.currentSpeed != null
-            ? +Math.max(
-                0.01,
-                Number(modelRaw.currentSpeed) +
-                  (modelSource === "live-api" ? diurnalMod.currentSpeed : 0),
-              ).toFixed(2)
+        modelRaw?.current_speed != null
+          ? parseFloat(Number(modelRaw.current_speed).toFixed(2))
+          : modelRaw?.currentSpeed != null
+            ? parseFloat(Number(modelRaw.currentSpeed).toFixed(2))
             : null,
       currentDirection:
-        modelRaw.current_direction != null
-          ? +(
-              (Number(modelRaw.current_direction) +
-                (modelSource === "live-api" ? diurnalMod.currentDirection : 0) +
-                360) %
-              360
-            ).toFixed(1)
-          : modelRaw.currentDirection != null
-            ? +(
-                (Number(modelRaw.currentDirection) +
-                  (modelSource === "live-api"
-                    ? diurnalMod.currentDirection
-                    : 0) +
-                  360) %
-                360
-              ).toFixed(1)
+        modelRaw?.current_direction != null
+          ? parseFloat(Number(modelRaw.current_direction).toFixed(1))
+          : modelRaw?.currentDirection != null
+            ? parseFloat(Number(modelRaw.currentDirection).toFixed(1))
             : null,
       dissolvedOxygen:
-        modelRaw.dissolved_oxygen != null
-          ? +Math.max(
-              5.0,
-              Number(modelRaw.dissolved_oxygen) +
-                (modelSource === "live-api" ? diurnalMod.dissolvedOxygen : 0),
-            ).toFixed(1)
-          : modelRaw.dissolvedOxygen != null
-            ? +Math.max(
-                5.0,
-                Number(modelRaw.dissolvedOxygen) +
-                  (modelSource === "live-api" ? diurnalMod.dissolvedOxygen : 0),
-              ).toFixed(1)
+        modelRaw?.dissolved_oxygen != null
+          ? parseFloat(Number(modelRaw.dissolved_oxygen).toFixed(1))
+          : modelRaw?.dissolvedOxygen != null
+            ? parseFloat(Number(modelRaw.dissolvedOxygen).toFixed(1))
             : null,
     };
 
-    // 5. Compute Deltas using standard or circular math & evaluate missing states
+    // 5. Compute Deltas: Δ = Observation - Model ONLY when BOTH values exist and are valid numbers
     const deltaVars = {};
     const variablesState = {};
     const varKeys = [
@@ -1296,7 +1325,7 @@ export const useOceanStore = create((set, get) => ({
       const o = obsVars[k];
       const m = modelVars[k];
 
-      // Missing Data Rule: Never calculate difference if one side is missing
+      // Strict Missing Data Rule: Never calculate difference if either side is missing
       const d =
         o != null && m != null && !isNaN(o) && !isNaN(m)
           ? calculateDelta(k, o, m)
@@ -1311,6 +1340,12 @@ export const useOceanStore = create((set, get) => ({
         status: getComparisonStatus(o, m),
       };
     }
+
+    const obsSourceLabel = profile?.sourceLabel
+      ? `${profile.sourceLabel} (${profile.sourceDetails || 'IFREMER Argo GDAC'})`
+      : profile?.source === 'offline-cache'
+        ? 'HISTORICAL SNAPSHOT (IFREMER GDAC, Captured: 09 Sep 2026)'
+        : 'LIVE (IFREMER Argo GDAC)';
 
     // 6. Atomically update Zustand store with provenance and comparison data
     set({
@@ -1327,12 +1362,9 @@ export const useOceanStore = create((set, get) => ({
         depth: depthM,
         isLoading: false,
         error: modelError,
-        modelSource,
-        obsSource:
-          profile?.source ||
-          (instrument?.type === "glider"
-            ? "glider-telemetry"
-            : "shipboard-ctd"),
+        modelSource: modelAvailable ? modelSource : "INCOIS ERDDAP (Model Unavailable)",
+        modelAvailable,
+        obsSource: obsSourceLabel,
       },
     });
 
@@ -1387,8 +1419,9 @@ export const useOceanStore = create((set, get) => ({
  * @returns {Promise<Object>} The FastAPI JSON response
  * @throws {Error} On timeout, network error, or non-200 HTTP response
  */
-async function _fetchModelPoint(lat, lon, depth) {
-  const url = `${MODEL_API_BASE}/api/model/point?lat=${lat}&lon=${lon}&depth=${depth}`;
+async function _fetchModelPoint(lat, lon, depth, time = null) {
+  const timeQuery = time ? `&time=${encodeURIComponent(time)}` : '';
+  const url = apiUrl(`/api/model/point?lat=${lat}&lon=${lon}&depth=${depth}${timeQuery}`);
 
   const controller = new AbortController();
   const timeoutHandle = setTimeout(
@@ -1509,64 +1542,71 @@ export function getInstrumentComparisonData(
   depthM = 15,
   timestamp = null,
 ) {
-  const fleet = DEMO_INSTRUMENTS;
-  const inst = fleet.find((i) => i.id === instrumentId) || fleet[0];
   const depth = Math.max(0, Math.min(4000, Number(depthM) || 0));
   const ts =
     timestamp ||
     useOceanStore.getState().selectedTimestamp ||
     new Date().toISOString();
+  const state = useOceanStore.getState();
 
-  const obs = calculateRealisticObservedProfile(
-    depth,
-    inst?.type || "argo",
-    inst,
-  );
-  const mod = calculateRealisticModelProfile(depth);
+  // If this matches the currently selected active instrument, return its genuine state
+  if (
+    state.activeInstrument &&
+    (state.activeInstrument.id === instrumentId ||
+      state.activeInstrument.floatId === instrumentId)
+  ) {
+    const comp = state.modelComparison;
+    return {
+      instrument: state.activeInstrument,
+      depth,
+      timestamp: ts,
+      observed: comp?.observed || {
+        temperature: null,
+        salinity: null,
+        chlorophyll: null,
+        currentSpeed: null,
+        currentDirection: null,
+        dissolvedOxygen: null,
+      },
+      model: comp?.model || {
+        temperature: null,
+        salinity: null,
+        chlorophyll: null,
+        currentSpeed: null,
+        currentDirection: null,
+        dissolvedOxygen: null,
+      },
+      delta: comp?.delta || {
+        temperature: null,
+        salinity: null,
+        chlorophyll: null,
+        currentSpeed: null,
+        currentDirection: null,
+        dissolvedOxygen: null,
+      },
+      variables: comp?.variables || {},
+    };
+  }
 
-  const diurnalObs = calculateDiurnalModulation(ts, depth, false);
-  const diurnalMod = calculateDiurnalModulation(ts, depth, true);
+  const fleet = DEMO_INSTRUMENTS;
+  const inst = fleet.find((i) => i.id === instrumentId) || fleet[0];
 
   const finalObs = {
-    temperature: +(obs.temperature + diurnalObs.temperature).toFixed(2),
-    salinity: +(obs.salinity + diurnalObs.salinity).toFixed(2),
-    chlorophyll:
-      obs.chlorophyll != null
-        ? +Math.max(0.01, obs.chlorophyll + diurnalObs.chlorophyll).toFixed(2)
-        : null,
-    currentSpeed: +Math.max(
-      0.01,
-      obs.currentSpeed + diurnalObs.currentSpeed,
-    ).toFixed(2),
-    currentDirection: +(
-      (obs.currentDirection + diurnalObs.currentDirection + 360) %
-      360
-    ).toFixed(1),
-    dissolvedOxygen: +Math.max(
-      5.0,
-      obs.dissolvedOxygen + diurnalObs.dissolvedOxygen,
-    ).toFixed(1),
+    temperature: null,
+    salinity: null,
+    chlorophyll: null,
+    currentSpeed: null,
+    currentDirection: null,
+    dissolvedOxygen: null,
   };
 
   const finalMod = {
-    temperature: +(mod.temperature + diurnalMod.temperature).toFixed(2),
-    salinity: +(mod.salinity + diurnalMod.salinity).toFixed(2),
-    chlorophyll:
-      mod.chlorophyll != null
-        ? +Math.max(0.01, mod.chlorophyll + diurnalMod.chlorophyll).toFixed(2)
-        : null,
-    currentSpeed: +Math.max(
-      0.01,
-      mod.currentSpeed + diurnalMod.currentSpeed,
-    ).toFixed(2),
-    currentDirection: +(
-      (mod.currentDirection + diurnalMod.currentDirection + 360) %
-      360
-    ).toFixed(1),
-    dissolvedOxygen: +Math.max(
-      5.0,
-      mod.dissolvedOxygen + diurnalMod.dissolvedOxygen,
-    ).toFixed(1),
+    temperature: null,
+    salinity: null,
+    chlorophyll: null,
+    currentSpeed: null,
+    currentDirection: null,
+    dissolvedOxygen: null,
   };
 
   const delta = {};
@@ -1581,19 +1621,13 @@ export function getInstrumentComparisonData(
   ];
 
   for (const k of varKeys) {
-    const o = finalObs[k];
-    const m = finalMod[k];
-    const d =
-      o != null && m != null && !isNaN(o) && !isNaN(m)
-        ? calculateDelta(k, o, m)
-        : null;
-    delta[k] = d;
+    delta[k] = null;
     variables[k] = {
       key: k,
-      obs: o,
-      model: m,
-      delta: d,
-      status: getComparisonStatus(o, m),
+      obs: null,
+      model: null,
+      delta: null,
+      status: "UNAVAILABLE",
     };
   }
 
@@ -1611,115 +1645,67 @@ export function getInstrumentComparisonData(
 /**
  * _extractObservationVariables
  * ----------------------------
- * Extracts in-situ observation values across all 6 parameters dynamically with depth.
- * Applies realistic oceanographic vertical profiles and diurnal solar perturbations.
+ * Extracts genuine in-situ observation values.
+ * For Argo floats: returns only real Temperature & Salinity from the profile (or null).
+ * Unmeasured parameters (Chlorophyll, Oxygen, Currents) return strictly null.
+ * ZERO diurnal offsets are added to real measurements.
  */
 function _extractObservationVariables(
   profile,
   instrument,
   observationDepth,
   targetDepth,
-  timestamp,
+  _timestamp,
 ) {
   const depthM = observationDepth ?? targetDepth ?? 0;
-  const instType =
-    instrument?.type ||
-    (instrument?.id?.includes("glider")
-      ? "glider"
-      : instrument?.id?.includes("ctd")
-        ? "ctd"
-        : "argo");
+  const isArgo =
+    !instrument?.type ||
+    instrument?.type === "argo" ||
+    instrument?.id?.includes("argo");
 
-  // Realistic baseline calculated from oceanic vertical physics for this device
-  const realistic = calculateRealisticObservedProfile(
-    depthM,
-    instType,
-    instrument,
-  );
+  if (isArgo) {
+    let temp = null;
+    let sal = null;
+    if (profile) {
+      const profReading = getProfileAtDepth(profile, depthM);
+      if (!isNaN(profReading.temperature)) temp = profReading.temperature;
+      if (!isNaN(profReading.salinity)) sal = profReading.salinity;
+    }
 
-  let temp = realistic.temperature;
-  let sal = realistic.salinity;
+    // Check if float profile has real BGC levels
+    let doxy = null;
+    let chla = null;
+    if (profile?.bgcLevels && Array.isArray(profile.bgcLevels) && profile.bgcLevels.length > 0) {
+      const match = profile.bgcLevels.find((l) => Math.abs(l.depth - depthM) <= 15);
+      if (match) {
+        if (match.doxy != null && !isNaN(match.doxy)) doxy = match.doxy;
+        if (match.chla != null && !isNaN(match.chla)) chla = match.chla;
+      }
+    }
 
-  // If live/cached Argo profile has explicit sensor values at this depth, interpolate:
-  if (profile) {
-    const profReading = getProfileAtDepth(profile, depthM);
-    if (!isNaN(profReading.temperature)) temp = profReading.temperature;
-    if (!isNaN(profReading.salinity)) sal = profReading.salinity;
+    return {
+      temperature: temp != null && !isNaN(temp) ? parseFloat(Number(temp).toFixed(2)) : null,
+      salinity: sal != null && !isNaN(sal) ? parseFloat(Number(sal).toFixed(2)) : null,
+      chlorophyll: chla != null && !isNaN(chla) ? parseFloat(Number(chla).toFixed(2)) : null,
+      currentSpeed: null, // Argo floats do NOT measure currents
+      currentDirection: null,
+      dissolvedOxygen: doxy != null && !isNaN(doxy) ? parseFloat(Number(doxy).toFixed(1)) : null,
+    };
   }
 
-  // Apply diurnal sinusoidal cycle modification
-  const diurnal = calculateDiurnalModulation(
-    timestamp || new Date(),
+  // Non-argo educational tour instruments
+  const realistic = calculateRealisticObservedProfile(
     depthM,
-    false,
+    instrument?.type,
+    instrument,
   );
-  if (temp != null) temp = +(temp + diurnal.temperature).toFixed(2);
-  if (sal != null) sal = +(sal + diurnal.salinity).toFixed(2);
-
-  // Chlorophyll: strictly null if depthM > 120m (aphotic zone)
-  const chl =
-    depthM <= 120
-      ? +Math.max(0.01, realistic.chlorophyll + diurnal.chlorophyll).toFixed(2)
-      : null;
-  const curSpd = +Math.max(
-    0.01,
-    realistic.currentSpeed + diurnal.currentSpeed,
-  ).toFixed(2);
-  const curDir = +(
-    (realistic.currentDirection + diurnal.currentDirection + 360) %
-    360
-  ).toFixed(1);
-  const doxy = +Math.max(
-    5.0,
-    realistic.dissolvedOxygen + diurnal.dissolvedOxygen,
-  ).toFixed(1);
-
   return {
-    temperature:
-      temp != null && !isNaN(temp) ? parseFloat(Number(temp).toFixed(2)) : null,
-    salinity:
-      sal != null && !isNaN(sal) ? parseFloat(Number(sal).toFixed(2)) : null,
-    chlorophyll:
-      chl != null && !isNaN(chl) ? parseFloat(Number(chl).toFixed(2)) : null,
-    currentSpeed: curSpd,
-    currentDirection: curDir,
-    dissolvedOxygen: doxy,
-  };
-}
-
-/**
- * _simulateModelPointFallback
- * ---------------------------
- * Analytical physics simulation fallback when local FastAPI NetCDF backend is offline.
- * Simulates depth-dependent profiles for all 6 oceanographic variables with diurnal cycle.
- */
-function _simulateModelPointFallback(lat, lon, depthM, timestamp) {
-  const base = calculateRealisticModelProfile(depthM);
-  const diurnal = calculateDiurnalModulation(
-    timestamp || new Date(),
-    depthM,
-    true,
-  );
-
-  return {
-    temperature: +(base.temperature + diurnal.temperature).toFixed(2),
-    salinity: +(base.salinity + diurnal.salinity).toFixed(2),
-    chlorophyll:
-      base.chlorophyll != null
-        ? +Math.max(0.01, base.chlorophyll + diurnal.chlorophyll).toFixed(2)
-        : null,
-    currentSpeed: +Math.max(
-      0.01,
-      base.currentSpeed + diurnal.currentSpeed,
-    ).toFixed(2),
-    currentDirection: +(
-      (base.currentDirection + diurnal.currentDirection + 360) %
-      360
-    ).toFixed(1),
-    dissolvedOxygen: +Math.max(
-      5.0,
-      base.dissolvedOxygen + diurnal.dissolvedOxygen,
-    ).toFixed(1),
+    temperature: realistic.temperature != null ? parseFloat(Number(realistic.temperature).toFixed(2)) : null,
+    salinity: realistic.salinity != null ? parseFloat(Number(realistic.salinity).toFixed(2)) : null,
+    chlorophyll: depthM <= 120 && realistic.chlorophyll != null ? parseFloat(Number(realistic.chlorophyll).toFixed(2)) : null,
+    currentSpeed: realistic.currentSpeed != null ? parseFloat(Number(realistic.currentSpeed).toFixed(2)) : null,
+    currentDirection: realistic.currentDirection != null ? parseFloat(Number(realistic.currentDirection).toFixed(1)) : null,
+    dissolvedOxygen: realistic.dissolvedOxygen != null ? parseFloat(Number(realistic.dissolvedOxygen).toFixed(1)) : null,
   };
 }
 

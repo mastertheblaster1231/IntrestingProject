@@ -66,3 +66,8 @@ coverage/
 *.tsbuildinfo
 pids/
 *.pid
+
+# Screenshots / Bug Reports
+1.png
+2.png
+image.png

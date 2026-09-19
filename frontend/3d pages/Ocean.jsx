@@ -1,3 +1,4 @@
+import "../services/logger.js";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import React from "react";
@@ -1381,31 +1382,31 @@ function populateUIWithFloatData(floatData) {
 
   const sci = floatData.scientificData || {};
   if (tempEl)
-    tempEl.textContent = `${sci.surfaceTempC !== undefined ? sci.surfaceTempC.toFixed(1) : "28.3"} °C`;
+    tempEl.textContent = sci.surfaceTempC !== undefined && sci.surfaceTempC !== null ? `${Number(sci.surfaceTempC).toFixed(2)} °C` : "—";
   if (tempLabelEl) tempLabelEl.textContent = "🌡 Surface Temp";
   if (salEl)
-    salEl.textContent = `${sci.surfaceSalinityPSU !== undefined ? sci.surfaceSalinityPSU.toFixed(1) : "34.3"} PSU`;
+    salEl.textContent = sci.surfaceSalinityPSU !== undefined && sci.surfaceSalinityPSU !== null ? `${Number(sci.surfaceSalinityPSU).toFixed(2)} PSU` : "—";
   if (depthEl) depthEl.textContent = "0 m / 2000 m";
-  if (oxyEl) oxyEl.textContent = `${sci.dissolvedOxygenUmolKg || 198} μmol/kg`;
+  if (oxyEl) oxyEl.textContent = sci.dissolvedOxygenUmolKg != null ? `${sci.dissolvedOxygenUmolKg} μmol/kg` : "— (Core Argo)";
   if (chlEl)
-    chlEl.textContent = `${sci.chlorophyllMgM3 !== undefined ? sci.chlorophyllMgM3.toFixed(2) : "0.42"} mg/m³`;
+    chlEl.textContent = sci.chlorophyllMgM3 != null ? `${Number(sci.chlorophyllMgM3).toFixed(2)} mg/m³` : "— (Core Argo)";
   if (currentEl)
     currentEl.textContent =
       sci.currentDisplay ||
-      `${sci.currentSpeedMs || 0.42} m/s → ${sci.currentDirection || "NE"}`;
-  if (qualityEl) qualityEl.textContent = sci.dataQuality || "GOOD";
+      (sci.currentSpeedMs != null ? `${sci.currentSpeedMs} m/s → ${sci.currentDirection || "NE"}` : "— (Lagrangian Drift)");
+  if (qualityEl) qualityEl.textContent = sci.dataQuality || "GOOD (QC 1, 2, 5)";
 
   const mission = floatData.mission || {};
   if (cycleEl)
     cycleEl.textContent =
-      mission.cycleDisplay || `#${mission.cycleNumber || 147}`;
+      mission.cycleDisplay || (mission.cycleNumber ? `#${mission.cycleNumber}` : "—");
   if (lastProfEl)
-    lastProfEl.textContent = mission.lastProfileRelative || "18 min ago";
+    lastProfEl.textContent = mission.lastProfileRelative || floatData.lastObservation || "—";
   if (batteryEl)
     batteryEl.textContent =
-      mission.batteryDisplay || `${mission.batteryPercent || 82}%`;
+      mission.batteryDisplay || (mission.batteryPercent ? `${mission.batteryPercent}%` : "85%");
   if (modalCycleEl)
-    modalCycleEl.textContent = `Cycle ${mission.cycleDisplay || `#${mission.cycleNumber || 147}`}`;
+    modalCycleEl.textContent = `Cycle ${mission.cycleDisplay || (mission.cycleNumber ? `#${mission.cycleNumber}` : "—")}`;
 
   // Update Temporal Status Banner
   const statusTxt = document.getElementById("temporalStatusText");
@@ -1592,37 +1593,51 @@ async function initFloatDescription() {
   populateUIWithFloatData(floatData);
 
   if (window.oceanStore) {
-    const fullInstrumentData = {
-      ...currentStation,
-      name: floatData.buoyName || currentStation?.name || currentStation?.id,
-      sea: floatData.locationPrimary || "Indian Ocean",
-      region: floatData.locationSecondary || "Central Basin",
-      type: floatData.platformType?.toLowerCase().includes("glider") ? "glider" : (floatData.platformType?.toLowerCase().includes("ctd") ? "ctd" : "argo"),
-      platform: floatData.platformType || "APEX Profiling Float",
-      lat: floatData.coordinates?.lat || currentStation?.lat,
-      lon: floatData.coordinates?.lon || currentStation?.lon,
-      depth: floatData.maxDepthMeters || 2000,
-      depthMeters: floatData.maxDepthMeters || 2000,
-      status: (floatData.status || "active").toLowerCase(),
-      telemetry: {
-        temperatureC: floatData.scientificData?.surfaceTempC,
-        salinityPSU: floatData.scientificData?.surfaceSalinityPSU,
-        dissolvedOxygen: floatData.scientificData?.dissolvedOxygenUmolKg,
-        chlorophyll: floatData.scientificData?.chlorophyllMgM3,
-        currentSpeed: floatData.scientificData?.currentSpeedMs,
-        currentDirection: floatData.scientificData?.currentDirection,
-        batteryPct: floatData.mission?.batteryPercent,
-        cycle: floatData.mission?.cycleNumber,
-        status: (floatData.status || "active").toLowerCase(),
-        missionWaypoint: floatData.locationSecondary,
-        vessel: floatData.locationSecondary
-      },
-      geoCoordinates: {
+    if (isNumericWmo) {
+      await window.oceanStore.getState().selectFloat(numericWmo);
+    } else {
+      const fullInstrumentData = {
+        ...currentStation,
+        name: floatData.buoyName || currentStation?.name || currentStation?.id,
+        sea: floatData.locationPrimary || "Indian Ocean",
+        region: floatData.locationSecondary || "Central Basin",
+        type: floatData.platformType?.toLowerCase().includes("glider") ? "glider" : (floatData.platformType?.toLowerCase().includes("ctd") ? "ctd" : "argo"),
+        platform: floatData.platformType || "APEX Profiling Float",
         lat: floatData.coordinates?.lat || currentStation?.lat,
         lon: floatData.coordinates?.lon || currentStation?.lon,
-      }
-    };
-    window.oceanStore.getState().setActiveInstrument(fullInstrumentData);
+        depth: floatData.maxDepthMeters || 2000,
+        depthMeters: floatData.maxDepthMeters || 2000,
+        status: (floatData.status || "active").toLowerCase(),
+        telemetry: {
+          temperatureC: floatData.scientificData?.surfaceTempC,
+          salinityPSU: floatData.scientificData?.surfaceSalinityPSU,
+          dissolvedOxygen: floatData.scientificData?.dissolvedOxygenUmolKg,
+          chlorophyll: floatData.scientificData?.chlorophyllMgM3,
+          currentSpeed: floatData.scientificData?.currentSpeedMs,
+          currentDirection: floatData.scientificData?.currentDirection,
+          batteryPct: floatData.mission?.batteryPercent,
+          cycle: floatData.mission?.cycleNumber,
+          status: (floatData.status || "active").toLowerCase(),
+          missionWaypoint: floatData.locationSecondary,
+          vessel: floatData.locationSecondary,
+          sourceLabel: floatData.source,
+          sourceDetails: floatData.sourceDetails,
+        },
+        geoCoordinates: {
+          lat: floatData.coordinates?.lat || currentStation?.lat,
+          lon: floatData.coordinates?.lon || currentStation?.lon,
+        }
+      };
+      window.oceanStore.getState().setActiveInstrument(fullInstrumentData);
+    }
+  }
+
+  // Ensure WorkspaceManager opens this instrument card in the right dock
+  const targetInstId = isNumericWmo ? `argo-${numericWmo}` : currentStation.id;
+  if (window.workspaceManager?.openInstrument) {
+    window.workspaceManager.openInstrument(targetInstId);
+  } else if (window.openInstrument) {
+    window.openInstrument(targetInstId);
   }
 
   // Apply the initial time of day preset
@@ -2152,7 +2167,7 @@ if (ctdInst1) {
 // Spawn Instruments Fleet
 DEMO_INSTRUMENTS.forEach((inst) => {
   // Primary surface Argo float is mapped to existing argoFloat
-  if (inst.id === "argo-2902351") {
+  if (inst.type === "argo" || (inst.id && String(inst.id).startsWith("argo-"))) {
     argoFloat.userData = {
       isInstrument: true,
       id: inst.id,
@@ -2964,35 +2979,29 @@ function updateTelemetryPanelWithInstrument(inst) {
   } else if (coordsEl && inst.lat && inst.lon) {
     coordsEl.textContent = `${Math.abs(inst.lat).toFixed(4)}° ${inst.lat >= 0 ? "N" : "S"}, ${Math.abs(inst.lon).toFixed(4)}° ${inst.lon >= 0 ? "E" : "W"}`;
   }
+  const tVal = inst.telemetry?.temperatureC ?? inst.temp;
   if (tempEl) {
-    tempEl.textContent = inst.telemetry.temperatureC
-      ? `${inst.telemetry.temperatureC.toFixed(1)} °C`
-      : "--";
+    tempEl.textContent = tVal != null ? `${Number(tVal).toFixed(2)} °C` : "--";
   }
+  const sVal = inst.telemetry?.salinityPSU ?? inst.salinity;
   if (salEl) {
-    salEl.textContent = inst.telemetry.salinityPSU
-      ? `${inst.telemetry.salinityPSU.toFixed(1)} PSU`
-      : "--";
+    salEl.textContent = sVal != null ? `${Number(sVal).toFixed(2)} PSU` : "--";
   }
   if (depthEl) {
-    depthEl.textContent = `${inst.depthMeters} m / 4000 m`;
+    const dVal = inst.depthMeters ?? inst.depth ?? 0;
+    depthEl.textContent = `${dVal} m / 4000 m`;
   }
   if (oxyEl) {
-    oxyEl.textContent = inst.telemetry.dissolvedOxygen
-      ? `${inst.telemetry.dissolvedOxygen} μmol/kg`
-      : "--";
+    const oxyVal = inst.telemetry?.dissolvedOxygen ?? inst.dissolvedOxygen;
+    oxyEl.textContent = oxyVal != null ? `${oxyVal} μmol/kg` : (inst.type === "argo" ? "— (Core Argo)" : "--");
   }
   if (currentEl) {
-    currentEl.textContent = inst.telemetry.speedKnots
-      ? `${inst.telemetry.speedKnots} kn Glide`
-      : "0.42 m/s → NE";
+    const speedVal = inst.telemetry?.speedKnots ?? inst.telemetry?.currentSpeed;
+    currentEl.textContent = speedVal != null ? `${speedVal} kn Glide` : (inst.type === "argo" ? "— (Lagrangian Drift)" : "0.42 m/s → NE");
   }
   if (cycleEl) {
-    cycleEl.textContent = inst.telemetry.cycle
-      ? `#${inst.telemetry.cycle}`
-      : inst.type === "glider"
-      ? "Mission #12"
-      : "Cast #4";
+    const cycleVal = inst.cycle ?? inst.telemetry?.cycle;
+    cycleEl.textContent = cycleVal ? `#${cycleVal}` : (inst.type === "glider" ? "Mission #12" : "Cast #4");
   }
   if (lastProfileEl) {
     lastProfileEl.textContent =
@@ -3044,7 +3053,7 @@ function updateTelemetryPanelWithInstrument(inst) {
 }
 
 // Focuses and dives camera to an instrument
-let selectedInstrumentId = "argo-2902351";
+let selectedInstrumentId = DEMO_INSTRUMENTS[0]?.id || "argo-2902351";
 const cameraTargetLookAt = new THREE.Vector3(0, -0.2, 1.5);
 const cameraTargetPosition = new THREE.Vector3(3.8, 2.2, 5.2);
 let isCameraLerping = false;
@@ -3189,9 +3198,10 @@ window.addEventListener("pointermove", (e) => {
       if (hoverDepth) hoverDepth.textContent = `${inst.depthMeters}m`;
       if (hoverStatus)
         hoverStatus.textContent = (inst.telemetry.status || "Active").toUpperCase();
+      const hoverTempVal = inst.telemetry?.temperatureC ?? inst.temp;
       if (hoverTemp)
-        hoverTemp.textContent = inst.telemetry.temperatureC
-          ? `${inst.telemetry.temperatureC.toFixed(1)} °C`
+        hoverTemp.textContent = hoverTempVal != null
+          ? `${Number(hoverTempVal).toFixed(2)} °C`
           : "--";
       if (hoverBattery)
         hoverBattery.textContent = `${inst.telemetry.batteryPct || 85}%`;
@@ -3559,7 +3569,8 @@ function animate() {
   // Strictly reads ONLY its own depth from store.instruments['argo-2902351']
   if (argoFloat.visible) {
     const store = window.oceanStore?.getState ? window.oceanStore.getState() : null;
-    const argoDepth = store?.instruments?.['argo-2902351']?.depth ?? 15;
+    const activeArgoId = DEMO_INSTRUMENTS[0]?.id || 'argo-2902351';
+    const argoDepth = store?.instruments?.[activeArgoId]?.depth ?? store?.instruments?.['argo-2902351']?.depth ?? 15;
     const argoRatio = argoDepth / 4000.0;
     const maxArgoDepth = 95.0 * (OCEAN_STATE.verticalExaggeration || 1.0);
     const isolatedArgoDiveY = -argoRatio * maxArgoDepth;

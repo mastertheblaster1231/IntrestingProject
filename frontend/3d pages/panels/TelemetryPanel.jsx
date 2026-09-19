@@ -50,6 +50,7 @@ export function TelemetryPanel() {
   const fetchAndSetInstrument = useOceanStore(
     (state) => state.fetchAndSetInstrument,
   );
+  const modelComparison = useOceanStore((state) => state.modelComparison);
 
   // Toggle state for the Multi-Variable Model vs Observation comparison view
   const [showComparison, setShowComparison] = useState(true);
@@ -286,13 +287,50 @@ export function TelemetryPanel() {
     fetchLiveOrHistoricalData(isRealTime);
   }, [fetchLiveOrHistoricalData, isRealTime]);
 
-  const displayObs = fetchedTelemetry
-    ? {
-        ...dynamicObs,
-        temperature: fetchedTelemetry.temperature,
-        salinity: fetchedTelemetry.salinity,
-      }
-    : dynamicObs;
+  const sourceLabel =
+    activeInstrument?.sourceLabel ||
+    (activeInstrument?.isSimulated
+      ? "SIMULATED"
+      : fetchedTelemetry
+      ? (isRealTime ? "LIVE" : "HISTORICAL SNAPSHOT")
+      : "HISTORICAL SNAPSHOT");
+
+  const sourceDetails =
+    activeInstrument?.sourceDetails ||
+    (sourceLabel === "LIVE"
+      ? "Source: IFREMER Argo GDAC"
+      : "Source: IFREMER Argo GDAC (Historical Snapshot)");
+
+  const displayObs = {
+    temperature:
+      fetchedTelemetry?.temperature ??
+      modelComparison?.observed?.temperature ??
+      activeInstrument?.telemetry?.temperatureC ??
+      dynamicObs?.temperature ??
+      null,
+    salinity:
+      fetchedTelemetry?.salinity ??
+      modelComparison?.observed?.salinity ??
+      activeInstrument?.telemetry?.salinityPSU ??
+      dynamicObs?.salinity ??
+      null,
+    chlorophyll:
+      modelComparison?.observed?.chlorophyll ??
+      dynamicObs?.chlorophyll ??
+      null,
+    currentSpeed:
+      modelComparison?.observed?.currentSpeed ??
+      dynamicObs?.currentSpeed ??
+      null,
+    currentDirection:
+      modelComparison?.observed?.currentDirection ??
+      dynamicObs?.currentDirection ??
+      null,
+    dissolvedOxygen:
+      modelComparison?.observed?.dissolvedOxygen ??
+      dynamicObs?.dissolvedOxygen ??
+      null,
+  };
 
   // Comparison variables suite (6 parameters)
   const comparisonRows = [
@@ -300,43 +338,49 @@ export function TelemetryPanel() {
       key: "temperature",
       label: "Temperature",
       unit: "°C",
-      obs: displayObs?.temperature,
-      model: dynamicModel?.temperature,
+      obs: displayObs.temperature,
+      model: dynamicModel?.temperature ?? modelComparison?.model?.temperature ?? null,
+      delta: modelComparison?.delta?.temperature ?? null,
     },
     {
       key: "salinity",
       label: "Salinity",
       unit: "PSU",
-      obs: displayObs?.salinity,
-      model: dynamicModel?.salinity,
+      obs: displayObs.salinity,
+      model: dynamicModel?.salinity ?? modelComparison?.model?.salinity ?? null,
+      delta: modelComparison?.delta?.salinity ?? null,
     },
     {
       key: "chlorophyll",
       label: "Chlorophyll-a",
       unit: "mg/m³",
-      obs: displayObs?.chlorophyll,
-      model: dynamicModel?.chlorophyll,
+      obs: displayObs.chlorophyll,
+      model: dynamicModel?.chlorophyll ?? modelComparison?.model?.chlorophyll ?? null,
+      delta: modelComparison?.delta?.chlorophyll ?? null,
     },
     {
       key: "currentSpeed",
       label: "Current Speed",
       unit: "m/s",
-      obs: displayObs?.currentSpeed,
-      model: dynamicModel?.currentSpeed,
+      obs: displayObs.currentSpeed,
+      model: dynamicModel?.currentSpeed ?? modelComparison?.model?.currentSpeed ?? null,
+      delta: modelComparison?.delta?.currentSpeed ?? null,
     },
     {
       key: "currentDirection",
       label: "Current Direction",
       unit: "°",
-      obs: displayObs?.currentDirection,
-      model: dynamicModel?.currentDirection,
+      obs: displayObs.currentDirection,
+      model: dynamicModel?.currentDirection ?? modelComparison?.model?.currentDirection ?? null,
+      delta: modelComparison?.delta?.currentDirection ?? null,
     },
     {
       key: "dissolvedOxygen",
       label: "Dissolved Oxygen",
       unit: "µmol/kg",
-      obs: displayObs?.dissolvedOxygen,
-      model: dynamicModel?.dissolvedOxygen,
+      obs: displayObs.dissolvedOxygen,
+      model: dynamicModel?.dissolvedOxygen ?? modelComparison?.model?.dissolvedOxygen ?? null,
+      delta: modelComparison?.delta?.dissolvedOxygen ?? null,
     },
   ];
 
@@ -479,11 +523,7 @@ export function TelemetryPanel() {
                   marginTop: "1px",
                 }}
               >
-                {regionName} •{" "}
-                {activeInstrument.platform ||
-                  (activeInstrument.type
-                    ? `${activeInstrument.type.toUpperCase()} Observation Platform`
-                    : "Ocean Sensor")}
+                {regionName} • {sourceDetails}
               </div>
             </div>
           </div>
@@ -497,12 +537,27 @@ export function TelemetryPanel() {
               fontSize: "0.62rem",
               fontWeight: 700,
               textTransform: "uppercase",
-              background: "rgba(16, 185, 129, 0.15)",
-              border: "1px solid rgba(16, 185, 129, 0.4)",
-              color: "#34d399",
+              background:
+                sourceLabel === "LIVE"
+                  ? "rgba(16, 185, 129, 0.15)"
+                  : sourceLabel === "HISTORICAL SNAPSHOT"
+                  ? "rgba(56, 189, 248, 0.15)"
+                  : "rgba(251, 191, 36, 0.15)",
+              border:
+                sourceLabel === "LIVE"
+                  ? "1px solid rgba(16, 185, 129, 0.4)"
+                  : sourceLabel === "HISTORICAL SNAPSHOT"
+                  ? "1px solid rgba(56, 189, 248, 0.4)"
+                  : "1px solid rgba(251, 191, 36, 0.4)",
+              color:
+                sourceLabel === "LIVE"
+                  ? "#34d399"
+                  : sourceLabel === "HISTORICAL SNAPSHOT"
+                  ? "#38bdf8"
+                  : "#fbbf24",
             }}
           >
-            {activeInstrument.status || "ACTIVE"}
+            {sourceLabel}
           </span>
         </div>
 
@@ -909,11 +964,11 @@ export function TelemetryPanel() {
             <span
               style={{ fontFamily: "Space Mono, monospace", color: "#4ade80" }}
             >
-              {dynamicObs?.chlorophyll != null
-                ? `${dynamicObs.chlorophyll.toFixed(2)} mg/m³`
+              {displayObs?.chlorophyll != null
+                ? `${displayObs.chlorophyll.toFixed(2)} mg/m³`
                 : resolvedDepth > 120
                   ? "Aphotic (>100m)"
-                  : "N/A"}
+                  : "—"}
             </span>
           </div>
         </div>
@@ -953,9 +1008,9 @@ export function TelemetryPanel() {
             <span
               style={{ fontFamily: "Space Mono, monospace", color: "#cbd5e1" }}
             >
-              {dynamicObs?.currentSpeed != null
-                ? `${dynamicObs.currentSpeed.toFixed(2)} m/s`
-                : "0.40 m/s"}
+              {displayObs?.currentSpeed != null
+                ? `${displayObs.currentSpeed.toFixed(2)} m/s`
+                : "—"}
             </span>
           </div>
 
@@ -971,9 +1026,9 @@ export function TelemetryPanel() {
             <span
               style={{ fontFamily: "Space Mono, monospace", color: "#cbd5e1" }}
             >
-              {dynamicObs?.currentDirection != null
-                ? `${dynamicObs.currentDirection.toFixed(0)}°`
-                : "055° (ENE)"}
+              {displayObs?.currentDirection != null
+                ? `${displayObs.currentDirection.toFixed(0)}°`
+                : "—"}
             </span>
           </div>
 

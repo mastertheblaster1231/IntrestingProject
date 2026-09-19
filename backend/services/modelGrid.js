@@ -20,21 +20,24 @@ import { round, sanitize } from './sanitize.js';
  */
 
 const INCOIS_ERDDAP = process.env.ERDDAP_INCOIS_BASE || 'https://erddap.incois.gov.in/erddap';
-const MODEL_DATASET_ID = process.env.MODEL_DATASET_ID || '';
+const MODEL_DATASET_ID = process.env.MODEL_DATASET_ID || 'incois_argo_10d_VAM';
 
 /**
  * Variable names in the configured dataset, comma-separated as
- * canonical:actual, e.g. "temperature:analysed_sst,salinity:so".
+ * canonical:actual, e.g. "temperature:TEMP,salinity:SAL".
  * Different INCOIS products use different names, so this stays configurable.
  */
-const MODEL_VARIABLE_MAP = parseVariableMap(process.env.MODEL_VARIABLES || '');
+const MODEL_VARIABLE_MAP = parseVariableMap(
+  process.env.MODEL_VARIABLES || 'temperature:TEMP,salinity:SAL'
+);
 
 /**
  * Dimension order of the configured dataset. Almost always one of:
  *   time,latitude,longitude          (2D surface products, e.g. SST)
  *   time,depth,latitude,longitude    (3D products)
+ *   time,ZAX,latitude,longitude      (INCOIS 3D products where ZAX = depth in meters)
  */
-const MODEL_DIMENSIONS = (process.env.MODEL_DIMENSIONS || 'time,latitude,longitude')
+const MODEL_DIMENSIONS = (process.env.MODEL_DIMENSIONS || 'time,ZAX,latitude,longitude')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -108,17 +111,28 @@ export async function fetchModelPoint({ lat, lon, depth = 0, time = null } = {})
 
     for (const [canonical, actual] of Object.entries(MODEL_VARIABLE_MAP)) {
       try {
-        // Build one bracket per dimension in the dataset's declared order.
-        const ranges = MODEL_DIMENSIONS.map((dim) => {
-          if (dim === 'time') return [stamp];
-          if (dim === 'depth' || dim === 'altitude' || dim === 'LEV') return [depth];
-          if (dim === 'latitude' || dim === 'lat') return [lat];
-          if (dim === 'longitude' || dim === 'lon') return [lon];
-          return [0];
-        });
+        const buildRanges = (tVal) =>
+          MODEL_DIMENSIONS.map((dim) => {
+            if (dim === 'time') return [tVal];
+            if (dim === 'depth' || dim === 'altitude' || dim === 'LEV' || dim === 'ZAX') return [depth];
+            if (dim === 'latitude' || dim === 'lat') return [lat];
+            if (dim === 'longitude' || dim === 'lon') return [lon];
+            return [0];
+          });
 
-        const url = buildGridUrl(base, actual, ranges);
-        const rows = parseTable(await fetchErddapJson(url, { timeoutMs: 20000 }));
+        let url = buildGridUrl(base, actual, buildRanges(stamp));
+        let rows = [];
+        try {
+          rows = parseTable(await fetchErddapJson(url, { timeoutMs: 20000 }));
+        } catch (fetchErr) {
+          // If a specific timestamp is outside coverage, query the latest available grid ('last')
+          if (stamp !== 'last') {
+            const fallbackUrl = buildGridUrl(base, actual, buildRanges('last'));
+            rows = parseTable(await fetchErddapJson(fallbackUrl, { timeoutMs: 20000 }));
+          } else {
+            throw fetchErr;
+          }
+        }
 
         if (rows.length === 0) {
           errors.push(`${canonical}: no grid cell at that position`);
