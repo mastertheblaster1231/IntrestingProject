@@ -59,28 +59,48 @@ export function SideBySideValidationPanel({ onClose }) {
     return SUPPORTED_VARIABLES.filter((v) => v.key === selectedVarFilter);
   }, [selectedVarFilter]);
 
-  // Dynamic realistic data: values realistically grow and decrease with depth and diurnal timeline
-  const resolvedDepth = targetDepth ?? 15;
-  const comparisonData = useMemo(() => {
-    const instId = activeInstrument?.id || 'argo-2902351';
-    return getInstrumentComparisonData(instId, resolvedDepth, selectedTimestamp);
-  }, [activeInstrument?.id, resolvedDepth, selectedTimestamp]);
+  const [apiData, setApiData] = useState(null);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState(null);
 
-  const dynamicObs = comparisonData.observed;
-  const dynamicModel = comparisonData.model;
-  const dynamicDelta = comparisonData.delta;
+  const resolvedDepth = targetDepth ?? 15;
+  const instId = activeInstrument?.id || 'argo-2902351';
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchData = async () => {
+      setApiLoading(true);
+      setApiError(null);
+      try {
+        const cleanId = instId.replace(/^argo-/i, '').trim();
+        const url = apiUrl(`/api/validation?platform_number=${cleanId}&depth=${resolvedDepth}&time=${selectedTimestamp || new Date().toISOString()}`);
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to fetch validation data');
+        if (isMounted) setApiData(data);
+      } catch (err) {
+        if (isMounted) setApiError(err.message);
+      } finally {
+        if (isMounted) setApiLoading(false);
+      }
+    };
+    fetchData();
+    return () => { isMounted = false; };
+  }, [instId, resolvedDepth, selectedTimestamp]);
 
   const provenance = {
     targetDepth: resolvedDepth,
-    observationDepth: resolvedDepth,
-    modelDepth: resolvedDepth,
-    matchingMethod: modelComparison?.matchingMethod ?? 'Nearest Valid Grid',
+    observationDepth: apiData?.depth_level || `${resolvedDepth}m`,
+    modelDepth: apiData?.depth_level || `${resolvedDepth}m`,
+    matchingMethod: 'Nearest Valid Grid',
   };
 
-  const instrumentName = activeInstrument?.name || 'In-Situ Device';
-  const instrumentPlatform = activeInstrument?.platform || 'Oceanographic In-Situ Sensor';
-  const instrumentCoords = `${(activeInstrument?.lat ?? 11.6).toFixed(4)}°N, ${(activeInstrument?.lon ?? 92.5).toFixed(4)}°E`;
-  const isDepthLoading = modelComparison?.isLoading;
+  const instrumentName = activeInstrument?.name || `Argo ${instId.replace(/^argo-/i, '')}`;
+  const instrumentPlatform = activeInstrument?.platform || 'APEX Profiling Float (Coastal Buoy)';
+  const instrumentCoords = apiData?.location 
+    ? `${apiData.location.lat.toFixed(4)}°N, ${apiData.location.lon.toFixed(4)}°E`
+    : `${(activeInstrument?.lat ?? 11.6).toFixed(4)}°N, ${(activeInstrument?.lon ?? 92.5).toFixed(4)}°E`;
+  const isDepthLoading = apiLoading;
 
   const handleGenerateReport = async () => {
     setIsGeneratingReport(true);
@@ -112,17 +132,8 @@ export function SideBySideValidationPanel({ onClose }) {
       console.error('Failed to fetch currents for report', e);
     }
 
-    const builtVariables = displayedVariables.map(v => ({
-      key: v.key,
-      name: v.label,
-      unit: v.unit,
-      observed: dynamicObs?.[v.key] ?? null,
-      model: dynamicModel?.[v.key] ?? null,
-      delta: dynamicDelta?.[v.key] ?? null,
-      observed_source: (v.key === 'chlorophyll' || v.key === 'dissolvedOxygen') ? 'ifremer-erddap-bgc' : 'ifremer-erddap',
-    }));
-
-    const hasAnyModel = builtVariables.some(v => v.model !== null);
+    const builtVariables = apiData ? apiData.variables : [];
+    const hasAnyModel = apiData?.model?.available || false;
 
     const snapshot = {
       regionName: instrumentName,
@@ -134,7 +145,7 @@ export function SideBySideValidationPanel({ onClose }) {
         location: { lat: activeInstrument?.lat ?? 11.6, lon: activeInstrument?.lon ?? 92.5 },
         model: {
           available: hasAnyModel,
-          source: hasAnyModel ? (modelComparison?.modelSource || 'Model Configured') : 'Not configured for this panel',
+          source: hasAnyModel ? (apiData?.model?.source || 'Model Configured') : 'Not configured for this panel',
         },
         variables: builtVariables,
       }
@@ -206,12 +217,12 @@ export function SideBySideValidationPanel({ onClose }) {
           <span style={styles.provenanceSep}>•</span>
           <div style={styles.provenanceItem}>
             <span style={styles.provenanceDimLabel}>OBS ALIGNMENT:</span>
-            <span style={styles.provenanceDimValue}>{provenance.observationDepth} m</span>
+            <span style={styles.provenanceDimValue}>{provenance.observationDepth}</span>
           </div>
           <span style={styles.provenanceSep}>•</span>
           <div style={styles.provenanceItem}>
             <span style={styles.provenanceDimLabel}>MODEL GRID:</span>
-            <span style={styles.provenanceDimValue}>{provenance.modelDepth} m</span>
+            <span style={styles.provenanceDimValue}>{provenance.modelDepth}</span>
           </div>
           <span style={styles.provenanceSep}>•</span>
           <span style={styles.provenanceBadge}>{provenance.matchingMethod}</span>
@@ -231,12 +242,10 @@ export function SideBySideValidationPanel({ onClose }) {
               style={styles.selectDropdown}
             >
               <option value="all">★ All Variables (6-Parameter Suite)</option>
-              <option value="temperature">🌡️ Temperature (°C)</option>
-              <option value="salinity">🧂 Salinity (PSU)</option>
-              <option value="chlorophyll">🌿 Chlorophyll-a (mg/m³)</option>
-              <option value="currentSpeed">🌊 Current Speed (m/s)</option>
-              <option value="currentDirection">🧭 Current Direction (°)</option>
-              <option value="dissolvedOxygen">🫧 Dissolved Oxygen (µmol/kg)</option>
+              <option value="temp">🌡️ Temperature (°C)</option>
+              <option value="psal">🧂 Salinity (PSU)</option>
+              <option value="chla">🌿 Chlorophyll-a (mg/m³)</option>
+              <option value="doxy">🫧 Dissolved Oxygen (µmol/kg)</option>
             </select>
           </div>
 
@@ -289,14 +298,18 @@ export function SideBySideValidationPanel({ onClose }) {
 
           <div style={styles.metaRow}>
             <span>📍 Location: <strong style={{ color: '#f8fafc' }}>{instrumentCoords}</strong></span>
-            <span>Level: <strong style={{ color: '#ff9436', fontFamily: 'Space Mono' }}>{provenance.observationDepth} m</strong></span>
+            <span>Level: <strong style={{ color: '#ff9436', fontFamily: 'Space Mono' }}>{provenance.observationDepth}</strong></span>
           </div>
 
           {/* Variable Rows for Observation */}
           <div style={styles.variableList}>
-            {displayedVariables.map((v) => {
+            {apiLoading ? (
+              <div style={{ padding: 20, color: '#94a3b8', textAlign: 'center' }}>Fetching Live ERDDAP Data...</div>
+            ) : apiError ? (
+              <div style={{ padding: 20, color: '#f87171', textAlign: 'center' }}>{apiError}</div>
+            ) : !apiData ? null : apiData.variables.filter(v => selectedVarFilter === 'all' || selectedVarFilter === v.key).map((v) => {
               const varKey = v.key;
-              const obsVal = dynamicObs?.[varKey] ?? modelComparison?.observed?.[varKey];
+              const obsVal = v.observed;
               const isSelected = activeVariable === varKey;
               const isMissing = obsVal == null || isNaN(obsVal);
 
@@ -312,7 +325,7 @@ export function SideBySideValidationPanel({ onClose }) {
                 >
                   <div style={styles.paramCardHeader}>
                     <span style={styles.paramIcon}>{getVariableIcon(varKey)}</span>
-                    <span style={styles.paramLabel}>{v.label}</span>
+                    <span style={styles.paramLabel}>{v.name}</span>
                     {isSelected && <span style={styles.active3dTag}>3D ACTIVE</span>}
                   </div>
 
@@ -342,8 +355,8 @@ export function SideBySideValidationPanel({ onClose }) {
               <div>
                 <div style={styles.columnTitle}>4D NetCDF Numerical Model</div>
                 <div style={styles.columnSubtitle}>
-                  {modelComparison?.modelSource && modelComparison.modelSource !== 'live-api'
-                    ? `Model: ${modelComparison.modelSource}`
+                  {apiData?.model?.available
+                    ? `Model: ${apiData.model.source}`
                     : 'Model (Unconfigured / Default)'}
                 </div>
               </div>
@@ -353,14 +366,18 @@ export function SideBySideValidationPanel({ onClose }) {
 
           <div style={styles.metaRow}>
             <span>Grid Point: <strong style={{ color: '#f8fafc' }}>{instrumentCoords}</strong></span>
-            <span>Grid Level: <strong style={{ color: '#38bdf8', fontFamily: 'Space Mono' }}>{provenance.modelDepth} m</strong></span>
+            <span>Grid Level: <strong style={{ color: '#38bdf8', fontFamily: 'Space Mono' }}>{provenance.modelDepth}</strong></span>
           </div>
 
           {/* Variable Rows for Model */}
           <div style={styles.variableList}>
-            {displayedVariables.map((v) => {
+            {apiLoading ? (
+              <div style={{ padding: 20, color: '#94a3b8', textAlign: 'center' }}>Querying ROMS/NetCDF Backend...</div>
+            ) : apiError ? (
+              <div style={{ padding: 20, color: '#f87171', textAlign: 'center' }}>{apiError}</div>
+            ) : !apiData ? null : apiData.variables.filter(v => selectedVarFilter === 'all' || selectedVarFilter === v.key).map((v) => {
               const varKey = v.key;
-              const modelVal = dynamicModel?.[varKey] ?? modelComparison?.model?.[varKey];
+              const modelVal = v.model;
               const isSelected = activeVariable === varKey;
               const isMissing = modelVal == null || isNaN(modelVal);
 
@@ -376,7 +393,7 @@ export function SideBySideValidationPanel({ onClose }) {
                 >
                   <div style={styles.paramCardHeader}>
                     <span style={styles.paramIcon}>{getVariableIcon(varKey)}</span>
-                    <span style={styles.paramLabel}>{v.label} (Model)</span>
+                    <span style={styles.paramLabel}>{v.name} (Model)</span>
                     {isSelected && <span style={styles.active3dTag}>3D ACTIVE</span>}
                   </div>
 
@@ -409,16 +426,20 @@ export function SideBySideValidationPanel({ onClose }) {
             </span>
           </div>
           <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>
-            Circular wrap-around applied for Current Direction: Δθ = ((θ_obs − θ_mod + 540) % 360) − 180
+            Strict validation: Delta only computed when both in-situ and model values are valid
           </span>
         </div>
 
         <div style={styles.deltaGrid}>
-          {displayedVariables.map((v) => {
+          {apiLoading ? (
+             <div style={{ padding: 20, color: '#94a3b8', textAlign: 'center' }}>Processing Deltas...</div>
+          ) : apiError ? (
+             <div style={{ padding: 20, color: '#f87171', textAlign: 'center' }}>Error Processing Deltas</div>
+          ) : !apiData ? null : apiData.variables.filter(v => selectedVarFilter === 'all' || selectedVarFilter === v.key).map((v) => {
             const varKey = v.key;
-            const obsVal = dynamicObs?.[varKey] ?? modelComparison?.observed?.[varKey];
-            const modelVal = dynamicModel?.[varKey] ?? modelComparison?.model?.[varKey];
-            const delta = dynamicDelta?.[varKey] ?? modelComparison?.delta?.[varKey];
+            const obsVal = v.observed;
+            const modelVal = v.model;
+            const delta = v.delta;
             const isMissing = obsVal == null || modelVal == null || isNaN(obsVal) || isNaN(modelVal);
             const rating = getAgreementRating(varKey, delta);
 
@@ -427,7 +448,7 @@ export function SideBySideValidationPanel({ onClose }) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span>{getVariableIcon(varKey)}</span>
-                    <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.72rem' }}>{v.label}</span>
+                    <span style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.72rem' }}>{v.name}</span>
                   </div>
                   <span
                     style={{

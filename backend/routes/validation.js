@@ -1,5 +1,11 @@
 import { Router } from 'express';
 import dotenv from 'dotenv';
+import { execFile } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 import { fetchCoreProfile, fetchFleet, interpolateAt } from '../services/argoCore.js';
 import { BGC_UNITS, BGC_VARIABLES, discoverBgcFloats, fetchBgcProfile } from '../services/argoBgc.js';
@@ -228,9 +234,101 @@ async function handleDepthSlice(req, res) {
   });
 }
 
+
 router.get('/argo/depth-slice', handleDepthSlice);
 router.get('/depth-slice', handleDepthSlice);
 router.get('/argo/depth_slice', handleDepthSlice);
+
+// ---- 3b. FLEET TELEMETRY ENGINE (Python-backed, date+depth resolution) ------
+/**
+ * Fetches real Argo telemetry for a specific float, resolving:
+ *   - Date: latest (real-time) | exact match | nearest historical
+ *   - Depth: closest pressure reading to requested depth
+ *
+ * Query: dynamicDisplayName (platformId), date (optional ISO), depth (meters)
+ */
+router.get('/argo/float-details', (req, res) => {
+  const { dynamicDisplayName, date, depth } = req.query;
+
+  // Platform ID is required; date and depth have sensible defaults
+  const platformId = String(dynamicDisplayName || '')
+    .replace(/^argo-/i, '')
+    .replace(/^Argo\s+/i, '')
+    .trim();
+
+  if (!platformId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required parameter: dynamicDisplayName (Argo platform number)',
+    });
+  }
+
+  const targetDepth = parseFloat(depth) || 15;
+  const targetDate = date && date !== '' ? date : 'latest';
+
+  const pythonScript = path.join(__dirname, '../../scripts/fleet_telemetry_engine.py');
+
+  // Use system Python (or venv if available)
+  const pythonExecutable = process.platform === 'win32'
+    ? 'python'
+    : 'python3';
+
+  const args = [
+    pythonScript,
+    '--platform', platformId,
+    '--date', targetDate,
+    '--depth', String(targetDepth),
+  ];
+
+  console.log(`\n┌─ [fleet-telemetry] ─────────────────────────────────────`);
+  console.log(`│  Platform : ${platformId}`);
+  console.log(`│  Date     : ${targetDate}`);
+  console.log(`│  Depth    : ${targetDepth}m`);
+  console.log(`│  Script   : ${pythonScript}`);
+  console.log(`└─────────────────────────────────────────────────────────`);
+
+  execFile(pythonExecutable, args, { timeout: 35000 }, (error, stdout, stderr) => {
+    // Log Python stderr (progress messages) to backend terminal
+    if (stderr) {
+      stderr.split('\n').filter(Boolean).forEach(line => {
+        console.log(`  📡 ${line}`);
+      });
+    }
+
+    try {
+      const payload = JSON.parse(stdout);
+
+      if (!payload.success) {
+        console.log(`  ❌ Error: ${payload.error}`);
+        return res.status(payload.status || 500).json(payload);
+      }
+
+      // Log the successful result to the terminal
+      console.log(`  ✅ Match: ${payload.match_type_label}`);
+      console.log(`  📅 Date : ${payload.matched_date}`);
+      console.log(`  🌊 Depth: ${payload.actual_depth}m (requested ${payload.requested_depth}m)`);
+      if (payload.matched_reading) {
+        const r = payload.matched_reading;
+        console.log(`  🌡️  Temp : ${r.temperature_c}°C`);
+        console.log(`  🧂 Sal  : ${r.salinity_psu} PSU`);
+        console.log(`  💨 O₂   : ${r.dissolved_oxygen_umol_kg ?? 'N/A'} µmol/kg`);
+        console.log(`  🌿 Chl-a: ${r.chlorophyll_a_mg_m3 ?? 'N/A'} mg/m³`);
+      }
+      console.log(`  📊 Dives available: ${payload.total_dives_available}`);
+      console.log('');
+
+      return res.json(payload);
+
+    } catch (parseError) {
+      console.error('  ❌ Failed to parse Python output:', stdout?.slice(0, 200));
+      console.error('  stderr:', stderr?.slice(0, 200));
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error: failed to parse telemetry engine output',
+      });
+    }
+  });
+});
 
 // ---- 4. MODEL POINT --------------------------------------------------------
 router.get('/model/point', async (req, res) => {
@@ -265,153 +363,75 @@ router.get('/model/datasets', async (_req, res) => {
 });
 
 // ---- 5. VALIDATION ---------------------------------------------------------
-const VARIABLE_DEFS = [
-  ['temp', 'Temp', '°C', 'temperature'],
-  ['psal', 'Salinity', 'PSU', 'salinity'],
-  ['doxy', 'O₂ Diss', BGC_UNITS.doxy, 'dissolved_oxygen'],
-  ['chla', 'Chl-a', BGC_UNITS.chla, 'chlorophyll'],
-];
+router.get('/validation', (req, res) => {
+  const { platform_number, depth, time } = req.query;
 
-/** Every cell null, for a float/time combination with no nearby cycle at all. */
-function emptyValidationResponse(pid, depth, requestedTime, reason) {
-  return {
-    platform_number: pid,
-    cycle_number: null,
-    depth_level: `${depth}m`,
-    time: null,
-    requested_time: requestedTime,
-    location: { lat: null, lon: null },
-    model: { available: false, reason: 'no observation to match against', source: null },
-    variables: VARIABLE_DEFS.map(([key, name, unit]) => ({
-      key,
-      name,
-      unit,
-      observed: null,
-      model: null,
-      delta: null,
-      observed_source: null,
-      reason,
-    })),
-    qc: 'Argo QC flags 1, 2, 5 accepted; values outside physical range rejected',
-    errors: [],
-  };
-}
-
-/**
- * Observation vs model at a given depth, optionally at a historical timestamp.
- *
- * time query param (optional): any ISO-8601 string, e.g. from
- * <input type="datetime-local">. When given, this returns the nearest real
- * Argo cycle within a search window, NOT an exact-timestamp reading — Argo
- * floats dive roughly every 10 days, so "the exact reading at time X" does
- * not exist as a concept.
- *
- * When no cycle exists anywhere near the requested time, this responds 200
- * with every variable null and a `reason`, rather than 404 — a UI scrubbing
- * through historical dates should show quiet "--" cells for gaps, not an
- * error page. A 404/502 here means something actually went wrong (bad input,
- * ERDDAP unreachable), not "this float had no dive that week".
- *
- * When the model is unavailable, `model` and `delta` are null. The previous
- * version computed model = observation minus a constant, which produced a
- * delta column that looked like model skill but measured nothing.
- */
-async function handleValidation(req, res) {
-  const pid = String(req.query.platform_number || '').replace(/^argo-/i, '').trim();
-  const depth = Math.max(0, Math.min(2100, parseFloat(req.query.depth) || 15));
-  const rawTime = req.query.time ? String(req.query.time).trim() : null;
-
-  if (!pid) return asError(res, 400, 'platform_number is required');
-
-  let atTime = null;
-  if (rawTime) {
-    const parsed = new Date(rawTime);
-    if (Number.isNaN(parsed.getTime())) {
-      return asError(res, 400, `Invalid time value: ${rawTime}. Expected ISO-8601.`);
-    }
-    atTime = parsed.toISOString();
+  if (!platform_number || !depth || !time) {
+      return res.status(400).json({ error: "Missing required parameters: platform_number, depth, time" });
   }
 
-  const [core, bgc] = await Promise.allSettled([
-    fetchCoreProfile(pid, { atTime }),
-    fetchBgcProfile(pid, { atTime }),
-  ]);
+  const pythonScript = path.join(__dirname, '../../scripts/validation_engine.py');
+  
+  // Use the .venv python executable based on platform
+  const pythonExecutable = process.platform === 'win32' 
+      ? path.join(__dirname, '../../.venv/Scripts/python.exe') 
+      : path.join(__dirname, '../../.venv/bin/python');
+  
+  // Optional: Point this to your actual INCOIS OPeNDAP URL or .nc file
+  const ncSource = process.env.NETCDF_SOURCE_URL || "";
 
-  if (core.status === 'rejected') {
-    // EMPTY_RESULT with a historical time = a real, expected gap in the
-    // record. Everything else (bad input, ERDDAP unreachable) is a real error.
-    if (core.reason.code === 'EMPTY_RESULT' && atTime) {
-      return res.json(emptyValidationResponse(pid, depth, atTime, core.reason.message));
-    }
-    const status = core.reason.code === 'BAD_INPUT' ? 400 : 404;
-    return asError(res, status, core.reason.message, { platform_number: pid });
-  }
+  const args = [
+      '--platform', platform_number,
+      '--depth', depth,
+      '--time', time,
+      '--nc_source', ncSource
+  ];
 
-  const p = core.value;
-  const bgcLevels = bgc.status === 'fulfilled' ? bgc.value.levels : [];
-
-  const observed = {
-    temp: round(interpolateAt(p.levels, depth, 'temp'), 2),
-    psal: round(interpolateAt(p.levels, depth, 'salinity'), 2),
-    doxy: bgcLevels.length ? round(interpolateAt(bgcLevels, depth, 'doxy'), 1) : null,
-    chla: bgcLevels.length ? round(interpolateAt(bgcLevels, depth, 'chla'), 3) : null,
-  };
-
-  let model = { available: false, reason: 'not requested', variables: {} };
-  if (p.lat !== null && p.lon !== null) {
-    try {
-      // Pass the CYCLE's own time (p.time), not the requested time — the
-      // model should be compared at the moment the float actually measured,
-      // which is what "delta" is supposed to mean.
-      model = await fetchModelPoint({ lat: p.lat, lon: p.lon, depth, time: p.time });
-    } catch (err) {
-      model = { available: false, reason: err.message, variables: {} };
-    }
-  }
-
-  const pair = (key, name, unit, modelKey) => {
-    const obs = observed[key];
-    const mod = model.available ? (model.variables[modelKey] ?? null) : null;
-    return {
-      key,
-      name,
-      unit,
-      observed: obs,
-      model: mod,
-      delta: obs !== null && mod !== null ? round(obs - mod, 3) : null,
-      observed_source: obs === null ? null : key === 'doxy' || key === 'chla'
-        ? 'ifremer-erddap-bgc'
-        : 'ifremer-erddap',
-      reason:
-        obs === null
-          ? `no ${name} measurement at ${depth} m on this float${atTime ? ' near the requested time' : ''}`
-          : mod === null
-            ? 'model value unavailable'
-            : null,
-    };
-  };
-
-  res.json({
-    platform_number: pid,
-    cycle_number: p.cycle_number,
-    depth_level: `${depth}m`,
-    time: p.time,
-    requested_time: atTime,
-    // The float drifts between dives — this cycle's position is not
-    // necessarily where it is "now". Label it as such in the UI when atTime
-    // is set, rather than showing it as a live position.
-    location: { lat: p.lat, lon: p.lon },
-    model: { available: model.available, reason: model.reason, source: model.source ?? null },
-    variables: VARIABLE_DEFS.map(([key, name, unit, modelKey]) => pair(key, name, unit, modelKey)),
-    qc: 'Argo QC flags 1, 2, 5 accepted; values outside physical range rejected',
-    errors: bgc.status === 'rejected' ? [`bgc: ${bgc.reason.message}`] : [],
+  execFile(pythonExecutable, [pythonScript, ...args], { timeout: 35000 }, (error, stdout, stderr) => {
+      try {
+          // Because the Python script outputs STRICT JSON via stdout, we just parse it directly
+          const payload = JSON.parse(stdout);
+          
+          if (payload.error) {
+              return res.status(payload.status || 500).json(payload);
+          }
+          
+          return res.json(payload);
+          
+      } catch (parseError) {
+          console.error("Python Error/Stderr:", stderr);
+          return res.status(500).json({ error: "Failed to parse validation data engine output." });
+      }
   });
-}
-
-router.get('/validation', handleValidation);
+});
 
 // Legacy alias so any existing frontend call keeps resolving.
-router.get('/validate', handleValidation);
+router.get('/validate', (req, res) => {
+  const { platform_number, depth, time } = req.query;
+  const pythonScript = path.join(__dirname, '../../scripts/validation_engine.py');
+  const pythonExecutable = process.platform === 'win32' 
+      ? path.join(__dirname, '../../.venv/Scripts/python.exe') 
+      : path.join(__dirname, '../../.venv/bin/python');
+  const ncSource = process.env.NETCDF_SOURCE_URL || "";
+
+  const args = [
+      '--platform', platform_number,
+      '--depth', depth,
+      '--time', time,
+      '--nc_source', ncSource
+  ];
+
+  execFile(pythonExecutable, [pythonScript, ...args], { timeout: 35000 }, (error, stdout, stderr) => {
+      try {
+          const payload = JSON.parse(stdout);
+          if (payload.error) return res.status(payload.status || 500).json(payload);
+          return res.json(payload);
+      } catch (parseError) {
+          console.error("Python Error/Stderr:", stderr);
+          return res.status(500).json({ error: "Failed to parse validation data engine output." });
+      }
+  });
+});
 
 // ---- 6. SURFACE CURRENTS (NOAA CoastWatch, altimetry-derived geostrophic) ---
 /**
