@@ -1166,7 +1166,7 @@ function ModelCompareView({ telemetry, onBack }) {
  * Compares real-time in-situ telemetry against 4D INCOIS-ROMS numerical model
  * dynamically aligned with the instrument's exact dive depth.
  */
-function ModelVsObsTopSection({ telemetry }) {
+function ModelVsObsTopSection({ telemetry, onDataFetched }) {
   const activeVariable = useOceanStore((state) => state.activeVariable);
   const setActiveVariable = useOceanStore((state) => state.setActiveVariable);
   const activeInstrument = useOceanStore((state) => state.activeInstrument);
@@ -1259,6 +1259,14 @@ function ModelVsObsTopSection({ telemetry }) {
             },
             metadata: json.location || {},
           });
+
+          if (onDataFetched) {
+            onDataFetched({
+              lat: json.location?.lat,
+              lon: json.location?.lon,
+              date: json.matched_date
+            });
+          }
 
           console.log(
             `[Fleet Telemetry] ✅ ${json.match_type_label} | ` +
@@ -2098,6 +2106,8 @@ function TelemetryCardBody({
   onRefresh,
   onClose,
 }) {
+  const [realTelemetry, setRealTelemetry] = useState(null);
+
   return (
     <>
       {isRefreshing && (
@@ -2134,7 +2144,7 @@ function TelemetryCardBody({
         /* EXACT TELEMETRY CARD MATCHING IMAGE 2 WITH DEDICATED SCROLLBAR */
         <div className="fleet-dock-subcard-scroll">
           {/* Model vs Observation Section for EVERY Instrument at the Top */}
-          <ModelVsObsTopSection telemetry={telemetry} />
+          <ModelVsObsTopSection telemetry={telemetry} onDataFetched={setRealTelemetry} />
 
           {/* Quick Actions Bar */}
           <div
@@ -2217,7 +2227,9 @@ function TelemetryCardBody({
             <div className="telemetry-row">
               <span className="telemetry-row__label">Coordinates</span>
               <span className="telemetry-row__value telemetry-row__value--cyan">
-                {telemetry.lat.toFixed(4)}°N, {telemetry.lon.toFixed(4)}°E
+                {realTelemetry?.lat != null && realTelemetry?.lon != null
+                  ? `${realTelemetry.lat.toFixed(4)}°N, ${realTelemetry.lon.toFixed(4)}°E`
+                  : `${telemetry.lat.toFixed(4)}°N, ${telemetry.lon.toFixed(4)}°E`}
               </span>
             </div>
             {telemetry.isGlider && (
@@ -2270,7 +2282,7 @@ function TelemetryCardBody({
             <div className="telemetry-row">
               <span className="telemetry-row__label">Observation Time</span>
               <span className="telemetry-row__value">
-                {telemetry.timestamp}
+                {realTelemetry?.date || telemetry.timestamp}
               </span>
             </div>
             <div className="telemetry-row">
